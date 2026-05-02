@@ -255,85 +255,48 @@ export function useGame() {
       // If clicking on a shielded piece, select it (default: move with butterfly)
       // User can still select butterfly alone if they want
 
-      // If ant has moved and user clicks elsewhere or another piece, revert ant to original position
-      // But keep rotations - only revert position if ant moved
-      if (selectedPiece?.type === 'ant' && prev.antMovedThisTurn) {
-        if (!myPiece || myPiece.id !== prev.selectedPieceId) {
-          // Revert ant to original position (but keep current orientation if rotated)
-          let pieces = prev.pieces.map(p => {
-            if (p.id === prev.selectedPieceId) {
-              const reverted = { ...p };
-              if (prev.antOriginalPosition) {
-                reverted.row = prev.antOriginalPosition.row;
-                reverted.col = prev.antOriginalPosition.col;
-              }
-              // Keep current orientation (don't revert rotation)
-              return reverted;
+      // If ant has moved and user clicks an empty / non-mine cell, snap the
+      // ant back to its original square and deselect. The move slot stays
+      // CONSUMED for this turn (antMovedThisTurn remains true) — rotation
+      // and End Turn are the only remaining options. The lock above already
+      // returns when the click would switch to a different own-piece, so
+      // the !myPiece path is the only one that reaches here.
+      if (selectedPiece?.type === 'ant' && prev.antMovedThisTurn && !myPiece) {
+        const sel = prev.pieces.find(p => p.id === prev.selectedPieceId);
+        const butterfly = sel?.shieldedBy ? prev.pieces.find(p => p.id === sel.shieldedBy) : null;
+        const revertedPieces = prev.pieces.map(p => {
+          if (p.id === prev.selectedPieceId) {
+            const reverted = { ...p };
+            if (prev.antOriginalPosition) {
+              reverted.row = prev.antOriginalPosition.row;
+              reverted.col = prev.antOriginalPosition.col;
             }
-            return p;
-          });
-          
-          // If clicking on another piece, select it; otherwise deselect
-          if (myPiece) {
-            const freshPiece = pieces.find(p => p.id === myPiece.id)!;
-            const { moves, canRotate, validRotations } = getValidMoves(freshPiece, pieces);
+            if (prev.antOriginalOrientation) {
+              reverted.orientation = prev.antOriginalOrientation;
+            }
+            return reverted;
+          }
+          if (butterfly && p.id === butterfly.id && prev.antOriginalPosition) {
             return {
-              ...prev,
-              pieces,
-              selectedPieceId: myPiece.id,
-              validMoves: moves,
-              canRotate,
-              validRotations,
-              antHasRotated: false,
-              antOriginalOrientation: freshPiece.type === 'ant' ? freshPiece.orientation : undefined,
-              antOriginalPosition: freshPiece.type === 'ant' ? { row: freshPiece.row, col: freshPiece.col } : undefined,
-              antMovedThisTurn: false,
-            };
-          } else {
-            // Deselect: revert to original position AND original orientation
-            // Also revert butterfly if piece is shielded (butterfly was at same position as shielded piece)
-            const selectedPiece = pieces.find(p => p.id === prev.selectedPieceId);
-            const butterfly = selectedPiece?.shieldedBy ? pieces.find(p => p.id === selectedPiece.shieldedBy) : null;
-            
-            const revertedPieces = pieces.map(p => {
-              if (p.id === prev.selectedPieceId) {
-                const reverted = { ...p };
-                // Revert position if moved
-                if (prev.antOriginalPosition) {
-                  reverted.row = prev.antOriginalPosition.row;
-                  reverted.col = prev.antOriginalPosition.col;
-                }
-                // Revert orientation if rotated
-                if (prev.antOriginalOrientation) {
-                  reverted.orientation = prev.antOriginalOrientation;
-                }
-                return reverted;
-              }
-              // Also revert butterfly to original position (same as shielded piece's original position)
-              if (butterfly && p.id === butterfly.id && prev.antOriginalPosition) {
-                // Butterfly should return to where the shielded piece originally was (they were on same cell)
-                return {
-                  ...p,
-                  row: prev.antOriginalPosition.row,
-                  col: prev.antOriginalPosition.col,
-                };
-              }
-              return p;
-            });
-            return {
-              ...prev,
-              pieces: revertedPieces,
-              selectedPieceId: null,
-              validMoves: [],
-              canRotate: false,
-              validRotations: [],
-              antHasRotated: false,
-              antOriginalOrientation: undefined,
-              antOriginalPosition: undefined,
-              antMovedThisTurn: false,
+              ...p,
+              row: prev.antOriginalPosition.row,
+              col: prev.antOriginalPosition.col,
             };
           }
-        }
+          return p;
+        });
+        return {
+          ...prev,
+          pieces: revertedPieces,
+          selectedPieceId: null,
+          validMoves: [],
+          canRotate: false,
+          validRotations: [],
+          antHasRotated: false,
+          // antMovedThisTurn intentionally NOT reset — one move per turn.
+          antOriginalOrientation: undefined,
+          antOriginalPosition: undefined,
+        };
       }
 
       // If deselecting or switching pieces — undo pending rotation
@@ -363,17 +326,27 @@ export function useGame() {
       // Select the piece (default = shielded piece if stack; HUD lets user switch to butterfly alone)
       const freshPiece = pieces.find(p => p.id === myPiece.id)!;
       const { moves, canRotate, validRotations } = getValidMoves(freshPiece, pieces);
+      const isAnt = freshPiece.type === 'ant';
+      const sameSelection = myPiece.id === prev.selectedPieceId;
 
       return {
         ...prev,
         pieces,
         selectedPieceId: myPiece.id,
-        validMoves: moves,
+        // Once the ant has used its move this turn, hide further move
+        // options on re-selection so it can only rotate / End Turn.
+        validMoves: (isAnt && prev.antMovedThisTurn) ? [] : moves,
         canRotate,
         validRotations,
-        antHasRotated: false,
-        antOriginalOrientation: freshPiece.type === 'ant' ? freshPiece.orientation : undefined,
-        antOriginalPosition: freshPiece.type === 'ant' ? { row: freshPiece.row, col: freshPiece.col } : undefined,
+        // Preserve the turn-scoped flags when re-selecting the SAME piece;
+        // a fresh selection starts the per-turn tracking from the current cell.
+        antHasRotated: sameSelection ? prev.antHasRotated : false,
+        antOriginalOrientation: sameSelection
+          ? prev.antOriginalOrientation
+          : (isAnt ? freshPiece.orientation : undefined),
+        antOriginalPosition: sameSelection
+          ? prev.antOriginalPosition
+          : (isAnt ? { row: freshPiece.row, col: freshPiece.col } : undefined),
       };
     });
   }, []);

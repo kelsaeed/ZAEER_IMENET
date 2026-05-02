@@ -190,47 +190,125 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
   const clickCell = useCallback((row: number, col: number) => {
     if (!state || !isMyTurn) return;
 
-    let newState = state;
-
+    // 1. Selected piece + valid move target → execute move.
     if (state.selectedPieceId) {
       const isValid = state.validMoves.some(m => m.row === row && m.col === col);
       if (isValid) {
-        newState = applyMove(state, state.selectedPieceId, row, col);
-        persist(newState);
+        persist(applyMove(state, state.selectedPieceId, row, col));
         return;
       }
     }
 
-    // Try to (re)select a piece at this cell.
-    const piece = state.pieces.find(p =>
+    // 2. Resolve which of my pieces (if any) is at the clicked cell.
+    //    Same precedence as the local hook: prefer the shielded piece, fall
+    //    back to a non-overlay piece, then anything.
+    const atCell = state.pieces.filter(p =>
       p.row === row && p.col === col && p.player === state.currentPlayer
     );
-    if (piece) {
-      const { moves, canRotate, validRotations } = getValidMoves(piece, state.pieces);
-      newState = {
-        ...state,
-        selectedPieceId: piece.id,
-        validMoves: moves,
-        canRotate,
-        validRotations,
-        antOriginalOrientation: piece.type === 'ant' ? piece.orientation : undefined,
-        antOriginalPosition: piece.type === 'ant' ? { row: piece.row, col: piece.col } : undefined,
-      };
-      persist(newState);
-      return;
+    const myPiece = atCell.length > 0
+      ? (atCell.find(p => p.shieldedBy) ?? atCell.find(p => !p.shielding) ?? atCell[0])
+      : null;
+
+    const selectedPiece = state.selectedPieceId
+      ? state.pieces.find(p => p.id === state.selectedPieceId)
+      : null;
+
+    // 3. Ant turn lock: once the ant moved or rotated, can't switch to a
+    //    different piece — only deselect / continue with the ant.
+    if (selectedPiece?.type === 'ant' && (state.antMovedThisTurn || state.antHasRotated)) {
+      if (myPiece && myPiece.id !== state.selectedPieceId) return;
     }
 
-    // Click on empty / not-mine cell: deselect.
-    if (state.selectedPieceId) {
-      newState = {
+    // 4. Ant moved + clicked away → snap back to its original square and
+    //    fully deselect. The move slot is still considered consumed for
+    //    this turn (antMovedThisTurn stays true), so the ant cannot be
+    //    moved a second time — only rotated, then End Turn. The block-3
+    //    lock above already returns when the click would switch to a
+    //    different piece, so the only path that reaches here is "click
+    //    on an empty / enemy / non-mine cell".
+    if (selectedPiece?.type === 'ant' && state.antMovedThisTurn && !myPiece) {
+      const sel = state.pieces.find(p => p.id === state.selectedPieceId);
+      const butterfly = sel?.shieldedBy ? state.pieces.find(p => p.id === sel.shieldedBy) : null;
+      const reverted = state.pieces.map(p => {
+        if (p.id === state.selectedPieceId) {
+          const r = { ...p };
+          if (state.antOriginalPosition) {
+            r.row = state.antOriginalPosition.row;
+            r.col = state.antOriginalPosition.col;
+          }
+          if (state.antOriginalOrientation) r.orientation = state.antOriginalOrientation;
+          return r;
+        }
+        if (butterfly && p.id === butterfly.id && state.antOriginalPosition) {
+          return { ...p, row: state.antOriginalPosition.row, col: state.antOriginalPosition.col };
+        }
+        return p;
+      });
+      persist({
         ...state,
+        pieces: reverted,
         selectedPieceId: null,
         validMoves: [],
         canRotate: false,
         validRotations: [],
-      };
-      persist(newState);
+        antHasRotated: false,
+        // antMovedThisTurn intentionally NOT reset — one move per turn
+        // means the slot is gone even after the visual revert.
+        antOriginalOrientation: undefined,
+        antOriginalPosition: undefined,
+      });
+      return;
     }
+
+    // 5. Deselecting / switching pieces with a pending rotation → undo it.
+    let pieces = state.pieces;
+    if (state.selectedPieceId && state.antHasRotated && state.antOriginalOrientation) {
+      pieces = state.pieces.map(p =>
+        p.id === state.selectedPieceId
+          ? { ...p, orientation: state.antOriginalOrientation }
+          : p
+      );
+    }
+
+    if (!myPiece) {
+      persist({
+        ...state,
+        pieces,
+        selectedPieceId: null,
+        validMoves: [],
+        canRotate: false,
+        validRotations: [],
+        antHasRotated: false,
+        antOriginalOrientation: undefined,
+        antOriginalPosition: undefined,
+      });
+      return;
+    }
+
+    // 6. Select / re-select the piece at the clicked cell.
+    const freshPiece = pieces.find(p => p.id === myPiece.id)!;
+    const { moves, canRotate, validRotations } = getValidMoves(freshPiece, pieces);
+    const isAnt = freshPiece.type === 'ant';
+    const sameSelection = myPiece.id === state.selectedPieceId;
+    persist({
+      ...state,
+      pieces,
+      selectedPieceId: myPiece.id,
+      // Once this ant has moved this turn, no further moves — only rotation
+      // and End Turn remain. Re-selecting the ant must not re-arm its move.
+      validMoves: (isAnt && state.antMovedThisTurn) ? [] : moves,
+      canRotate,
+      validRotations,
+      // Preserve the turn-scoped ant flags when re-selecting the same piece;
+      // a fresh selection starts the per-turn tracking from the current cell.
+      antHasRotated: sameSelection ? state.antHasRotated : false,
+      antOriginalOrientation: sameSelection
+        ? state.antOriginalOrientation
+        : (isAnt ? freshPiece.orientation : undefined),
+      antOriginalPosition: sameSelection
+        ? state.antOriginalPosition
+        : (isAnt ? { row: freshPiece.row, col: freshPiece.col } : undefined),
+    });
   }, [state, isMyTurn, persist]);
 
   const rotateAntTo = useCallback((orientation: Orientation) => {

@@ -65,7 +65,7 @@ export default function Home() {
       // HUD width = clamp(15rem, 20vw, 22rem) at lg+. Mirror that here so the
       // board's max cell size never collides with the panel.
       const hudReserve = sideBySide
-        ? Math.max(15 * 16, Math.min(22 * 16, Math.floor(vw * 0.20)))
+        ? Math.max(16 * 16, Math.min(30 * 16, Math.floor(vw * 0.22)))
         : 0;
       const flexGap = sideBySide ? 16 : 0;
 

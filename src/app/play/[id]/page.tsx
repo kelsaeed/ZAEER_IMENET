@@ -73,12 +73,15 @@ export default function OnlineGamePage() {
       const sideBySide = vw >= 1024;
       const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 24 : 20;
       const hudReserve = sideBySide
-        ? Math.max(15 * 16, Math.min(22 * 16, Math.floor(vw * 0.20)))
+        ? Math.max(16 * 16, Math.min(30 * 16, Math.floor(vw * 0.22)))
         : 0;
       const flexGap = sideBySide ? 16 : 0;
       const widthBudget = vw - padX * 2 - hudReserve - flexGap;
       const maxFromW = Math.floor(widthBudget / 16.6);
-      const padY = sideBySide ? 96 : 110; // bigger top padding to fit the player bar
+      // Reserve enough vertical space for the fixed player ribbon at the top
+      // AND the in-flow status pill (Waiting / Spectating / Reviewing) that
+      // sits above the board, plus bottom controls.
+      const padY = sideBySide ? 150 : 130;
       const maxFromH = Math.floor((vh - padY) / 16.6);
       const minCell = vw < 360 ? 14 : 16;
       const maxCell = sideBySide
@@ -252,7 +255,7 @@ export default function OnlineGamePage() {
   return (
     <main
       dir={isRTL ? 'rtl' : 'ltr'}
-      className="min-h-screen w-full max-w-full flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-center gap-3 lg:gap-4 px-2 sm:px-3 lg:px-4 py-3 sm:py-3 lg:py-3 pt-20 lg:pt-3 overflow-x-hidden overflow-y-auto box-border"
+      className="min-h-screen w-full max-w-full flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-center gap-3 lg:gap-4 px-2 sm:px-3 lg:px-4 py-3 sm:py-3 lg:py-3 pt-24 lg:pt-20 overflow-x-hidden overflow-y-auto box-border"
       style={{
         minHeight: '100dvh',
         background: theme.bgGradient,
@@ -317,15 +320,12 @@ export default function OnlineGamePage() {
         />
       </div>
 
-      <div className="flex flex-col gap-3 sm:gap-4 items-center lg:shrink-0 relative">
-        <GameBoard
-          state={displayState!}
-          cellSize={cellSize}
-          onCellClick={isSpectator ? () => {} : clickCell}
-        />
+      <div className="flex flex-col gap-2 sm:gap-3 items-center lg:shrink-0 relative">
+        {/* Status pill — in-flow above the board so it never overlaps the
+            fixed player ribbon at the top of the page. */}
         {!isMyTurn && !reviewing && !won && !isSpectator && (
           <div
-            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
+            className="rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
             style={{
               background: theme.panelBg,
               border: `1px solid ${theme.panelBorder}`,
@@ -338,7 +338,7 @@ export default function OnlineGamePage() {
         )}
         {isSpectator && !won && (
           <div
-            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
+            className="rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
             style={{
               background: theme.panelBg,
               border: `1px solid ${theme.p1AccentBorder}`,
@@ -351,7 +351,7 @@ export default function OnlineGamePage() {
         )}
         {reviewing && (
           <div
-            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
+            className="rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
             style={{
               background: theme.panelBg,
               border: `1px solid ${theme.p1AccentBorder}`,
@@ -362,6 +362,11 @@ export default function OnlineGamePage() {
             ⏪ Reviewing turn {viewingHistoryIndex! + 1} / {state.history.length}
           </div>
         )}
+        <GameBoard
+          state={displayState!}
+          cellSize={cellSize}
+          onCellClick={isSpectator ? () => {} : clickCell}
+        />
       </div>
 
       <GameHUD
@@ -431,7 +436,7 @@ export default function OnlineGamePage() {
       {won && winner !== null && winDismissed && (
         <button
           onClick={() => setWinDismissed(false)}
-          className="fixed bottom-16 z-30 rounded-full px-4 py-2 font-bold text-sm shadow-lg"
+          className="fixed bottom-24 z-30 rounded-full px-4 py-2 font-bold text-sm shadow-lg"
           style={{
             [isRTL ? 'left' : 'right']: 16,
             background: theme.p1AccentBg,

@@ -47,6 +47,12 @@ export default function GameBoard({ state, cellSize, onCellClick }: Props) {
           background: theme.boardBg,
           boxShadow: `0 0 0 1px rgba(255,255,255,0.04), 0 12px 40px rgba(0,0,0,0.45), inset 0 0 24px rgba(0,0,0,0.35)`,
           overflow: 'hidden',
+          // Block the page from scrolling/zooming when the user drags a
+          // finger across the board. Taps still register; the rest of the
+          // page (HUD, top bar) remains scrollable normally.
+          touchAction: 'none',
+          WebkitUserSelect: 'none',
+          userSelect: 'none',
         }}
       >
         {Array.from({ length: BOARD_SIZE }).map((_, row) => (
