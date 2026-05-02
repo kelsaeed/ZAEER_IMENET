@@ -34,24 +34,23 @@ export default function GameHUD({ state, onMainMenu, onRestartMatch, onRotateTo,
   const p1Pieces = pieces.filter(p => p.player === 1);
   const p2Pieces = pieces.filter(p => p.player === 2);
 
-  // Fluid scale tokens. Typography, spacing, and inner widths all scale
-  // smoothly with viewport width via clamp() — same panel feels right on a
-  // phone (~360px), a laptop (1366px), and a 4K monitor (3840px), with no
-  // sudden breakpoints. The vw multipliers are intentionally aggressive so
-  // the HUD visibly grows on big screens and stays tight on small ones.
+  // Fluid scale tokens — typography, spacing, widths all scale with viewport
+  // width via clamp(). Tuned so the panel reads cleanly on a phone (~360px)
+  // through a 4K monitor without ever feeling chunky. Caps were dialed back
+  // after the previous version felt oversized on desktop.
   const fs = {
-    small:  'clamp(11px, 0.55rem + 0.45vw, 16px)',
-    base:   'clamp(13px, 0.7rem + 0.5vw, 19px)',
-    medium: 'clamp(14px, 0.75rem + 0.6vw, 22px)',
-    large:  'clamp(17px, 0.85rem + 0.85vw, 28px)',
-    huge:   'clamp(22px, 1.1rem + 1.1vw, 38px)',
-    icon:   'clamp(20px, 1rem + 0.85vw, 32px)',
+    small:  'clamp(11px, 0.6rem + 0.2vw, 13px)',
+    base:   'clamp(12px, 0.65rem + 0.25vw, 15px)',
+    medium: 'clamp(13px, 0.7rem + 0.3vw, 17px)',
+    large:  'clamp(15px, 0.8rem + 0.4vw, 20px)',
+    huge:   'clamp(20px, 1rem + 0.5vw, 26px)',
+    icon:   'clamp(18px, 0.9rem + 0.4vw, 24px)',
   };
   const sp = {
-    gap:    'clamp(8px, 0.4rem + 0.5vw, 22px)',
-    padBig: 'clamp(12px, 0.65rem + 0.55vw, 28px)',
-    padMed: 'clamp(8px, 0.4rem + 0.4vw, 18px)',
-    radius: 'clamp(10px, 0.55rem + 0.3vw, 18px)',
+    gap:    'clamp(6px, 0.3rem + 0.2vw, 12px)',
+    padBig: 'clamp(10px, 0.5rem + 0.25vw, 16px)',
+    padMed: 'clamp(7px, 0.4rem + 0.15vw, 12px)',
+    radius: 'clamp(8px, 0.45rem + 0.15vw, 14px)',
   };
 
   return (
@@ -103,11 +102,13 @@ export default function GameHUD({ state, onMainMenu, onRestartMatch, onRotateTo,
         })()}
       </div>
 
-      {/* Selected piece info + controls */}
+      {/* Selected piece info + controls. Fade-only (no scale/translate) so
+          the surrounding HUD doesn't visibly shift when this panel appears. */}
       {selectedPiece && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.18 }}
           style={{
             background: theme.panelBg,
             border: `1px solid ${theme.panelBorder}`,

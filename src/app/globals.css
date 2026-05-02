@@ -48,12 +48,11 @@ input, select, textarea {
 }
 
 /* HUD: full width on small screens (stacked layout), fluid clamp on lg+ so
- * it scales smoothly across laptops, monitors, and 4K displays. The vw
- * multiplier is generous (24%) and the cap is large (30rem) so the panel
- * visibly grows on big screens instead of feeling stuck at one width. */
+ * it scales smoothly across laptops, monitors, and 4K displays. Capped at
+ * 22rem so the panel never dominates the page. */
 @media (min-width: 1024px) {
   .zi-hud {
-    width: clamp(16rem, 24vw, 30rem);
-    min-width: 15rem;
+    width: clamp(15rem, 20vw, 22rem);
+    min-width: 14rem;
   }
 }

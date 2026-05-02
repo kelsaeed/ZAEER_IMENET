@@ -27,36 +27,46 @@ export default function Home() {
       const sideBySide = vw >= 1024;
 
       const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 24 : 20;
-      // HUD width = clamp(16rem, 24vw, 30rem) at lg+. Mirror that so the
+      // HUD width = clamp(15rem, 20vw, 22rem) at lg+. Mirror that here so the
       // board's max cell size never collides with the panel.
       const hudReserve = sideBySide
-        ? Math.max(16 * 16, Math.min(30 * 16, Math.floor(vw * 0.24)))
+        ? Math.max(15 * 16, Math.min(22 * 16, Math.floor(vw * 0.20)))
         : 0;
       const flexGap = sideBySide ? 16 : 0;
 
-      // Board = 16 cells + 0.5-cell row label = 16.5; use 16.6 for tiny safety margin.
+      // Board = 16 cells + 0.5-cell row label = 16.5; pad slightly for safety.
       const widthBudget = vw - padX * 2 - hudReserve - flexGap;
       const maxFromW = Math.floor(widthBudget / 16.6);
 
-      // Vertical budget: just the column-label row (≈0.6 cell) + tiny page padding.
-      // On stacked layouts the HUD sits below and scrolls, so we still drive size by height.
       const padY = sideBySide ? 36 : 56;
       const maxFromH = Math.floor((vh - padY) / 16.6);
 
       const minCell = vw < 360 ? 14 : 16;
-      // Allow large cells on roomy screens so the board fills the page.
       const maxCell = sideBySide
         ? (vw >= 1600 ? 96 : vw >= 1280 ? 84 : 68)
         : 60;
-      const next = Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH));
-      setCellSize(next);
+      setCellSize(Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH)));
     }
+
+    // RAF-throttle: a drag-resize fires the resize event ~60×/s. Without
+    // throttling, each fire triggers a setState → re-render of 256 cells.
+    // requestAnimationFrame coalesces them so we recalc at most once per frame.
+    let raf = 0;
+    function schedule() {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        calc();
+      });
+    }
+
     calc();
-    window.addEventListener('resize', calc);
-    window.addEventListener('orientationchange', calc);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('orientationchange', schedule);
     return () => {
-      window.removeEventListener('resize', calc);
-      window.removeEventListener('orientationchange', calc);
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('orientationchange', schedule);
     };
   }, []);
 
@@ -72,7 +82,7 @@ export default function Home() {
   return (
     <main
       dir={isRTL ? 'rtl' : 'ltr'}
-      className="min-h-screen w-full max-w-full flex flex-col lg:flex-row items-center lg:items-center justify-center lg:justify-center gap-3 lg:gap-4 px-2 sm:px-3 lg:px-4 py-3 sm:py-3 lg:py-3 pt-14 lg:pt-3 overflow-x-hidden overflow-y-auto box-border"
+      className="min-h-screen w-full max-w-full flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-center gap-3 lg:gap-4 px-2 sm:px-3 lg:px-4 py-3 sm:py-3 lg:py-3 pt-14 lg:pt-3 overflow-x-hidden overflow-y-auto box-border"
       style={{
         minHeight: '100dvh',
         background: theme.bgGradient,
