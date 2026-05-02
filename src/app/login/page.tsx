@@ -23,13 +23,16 @@ export default function LoginPage() {
     setLoading(true);
     const supabase = getSupabaseBrowser();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
-    router.push('/');
-    router.refresh();
+    // Don't drop the spinner — keep it spinning while we navigate so the
+    // user gets immediate feedback. The UserProvider's onAuthStateChange
+    // already picks up the SIGNED_IN event; no need for router.refresh()
+    // (which forces a full server re-render and was the slow part).
+    router.replace('/');
   }
 
   async function signInWithGoogle() {

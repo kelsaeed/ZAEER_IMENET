@@ -63,9 +63,16 @@ export function useGame() {
     setState({ ...createInitialState(), phase: 'playing', lastAction: { key: 'action.player1Turn' } });
   }, []);
 
+  /** Go all the way back to the start screen (with the rules / piece guide). */
   const resetGame = useCallback(() => {
     sessionStorage.removeItem(STORAGE_KEY);
     setState(createInitialState());
+  }, []);
+
+  /** Restart the match in place — fresh pieces, no phase change. The player
+   *  stays on the board instead of returning to the menu. */
+  const restartMatch = useCallback(() => {
+    setState({ ...createInitialState(), phase: 'playing', lastAction: { key: 'action.player1Turn' } });
   }, []);
 
   /** Rotate the currently selected ant to the given orientation. Only valid options are allowed.
@@ -313,5 +320,5 @@ export function useGame() {
     });
   }, []);
 
-  return { state, startGame, resetGame, rotateAntTo, endTurn, switchToShieldedPiece, switchToShieldingButterfly, clickCell };
+  return { state, startGame, resetGame, restartMatch, rotateAntTo, endTurn, switchToShieldedPiece, switchToShieldingButterfly, clickCell };
 }

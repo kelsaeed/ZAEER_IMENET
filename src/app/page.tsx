@@ -13,7 +13,7 @@ import AuthBadge from '@/components/AuthBadge';
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
 
 export default function Home() {
-  const { state, startGame, resetGame, rotateAntTo, endTurn, switchToShieldedPiece, switchToShieldingButterfly, clickCell } = useGame();
+  const { state, startGame, resetGame, restartMatch, rotateAntTo, endTurn, switchToShieldedPiece, switchToShieldingButterfly, clickCell } = useGame();
   const { theme, isRTL } = useSettings();
   const [cellSize, setCellSize] = useState(42);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -111,7 +111,8 @@ export default function Home() {
 
       <GameHUD
         state={state}
-        onReset={resetGame}
+        onMainMenu={resetGame}
+        onRestartMatch={restartMatch}
         onRotateTo={rotateAntTo}
         onEndTurn={endTurn}
         onSwitchToShieldedPiece={switchToShieldedPiece}

@@ -7,7 +7,8 @@ import { format } from '@/game/locales';
 
 interface Props {
   state: GameState;
-  onReset: () => void;
+  onMainMenu: () => void;
+  onRestartMatch: () => void;
   onRotateTo: (orientation: Orientation) => void;
   onEndTurn: () => void;
   onSwitchToShieldedPiece: () => void;
@@ -16,7 +17,7 @@ interface Props {
 
 const ALL_TYPES = ['monkey', 'bat', 'butterfly', 'ant', 'elephant', 'lion'] as const;
 
-export default function GameHUD({ state, onReset, onRotateTo, onEndTurn, onSwitchToShieldedPiece, onSwitchToShieldingButterfly }: Props) {
+export default function GameHUD({ state, onMainMenu, onRestartMatch, onRotateTo, onEndTurn, onSwitchToShieldedPiece, onSwitchToShieldingButterfly }: Props) {
   const { theme, t } = useSettings();
   const { pieces, currentPlayer, selectedPieceId, validRotations, antHasRotated, antMovedThisTurn, lastAction, turn } = state;
   const pieceName = (type: string) => t(`piece.${type}`);
@@ -289,11 +290,29 @@ export default function GameHUD({ state, onReset, onRotateTo, onEndTurn, onSwitc
         <div className="mt-1 opacity-65" style={{ fontSize: fs.small }}>{t('hud.killCycleNote')}</div>
       </div>
 
-      {/* Reset */}
+      {/* Main Menu — go back to start screen with the rules. */}
       <motion.button
         whileHover={{ scale: 1.03 }}
         whileTap={{ scale: 0.97 }}
-        onClick={onReset}
+        onClick={onMainMenu}
+        className="font-semibold transition-opacity"
+        style={{
+          background: theme.buttonRotateBg,
+          border: `1px solid ${theme.buttonRotateBorder}`,
+          color: theme.buttonRotateText,
+          padding: 'clamp(8px, 0.5rem + 0.2vw, 14px)',
+          borderRadius: sp.radius,
+          fontSize: fs.medium,
+        }}
+      >
+        {t('hud.mainMenu')}
+      </motion.button>
+
+      {/* Restart match — fresh pieces, stay on the game board. */}
+      <motion.button
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
+        onClick={onRestartMatch}
         className="font-semibold opacity-75 hover:opacity-100 transition-opacity"
         style={{
           background: theme.buttonBg,
@@ -304,7 +323,7 @@ export default function GameHUD({ state, onReset, onRotateTo, onEndTurn, onSwitc
           fontSize: fs.medium,
         }}
       >
-        {t('hud.reset')}
+        {t('hud.restartMatch')}
       </motion.button>
     </div>
   );

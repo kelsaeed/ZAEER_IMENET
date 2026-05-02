@@ -63,6 +63,8 @@ const en: Record<string, string> = {
   'hud.killCycleNote': '🐘 2 HP (incl. vs 🦁) · 🦇 paralyzes · 🦋 shields',
   'hud.killCycleAll': '· 🦁 kills all',
   'hud.reset': '🔁 Reset Game',
+  'hud.mainMenu': '🏠 Main Menu',
+  'hud.restartMatch': '🔁 Restart Match',
   'hud.settings': '⚙️',
 
   // Orientation labels
@@ -198,6 +200,8 @@ const ar: Record<string, string> = {
   'hud.killCycleNote': '🐘 نقطتا حياة (ضد 🦁 أيضاً) · 🦇 يشلّ · 🦋 تحمي',
   'hud.killCycleAll': '· 🦁 يقتل الجميع',
   'hud.reset': '🔁 إعادة اللعبة',
+  'hud.mainMenu': '🏠 القائمة الرئيسية',
+  'hud.restartMatch': '🔁 مباراة جديدة',
   'hud.settings': '⚙️',
 
   'orientation.horizontal': 'أفقي',

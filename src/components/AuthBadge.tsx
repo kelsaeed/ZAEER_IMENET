@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
@@ -15,6 +15,19 @@ export default function AuthBadge({ side }: Props) {
   const { user, profile, signOut, loading } = useUser();
   const { theme, t } = useSettings();
   const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the dropdown when clicking outside it.
+  useEffect(() => {
+    if (!open) return;
+    function handle(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [open]);
 
   // While the user state is loading, show the looping emoji animation in
   // the badge slot so the user knows we're working — never render blank.
@@ -56,7 +69,7 @@ export default function AuthBadge({ side }: Props) {
   const initial = (profile?.display_name ?? user.email ?? '?').slice(0, 1).toUpperCase();
 
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapperRef}>
       <button
         onClick={() => setOpen(o => !o)}
         className="rounded-full h-10 px-2 inline-flex items-center gap-2 font-semibold text-sm"
@@ -104,11 +117,15 @@ export default function AuthBadge({ side }: Props) {
               {t('auth.profile')}
             </Link>
             <button
-              onClick={async () => {
+              type="button"
+              onClick={() => {
                 setOpen(false);
-                await signOut();
+                // Fire-and-forget: signOut clears local state synchronously
+                // before awaiting Supabase, so the UI flips to "Sign in"
+                // immediately even if the network request lags.
+                signOut();
               }}
-              className="w-full text-start px-3 py-2 text-sm hover:opacity-80"
+              className="w-full text-start px-3 py-2 text-sm hover:opacity-80 cursor-pointer"
             >
               {t('auth.signOut')}
             </button>

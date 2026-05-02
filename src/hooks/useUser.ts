@@ -106,9 +106,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const supabase = getSupabaseBrowser();
-    await supabase.auth.signOut();
+    // Wipe local state FIRST so the UI updates immediately even if the
+    // network call to Supabase is slow or fails.
     setUser(null);
     setProfile(null);
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // If signOut throws (network down, expired token), local state is
+      // already cleared above so the user appears signed out anyway.
+    }
   }, []);
 
   const reloadProfile = useCallback(async () => {
