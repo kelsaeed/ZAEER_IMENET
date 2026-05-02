@@ -12,6 +12,7 @@ import GameHUD from '@/components/GameHUD';
 import AuthBadge from '@/components/AuthBadge';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
+import MatchChat from '@/components/MatchChat';
 import type { Player } from '@/game/types';
 import type { Theme } from '@/game/themes';
 
@@ -414,6 +415,9 @@ export default function OnlineGamePage() {
       )}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+
+      {/* In-match chat (floating button + slide-in drawer) */}
+      {gameId && <MatchChat gameId={gameId} spectator={isSpectator} />}
     </main>
   );
 }

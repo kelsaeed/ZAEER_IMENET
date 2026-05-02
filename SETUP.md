@@ -43,6 +43,14 @@ After the initial schema:
 If you've already created users from the older schema, this migration is
 idempotent — it'll just no-op the parts that already exist.
 
+### 2.6) Run the chat migration
+
+1. **SQL Editor → New query**.
+2. Open `supabase/migrations/0003_chat.sql`, paste, **Run**.
+3. This adds `match_messages` (in-game chat tied to a game) and
+   `dm_messages` (friend-to-friend DMs, restricted by RLS to accepted
+   friendships). Both are added to the Realtime publication.
+
 ## 3) Enable Google sign-in (free)
 
 1. <https://console.cloud.google.com> → create a project.

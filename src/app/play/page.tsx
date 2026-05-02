@@ -17,12 +17,13 @@ import {
   removeFriendship,
   acceptFriendRequest,
   sendFriendRequest,
-  findProfileByUsername,
+  searchProfiles,
   FriendProfile,
 } from '@/lib/supabase/friends';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import AuthBadge from '@/components/AuthBadge';
 import Avatar from '@/components/Avatar';
+import FriendDm from '@/components/FriendDm';
 
 interface PublicGame {
   id: string;
@@ -388,6 +389,14 @@ function ActionCard({
 
 // ─── Friends tab ──────────────────────────────────────────────────────────
 
+interface SearchResult {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  rating: number;
+}
+
 function FriendsTab({
   theme, user, setError,
 }: {
@@ -399,8 +408,10 @@ function FriendsTab({
   const [friends, setFriends] = useState<FriendProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [dmFriend, setDmFriend] = useState<FriendProfile | null>(null);
 
   const refresh = useCallback(async () => {
     if (!user) return;
@@ -428,22 +439,40 @@ function FriendsTab({
     return () => { supabase.removeChannel(ch); };
   }, [user, refresh]);
 
-  async function handleSearch() {
-    if (!user || !searchQuery.trim()) return;
-    setError(null);
+  // Debounced fuzzy search — runs ~300ms after typing stops.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!user || q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
     setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const results = await searchProfiles(q, user.id);
+        setSearchResults(results as SearchResult[]);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery, user]);
+
+  async function handleAddFromSearch(p: SearchResult) {
+    if (!user) return;
+    setError(null);
+    setActionBusy(`add-${p.id}`);
     try {
-      const username = searchQuery.trim().replace(/^@/, '').toLowerCase();
-      const found = await findProfileByUsername(username);
-      if (!found) throw new Error(`No user found with username @${username}.`);
-      if (found.id === user.id) throw new Error("That's you :)");
-      await sendFriendRequest({ myId: user.id, addresseeId: found.id });
+      await sendFriendRequest({ myId: user.id, addresseeId: p.id });
       setSearchQuery('');
+      setSearchResults([]);
       await refresh();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not send request.');
     } finally {
-      setSearching(false);
+      setActionBusy(null);
     }
   }
 
@@ -489,41 +518,74 @@ function FriendsTab({
   const outgoing = friends.filter(f => f.status === 'pending' && f.outgoing);
   const accepted = friends.filter(f => f.status === 'accepted');
 
+  // Filter out users already in our friendships list (any status) so the
+  // search results show people we haven't already requested / friended.
+  const knownIds = new Set(friends.map(f => f.id));
+  const visibleResults = searchResults.filter(r => !knownIds.has(r.id));
+
   return (
     <div>
-      {/* Add friend by username */}
+      {/* Add friend — fuzzy search */}
       <div
         className="rounded-xl p-4 mb-4"
         style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
       >
-        <div className="text-sm font-bold mb-2">🔎 Add friend by username</div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="@username"
-            className="rounded-md px-3 py-2 text-sm flex-1 min-w-0"
-            style={{
-              background: theme.inputBg,
-              color: theme.inputText,
-              border: `1px solid ${theme.buttonBorder}`,
-            }}
-          />
-          <button
-            onClick={handleSearch}
-            disabled={!searchQuery.trim() || searching}
-            className="rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center min-w-[80px]"
-            style={{
-              background: theme.buttonRotateBg,
-              border: `1px solid ${theme.buttonRotateBorder}`,
-              color: theme.buttonRotateText,
-            }}
-          >
-            {searching ? <LoadingEmojis size={14} gap={2} /> : 'Add'}
-          </button>
-        </div>
+        <div className="text-sm font-bold mb-2">🔎 Find friends</div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search by username or display name…"
+          className="w-full rounded-md px-3 py-2 text-sm"
+          style={{
+            background: theme.inputBg,
+            color: theme.inputText,
+            border: `1px solid ${theme.buttonBorder}`,
+          }}
+        />
+        {searching && (
+          <div className="flex items-center justify-center mt-3"><LoadingEmojis size={14} gap={2} /></div>
+        )}
+        {!searching && searchQuery.trim().length >= 2 && visibleResults.length === 0 && (
+          <div className="text-xs opacity-60 mt-3 text-center">No matching users.</div>
+        )}
+        {visibleResults.length > 0 && (
+          <div className="flex flex-col gap-1.5 mt-3">
+            {visibleResults.map(r => (
+              <motion.div
+                key={r.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 rounded-lg p-2"
+                style={{ background: theme.inputBg, border: `1px solid ${theme.buttonBorder}` }}
+              >
+                <Avatar url={r.avatar_url} name={r.display_name} size={32} accent="p2" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{r.display_name}</div>
+                  <div className="text-xs opacity-70 truncate">@{r.username} · ★ {r.rating}</div>
+                </div>
+                <Link
+                  href={`/u/${r.username}`}
+                  className="text-xs opacity-70 hover:opacity-100 px-2"
+                >
+                  View
+                </Link>
+                <button
+                  onClick={() => handleAddFromSearch(r)}
+                  disabled={actionBusy === `add-${r.id}`}
+                  className="rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-50 inline-flex items-center justify-center min-w-[72px]"
+                  style={{
+                    background: theme.buttonRotateBg,
+                    border: `1px solid ${theme.buttonRotateBorder}`,
+                    color: theme.buttonRotateText,
+                  }}
+                >
+                  {actionBusy === `add-${r.id}` ? <LoadingEmojis size={12} gap={2} /> : '+ Add'}
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -563,7 +625,7 @@ function FriendsTab({
           <Section title={`🤝 Friends (${accepted.length})`} theme={theme}>
             {accepted.length === 0 ? (
               <div className="text-sm opacity-60 py-3 text-center">
-                No friends yet. Add someone by their @username above!
+                No friends yet. Search above to find someone!
               </div>
             ) : (
               accepted.map(f => (
@@ -572,6 +634,7 @@ function FriendsTab({
                   friend={f}
                   theme={theme}
                   busy={actionBusy}
+                  iconAction={{ label: '💬', onClick: () => setDmFriend(f), title: 'Chat' }}
                   primary={{ label: '⚔️ Challenge', onClick: () => handleChallenge(f), busyKey: `challenge-${f.friendshipId}` }}
                   secondary={{ label: 'Remove', onClick: () => handleRemove(f), busyKey: `remove-${f.friendshipId}` }}
                 />
@@ -579,6 +642,16 @@ function FriendsTab({
             )}
           </Section>
         </>
+      )}
+
+      {/* DM modal */}
+      {dmFriend && (
+        <FriendDm
+          friendId={dmFriend.id}
+          friendName={dmFriend.display_name}
+          friendAvatarUrl={dmFriend.avatar_url}
+          onClose={() => setDmFriend(null)}
+        />
       )}
     </div>
   );
@@ -594,7 +667,7 @@ function Section({ title, theme, children }: { title: string; theme: ReturnType<
 }
 
 function FriendRow({
-  friend, theme, busy, primary, secondary, badge,
+  friend, theme, busy, primary, secondary, badge, iconAction,
 }: {
   friend: FriendProfile;
   theme: ReturnType<typeof useSettings>['theme'];
@@ -602,18 +675,37 @@ function FriendRow({
   primary?: { label: string; onClick: () => void; busyKey: string };
   secondary?: { label: string; onClick: () => void; busyKey: string };
   badge?: string;
+  iconAction?: { label: string; onClick: () => void; title?: string };
 }) {
   return (
     <div
-      className="rounded-xl p-3 flex items-center gap-3"
+      className="rounded-xl p-3 flex items-center gap-2"
       style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
     >
-      <Avatar url={friend.avatar_url} name={friend.display_name} size={42} />
+      <Link href={`/u/${friend.username}`} className="shrink-0">
+        <Avatar url={friend.avatar_url} name={friend.display_name} size={42} />
+      </Link>
       <div className="flex-1 min-w-0">
-        <div className="font-bold truncate">{friend.display_name}</div>
+        <Link href={`/u/${friend.username}`} className="font-bold truncate block hover:underline">
+          {friend.display_name}
+        </Link>
         <div className="text-xs opacity-70 truncate">@{friend.username} · ★ {friend.rating}</div>
       </div>
       {badge && <span className="text-xs opacity-70 px-2 py-1 rounded-full" style={{ background: theme.buttonBg }}>{badge}</span>}
+      {iconAction && (
+        <button
+          onClick={iconAction.onClick}
+          title={iconAction.title}
+          className="rounded-lg w-9 h-9 inline-flex items-center justify-center text-base hover:scale-110 transition-transform"
+          style={{
+            background: theme.buttonBg,
+            border: `1px solid ${theme.buttonBorder}`,
+            color: theme.textPrimary,
+          }}
+        >
+          {iconAction.label}
+        </button>
+      )}
       {primary && (
         <button
           onClick={primary.onClick}

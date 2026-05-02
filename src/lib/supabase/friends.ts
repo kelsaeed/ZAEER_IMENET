@@ -27,15 +27,33 @@ interface RawRow {
 }
 
 /** Find a profile by exact username (case-insensitive). Returns null if no
- *  match. Used by the "Add friend" search box. */
+ *  match. Used by URL-based lookups (/u/<username>). */
 export async function findProfileByUsername(username: string) {
   const supabase = getSupabaseBrowser();
   const { data } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_url, rating')
+    .select('id, username, display_name, avatar_url, rating, wins, losses, draws, bio, is_admin')
     .ilike('username', username.trim())
     .maybeSingle();
   return data;
+}
+
+/** Fuzzy search: returns up to 8 profiles whose username or display name
+ *  contains the query (case-insensitive). Used by the friend-search box. */
+export async function searchProfiles(query: string, excludeId?: string) {
+  const q = query.trim().replace(/^@/, '');
+  if (q.length < 2) return [];
+  const supabase = getSupabaseBrowser();
+  const pattern = `%${q.replace(/[%_]/g, '\\$&')}%`;
+  let req = supabase
+    .from('profiles')
+    .select('id, username, display_name, avatar_url, rating')
+    .or(`username.ilike.${pattern},display_name.ilike.${pattern}`)
+    .order('username')
+    .limit(8);
+  if (excludeId) req = req.neq('id', excludeId);
+  const { data } = await req;
+  return data ?? [];
 }
 
 /** Send a friend request to `addresseeId`. Idempotent: if a row already
