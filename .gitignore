@@ -1,0 +1,58 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# environment variables — keep templates only, NEVER commit secrets
+.env
+.env*.local
+.env.development
+.env.production
+.env.test
+# (we DO want to track .env.example so a fresh clone can copy it)
+!.env.example
+
+# IDE / editor
+.idea
+.vscode
+*.swp
+*.swo
+
+# Claude Code workspace metadata (project-local, not for sharing)
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# typescript build cache
+*.tsbuildinfo
+next-env.d.ts
+
+# vercel
+.vercel
+
+# Supabase local CLI cache (if you ever run `supabase start`)
+**/.supabase/

@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a14;
+  --foreground: #e5e7eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Extra scroll room on phones with home indicator */
+@supports (padding: max(0px)) {
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track { background: #0a0a14; }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+/* Make native dropdowns readable. Some OS/browsers ignore inline styles on
+ * <option> when the parent uses a translucent background, so we force a solid
+ * dark surface with light text as a baseline. Themed selects/options pass
+ * explicit inline styles that win over these rules. */
+select, option {
+  background-color: #1a1a2e;
+  color: #f1f5f9;
+}
+input, select, textarea {
+  color-scheme: dark;
+}
+
+/* HUD: full width on small screens (stacked layout), fluid clamp on lg+ so
+ * it scales smoothly across laptops, monitors, and 4K displays. The vw
+ * multiplier is generous (24%) and the cap is large (30rem) so the panel
+ * visibly grows on big screens instead of feeling stuck at one width. */
+@media (min-width: 1024px) {
+  .zi-hud {
+    width: clamp(16rem, 24vw, 30rem);
+    min-width: 15rem;
+  }
+}
