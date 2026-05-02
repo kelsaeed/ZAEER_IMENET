@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
+import LoadingEmojis from './LoadingEmojis';
 
 interface Props {
   /** Render position. The page positions us absolutely; we just need the side. */
@@ -15,7 +16,22 @@ export default function AuthBadge({ side }: Props) {
   const { theme, t } = useSettings();
   const [open, setOpen] = useState(false);
 
-  if (loading) return null;
+  // While the user state is loading, show the looping emoji animation in
+  // the badge slot so the user knows we're working — never render blank.
+  if (loading) {
+    return (
+      <div
+        className="rounded-full px-3 h-10 inline-flex items-center"
+        style={{
+          background: theme.panelBg,
+          border: `1px solid ${theme.panelBorder}`,
+        }}
+        aria-label="Loading account"
+      >
+        <LoadingEmojis size={14} gap={2} />
+      </div>
+    );
+  }
 
   // Not signed in — single "Sign in" button.
   if (!user) {

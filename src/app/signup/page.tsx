@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
+import LoadingEmojis from '@/components/LoadingEmojis';
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED === 'true';
 
@@ -173,14 +174,15 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg py-2.5 font-bold disabled:opacity-50"
+            className="rounded-lg py-2.5 font-bold disabled:opacity-70 flex items-center justify-center"
             style={{
               background: theme.buttonRotateBg,
               border: `1px solid ${theme.buttonRotateBorder}`,
               color: theme.buttonRotateText,
+              minHeight: 48,
             }}
           >
-            {loading ? '…' : t('auth.signUp')}
+            {loading ? <LoadingEmojis size={20} gap={3} /> : t('auth.signUp')}
           </button>
         </form>
 
