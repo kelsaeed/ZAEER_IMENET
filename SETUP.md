@@ -51,6 +51,19 @@ idempotent — it'll just no-op the parts that already exist.
    `dm_messages` (friend-to-friend DMs, restricted by RLS to accepted
    friendships). Both are added to the Realtime publication.
 
+### 2.7) Run the join-by-code migration (REQUIRED for online play)
+
+Without this, joining a public or private game fails because RLS won't
+let a non-participant update the row.
+
+1. **SQL Editor → New query**.
+2. Open `supabase/migrations/0004_join_by_code.sql`, paste, **Run**.
+3. This creates two SECURITY DEFINER functions:
+   - `find_game_by_invite_code(code)` — lets the joiner look up a private
+     room by its 6-char code.
+   - `join_open_game(game_id)` — atomically swaps the joiner into
+     `player2_id` and flips status to `playing`.
+
 ## 3) Enable Google sign-in (free)
 
 1. <https://console.cloud.google.com> → create a project.

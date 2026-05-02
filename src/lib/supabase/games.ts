@@ -63,37 +63,31 @@ export async function createOnlineGame(opts: {
   return data as GameRow;
 }
 
-/** Join a game as player 2. Game must be in 'waiting' status with no player2 yet. */
+/** Join a game as player 2. Calls the join_open_game RPC (security definer)
+ *  which atomically updates the row server-side and bypasses the
+ *  participants-only RLS UPDATE policy. */
 export async function joinOnlineGame(opts: {
   userId: string;
   gameId: string;
 }): Promise<GameRow> {
   const supabase = getSupabaseBrowser();
-  const { data, error } = await supabase
-    .from('games')
-    .update({
-      player2_id: opts.userId,
-      status: 'playing',
-      started_at: new Date().toISOString(),
-    })
-    .eq('id', opts.gameId)
-    .eq('status', 'waiting')
-    .is('player2_id', null)
-    .select()
-    .single();
-  if (error || !data) throw new Error(error?.message ?? 'Could not join — already taken or finished?');
-  return data as GameRow;
+  const { data, error } = await supabase.rpc('join_open_game', { p_game_id: opts.gameId });
+  if (error) throw new Error(error.message);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error('Could not join — already taken or finished?');
+  }
+  return data[0] as GameRow;
 }
 
-/** Look up a game by its invite code (for the "Join with code" flow). */
+/** Look up a game by its invite code, including private rooms. Calls the
+ *  find_game_by_invite_code RPC so the lookup works for the joiner who
+ *  isn't yet a participant (and therefore cannot read the row directly). */
 export async function findGameByInviteCode(code: string): Promise<GameRow | null> {
   const supabase = getSupabaseBrowser();
-  const { data } = await supabase
-    .from('games')
-    .select('*')
-    .eq('invite_code', code.toUpperCase())
-    .maybeSingle();
-  return (data as GameRow | null) ?? null;
+  const { data, error } = await supabase
+    .rpc('find_game_by_invite_code', { code: code.toUpperCase() });
+  if (error) return null;
+  return Array.isArray(data) && data.length > 0 ? (data[0] as GameRow) : null;
 }
 
 /** Persist a move/state change. The caller pre-computes the new GameState
