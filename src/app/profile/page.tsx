@@ -7,6 +7,7 @@ import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { uploadAvatar, saveAvatarUrl } from '@/lib/supabase/avatars';
+import { listFriendships, FriendProfile } from '@/lib/supabase/friends';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
 
@@ -39,6 +40,7 @@ export default function ProfilePage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [friends, setFriends] = useState<FriendProfile[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [msg, setMsg] = useState<string | null>(null);
@@ -52,6 +54,16 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
   }, [loading, user, router]);
+
+  // Load friends — non-critical, runs in the background after the page renders.
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+    listFriendships(user.id)
+      .then(list => { if (mounted) setFriends(list); })
+      .catch(() => { if (mounted) setFriends([]); }); // RLS / migration error → empty
+    return () => { mounted = false; };
+  }, [user]);
 
   // Hydrate the form from the loaded profile, but only once — keep the
   // user's edits intact if the profile reloads in the background.
@@ -263,15 +275,6 @@ export default function ProfilePage() {
               </h1>
               <div className="text-sm opacity-70 truncate">@{profile?.username ?? '…'}</div>
               <div className="text-xs opacity-60 truncate">{user.email}</div>
-              {profile?.username && (
-                <button
-                  onClick={copyShareLink}
-                  className="text-xs mt-1 underline opacity-70 hover:opacity-100 inline-flex items-center gap-1"
-                  style={{ color: theme.p1Color }}
-                >
-                  🔗 {shareCopied ? 'Copied!' : 'Copy share link'}
-                </button>
-              )}
               {profile?.is_admin && (
                 <div className="text-xs mt-1" style={{ color: theme.p1Color }}>
                   ★ {t('auth.admin')}
@@ -280,12 +283,62 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* Share link card — gradient frame + monospaced URL preview + copy button */}
+          {profile?.username && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl p-3 mb-5 flex items-center gap-3"
+              style={{
+                background: `linear-gradient(135deg, color-mix(in srgb, ${theme.p1Color} 14%, transparent), color-mix(in srgb, ${theme.p2Color} 10%, transparent))`,
+                border: `1px solid ${theme.p1AccentBorder}`,
+              }}
+            >
+              <div
+                className="rounded-full w-10 h-10 flex items-center justify-center text-lg shrink-0"
+                style={{
+                  background: theme.p1AccentBg,
+                  border: `1px solid ${theme.p1AccentBorder}`,
+                  color: theme.p1Color,
+                }}
+              >
+                🔗
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold mb-0.5" style={{ color: theme.p1Color }}>
+                  Share your profile
+                </div>
+                <div
+                  className="text-xs opacity-80 truncate font-mono"
+                  style={{ direction: 'ltr' }}
+                  title={`/u/${profile.username}`}
+                >
+                  /u/{profile.username}
+                </div>
+              </div>
+              <button
+                onClick={copyShareLink}
+                className="rounded-lg px-3 py-2 text-sm font-bold inline-flex items-center gap-1.5 transition-transform active:scale-95 shrink-0"
+                style={{
+                  background: shareCopied ? theme.p1Color : theme.buttonRotateBg,
+                  border: `1px solid ${shareCopied ? theme.p1Color : theme.buttonRotateBorder}`,
+                  color: shareCopied ? '#000' : theme.buttonRotateText,
+                }}
+              >
+                {shareCopied ? <>✓ Copied</> : <>📋 Copy</>}
+              </button>
+            </motion.div>
+          )}
+
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3 mb-5">
             <Stat label="Rating" value={profile?.rating ?? 1000} theme={theme} />
             <Stat label="Wins"   value={profile?.wins ?? 0}   theme={theme} />
             <Stat label="Losses" value={profile?.losses ?? 0} theme={theme} />
           </div>
+
+          {/* Friends preview */}
+          <FriendsCard friends={friends} />
 
           {/* Toast */}
           {(msg || err) && (
@@ -423,6 +476,109 @@ function Stat({
     >
       <div className="text-xs opacity-70">{label}</div>
       <div className="text-xl font-bold" style={{ color: theme.p1Color }}>{value}</div>
+    </div>
+  );
+}
+
+function FriendsCard({ friends }: { friends: FriendProfile[] | null }) {
+  const { theme } = useSettings();
+  const accepted = friends?.filter(f => f.status === 'accepted') ?? [];
+  const pending = friends?.filter(f => f.status === 'pending' && !f.outgoing) ?? [];
+  const previewLimit = 6;
+  const preview = accepted.slice(0, previewLimit);
+  const moreCount = Math.max(0, accepted.length - previewLimit);
+
+  return (
+    <div
+      className="rounded-xl p-4 mb-5"
+      style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-baseline gap-2">
+          <span className="text-base font-bold">🤝 Friends</span>
+          <span
+            className="text-xs px-2 py-0.5 rounded-full font-bold"
+            style={{
+              background: theme.p1AccentBg,
+              border: `1px solid ${theme.p1AccentBorder}`,
+              color: theme.p1Color,
+            }}
+          >
+            {friends === null ? '…' : accepted.length}
+          </span>
+          {pending.length > 0 && (
+            <span
+              className="text-xs px-2 py-0.5 rounded-full font-bold"
+              style={{
+                background: 'rgba(244,114,182,0.18)',
+                border: '1px solid rgba(244,114,182,0.45)',
+                color: '#f9a8d4',
+              }}
+              title={`${pending.length} incoming friend request${pending.length > 1 ? 's' : ''}`}
+            >
+              📥 {pending.length}
+            </span>
+          )}
+        </div>
+        <Link
+          href="/play"
+          className="text-xs opacity-70 hover:opacity-100 hover:underline"
+          style={{ color: theme.p1Color }}
+        >
+          Open ↗
+        </Link>
+      </div>
+
+      {friends === null ? (
+        <div className="flex items-center justify-center py-3">
+          <LoadingEmojis size={18} gap={3} />
+        </div>
+      ) : accepted.length === 0 ? (
+        <div className="text-center py-3">
+          <div className="text-2xl mb-1">🪑</div>
+          <div className="text-sm opacity-70">No friends yet.</div>
+          <Link
+            href="/play"
+            className="inline-block mt-2 text-xs font-semibold underline"
+            style={{ color: theme.p1Color }}
+          >
+            Find someone to play with →
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {preview.map(f => (
+            <Link
+              key={f.id}
+              href={`/u/${f.username}`}
+              className="flex items-center gap-2 rounded-lg p-2 hover:scale-[1.02] transition-transform"
+              style={{
+                background: theme.inputBg,
+                border: `1px solid ${theme.buttonBorder}`,
+              }}
+            >
+              <Avatar url={f.avatar_url} name={f.display_name} size={32} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate">{f.display_name}</div>
+                <div className="text-xs opacity-70 truncate">@{f.username}</div>
+              </div>
+            </Link>
+          ))}
+          {moreCount > 0 && (
+            <Link
+              href="/play"
+              className="flex items-center justify-center gap-1 rounded-lg p-2 text-sm font-bold hover:scale-[1.02] transition-transform"
+              style={{
+                background: theme.p1AccentBg,
+                border: `1px dashed ${theme.p1AccentBorder}`,
+                color: theme.p1Color,
+              }}
+            >
+              + {moreCount} more
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   );
 }
