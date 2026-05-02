@@ -10,129 +10,67 @@ import {
   createOnlineGame,
   joinOnlineGame,
   findGameByInviteCode,
-  GameRow,
+  quickMatch,
 } from '@/lib/supabase/games';
+import {
+  listFriendships,
+  removeFriendship,
+  acceptFriendRequest,
+  sendFriendRequest,
+  findProfileByUsername,
+  FriendProfile,
+} from '@/lib/supabase/friends';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import AuthBadge from '@/components/AuthBadge';
+import Avatar from '@/components/Avatar';
 
 interface PublicGame {
   id: string;
   player1_id: string;
-  invite_code: string | null;
-  created_at: string;
   player1: { username: string; display_name: string; avatar_url: string | null } | null;
 }
+
+type LobbyTab = 'play' | 'friends';
 
 export default function LobbyPage() {
   const router = useRouter();
   const { user, profile, loading: userLoading } = useUser();
-  const { theme, t, isRTL } = useSettings();
-  const [games, setGames] = useState<PublicGame[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { theme, isRTL, t } = useSettings();
+  const [tab, setTab] = useState<LobbyTab>('play');
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [joining, setJoining] = useState<string | null>(null);
-  const [joinCode, setJoinCode] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
 
   // Bounce unauthenticated visitors.
   useEffect(() => {
     if (!userLoading && !user) router.replace('/login?next=/play');
   }, [userLoading, user, router]);
 
-  // Initial load + Realtime subscription so the lobby auto-refreshes when
-  // someone creates/joins a public game.
-  useEffect(() => {
-    if (!user) return;
-    const supabase = getSupabaseBrowser();
-    let mounted = true;
-
-    async function refresh() {
-      const { data, error } = await supabase
-        .from('games')
-        .select('id, player1_id, invite_code, created_at, player1:profiles!games_player1_id_fkey(username, display_name, avatar_url)')
-        .eq('status', 'waiting')
-        .eq('is_public', true)
-        .neq('player1_id', user!.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      if (!mounted) return;
-      if (error) {
-        setError(error.message);
-      } else {
-        setGames((data as unknown as PublicGame[]) ?? []);
-        setError(null);
-      }
-      setLoading(false);
+  // ── Quick Match ────────────────────────────────────────────────────────
+  const handleQuickMatch = useCallback(async () => {
+    if (!user || busy) return;
+    setError(null);
+    setBusy('quick');
+    try {
+      const { gameId } = await quickMatch({ userId: user.id });
+      router.push(`/play/${gameId}`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not start a quick match.');
+      setBusy(null);
     }
-    refresh();
-
-    // Auto-refresh on any insert/update to games.
-    const channel = supabase
-      .channel('lobby')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'games' },
-        () => refresh(),
-      )
-      .subscribe();
-
-    return () => {
-      mounted = false;
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
+  }, [user, busy, router]);
 
   const handleCreate = useCallback(async (isPublic: boolean) => {
-    if (!user || creating) return;
+    if (!user || busy) return;
     setError(null);
-    setCreating(true);
+    setBusy(isPublic ? 'public' : 'private');
     try {
       const game = await createOnlineGame({ userId: user.id, isPublic });
       router.push(`/play/${game.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not create game.');
-      setCreating(false);
+      setBusy(null);
     }
-  }, [user, creating, router]);
-
-  const handleJoinPublic = useCallback(async (g: PublicGame) => {
-    if (!user || joining) return;
-    setError(null);
-    setJoining(g.id);
-    try {
-      await joinOnlineGame({ userId: user.id, gameId: g.id });
-      router.push(`/play/${g.id}`);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not join.');
-      setJoining(null);
-    }
-  }, [user, joining, router]);
-
-  const handleJoinByCode = useCallback(async () => {
-    if (!user || !joinCode.trim()) return;
-    setError(null);
-    setJoining('code');
-    try {
-      const code = joinCode.trim().toUpperCase();
-      const found = await findGameByInviteCode(code);
-      if (!found) throw new Error('No game with that code.');
-      if (found.player2_id && found.player2_id !== user.id) {
-        throw new Error('That game is already full.');
-      }
-      if (found.player1_id === user.id) {
-        // Re-entering your own waiting game.
-        router.push(`/play/${found.id}`);
-        return;
-      }
-      if (found.status === 'waiting') {
-        await joinOnlineGame({ userId: user.id, gameId: found.id });
-      }
-      router.push(`/play/${found.id}`);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not join with that code.');
-      setJoining(null);
-    }
-  }, [user, joinCode, router]);
+  }, [user, busy, router]);
 
   return (
     <main
@@ -147,87 +85,24 @@ export default function LobbyPage() {
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>
 
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <Link href="/" className="text-sm opacity-70 hover:opacity-100">
           ← {t('auth.backHome')}
         </Link>
 
-        <h1
-          className="text-3xl sm:text-4xl font-extrabold mt-3 mb-1"
-          style={{ color: theme.p1Color }}
-        >
-          🌐 Online Lobby
+        <h1 className="text-3xl sm:text-4xl font-extrabold mt-3 mb-1" style={{ color: theme.p1Color }}>
+          🌐 Online
         </h1>
         <p className="text-sm opacity-70 mb-6">
-          Play with another human anywhere. Create a public room, share an invite code, or join an open match.
+          Find a match in seconds, play with a friend, or browse open rooms.
         </p>
 
-        {/* Action row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <button
-            onClick={() => handleCreate(true)}
-            disabled={creating}
-            className="rounded-xl p-4 font-semibold text-start hover:scale-[1.02] transition-transform disabled:opacity-50"
-            style={{
-              background: theme.buttonRotateBg,
-              border: `1px solid ${theme.buttonRotateBorder}`,
-              color: theme.buttonRotateText,
-            }}
-          >
-            <div className="text-2xl mb-1">⚔️</div>
-            <div className="text-sm font-bold">Create Public Game</div>
-            <div className="text-xs opacity-80 mt-1">Anyone in the lobby can join.</div>
-          </button>
-          <button
-            onClick={() => handleCreate(false)}
-            disabled={creating}
-            className="rounded-xl p-4 font-semibold text-start hover:scale-[1.02] transition-transform disabled:opacity-50"
-            style={{
-              background: theme.buttonSwitchBg,
-              border: `1px solid ${theme.buttonSwitchBorder}`,
-              color: theme.buttonSwitchText,
-            }}
-          >
-            <div className="text-2xl mb-1">🔒</div>
-            <div className="text-sm font-bold">Create Private Game</div>
-            <div className="text-xs opacity-80 mt-1">Only friends with the invite code can join.</div>
-          </button>
-          <div
-            className="rounded-xl p-4"
-            style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
-          >
-            <div className="text-sm font-bold mb-2">🎟 Join with code</div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={joinCode}
-                onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
-                placeholder="ABC123"
-                maxLength={6}
-                className="rounded-md px-2 py-1.5 text-sm flex-1 min-w-0 tracking-widest font-mono"
-                style={{
-                  background: theme.inputBg,
-                  color: theme.inputText,
-                  border: `1px solid ${theme.buttonBorder}`,
-                }}
-              />
-              <button
-                onClick={handleJoinByCode}
-                disabled={!joinCode.trim() || joining === 'code'}
-                className="rounded-md px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
-                style={{
-                  background: theme.buttonRotateBg,
-                  border: `1px solid ${theme.buttonRotateBorder}`,
-                  color: theme.buttonRotateText,
-                }}
-              >
-                {joining === 'code' ? <LoadingEmojis size={14} gap={2} /> : 'Go'}
-              </button>
-            </div>
-          </div>
+        {/* Tabs */}
+        <div className="flex gap-1 mb-5 rounded-xl p-1" style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}>
+          <TabBtn label="🎮 Play" active={tab === 'play'} onClick={() => setTab('play')} theme={theme} />
+          <TabBtn label="🤝 Friends" active={tab === 'friends'} onClick={() => setTab('friends')} theme={theme} />
         </div>
 
-        {/* Error */}
         {error && (
           <div
             className="text-sm rounded-md px-3 py-2 mb-4"
@@ -241,69 +116,532 @@ export default function LobbyPage() {
           </div>
         )}
 
-        {/* Public games list */}
-        <h2 className="text-lg font-bold mb-2">Open public games</h2>
+        {tab === 'play' && (
+          <PlayTab
+            theme={theme}
+            busy={busy}
+            onQuickMatch={handleQuickMatch}
+            onCreate={handleCreate}
+            setBusy={setBusy}
+            setError={setError}
+            user={user}
+            router={router}
+          />
+        )}
 
-        {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <LoadingEmojis size={28} />
-          </div>
-        ) : games.length === 0 ? (
-          <div
-            className="rounded-xl p-6 text-center"
-            style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
-          >
-            <div className="text-3xl mb-2">🪑</div>
-            <div className="text-sm opacity-80">No one's hosting right now.</div>
-            <div className="text-xs opacity-60 mt-1">Create a public game and someone will join in.</div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {games.map(g => (
-              <motion.div
-                key={g.id}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-xl p-3 flex items-center gap-3"
-                style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
-              >
-                <div
-                  className="rounded-full flex items-center justify-center font-bold shrink-0"
-                  style={{
-                    width: 40, height: 40,
-                    background: theme.p2Color,
-                    color: '#000',
-                  }}
-                >
-                  {(g.player1?.display_name ?? '?').slice(0, 1).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold truncate">{g.player1?.display_name ?? 'Anonymous'}</div>
-                  <div className="text-xs opacity-70 truncate">@{g.player1?.username ?? '?'}</div>
-                </div>
-                <button
-                  onClick={() => handleJoinPublic(g)}
-                  disabled={joining === g.id}
-                  className="rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50 inline-flex items-center justify-center min-w-[80px]"
-                  style={{
-                    background: theme.buttonRotateBg,
-                    border: `1px solid ${theme.buttonRotateBorder}`,
-                    color: theme.buttonRotateText,
-                  }}
-                >
-                  {joining === g.id ? <LoadingEmojis size={14} gap={2} /> : 'Join'}
-                </button>
-              </motion.div>
-            ))}
-          </div>
+        {tab === 'friends' && (
+          <FriendsTab
+            theme={theme}
+            user={user}
+            setError={setError}
+          />
         )}
 
         {profile && (
-          <div className="text-xs opacity-50 mt-6 text-center">
+          <div className="text-xs opacity-50 mt-8 text-center">
             Signed in as @{profile.username}
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+function TabBtn({ label, active, onClick, theme }: { label: string; active: boolean; onClick: () => void; theme: ReturnType<typeof useSettings>['theme'] }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex-1 rounded-lg py-2 px-3 text-sm font-semibold transition-colors"
+      style={{
+        background: active ? theme.buttonRotateBg : 'transparent',
+        color: active ? theme.buttonRotateText : theme.textPrimary,
+        opacity: active ? 1 : 0.7,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ─── Play tab ─────────────────────────────────────────────────────────────
+
+function PlayTab({
+  theme, busy, onQuickMatch, onCreate, setBusy, setError, user, router,
+}: {
+  theme: ReturnType<typeof useSettings>['theme'];
+  busy: string | null;
+  onQuickMatch: () => void;
+  onCreate: (isPublic: boolean) => void;
+  setBusy: (b: string | null) => void;
+  setError: (e: string | null) => void;
+  user: ReturnType<typeof useUser>['user'];
+  router: ReturnType<typeof useRouter>;
+}) {
+  const [joinCode, setJoinCode] = useState('');
+  const [games, setGames] = useState<PublicGame[]>([]);
+  const [gamesLoading, setGamesLoading] = useState(true);
+
+  // Live list of public open games (small section, collapsed).
+  useEffect(() => {
+    if (!user) return;
+    const supabase = getSupabaseBrowser();
+    let mounted = true;
+    async function refresh() {
+      const { data } = await supabase
+        .from('games')
+        .select('id, player1_id, player1:profiles!games_player1_id_fkey(username, display_name, avatar_url)')
+        .eq('status', 'waiting')
+        .eq('is_public', true)
+        .neq('player1_id', user!.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (!mounted) return;
+      setGames((data as unknown as PublicGame[]) ?? []);
+      setGamesLoading(false);
+    }
+    refresh();
+    const ch = supabase
+      .channel('lobby-public')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => refresh())
+      .subscribe();
+    return () => { mounted = false; supabase.removeChannel(ch); };
+  }, [user]);
+
+  async function handleJoinByCode() {
+    if (!user || !joinCode.trim()) return;
+    setError(null);
+    setBusy('code');
+    try {
+      const code = joinCode.trim().toUpperCase();
+      const found = await findGameByInviteCode(code);
+      if (!found) throw new Error('No game with that code.');
+      if (found.player2_id && found.player2_id !== user.id) throw new Error('That game is already full.');
+      if (found.player1_id === user.id) {
+        router.push(`/play/${found.id}`);
+        return;
+      }
+      if (found.status === 'waiting') {
+        await joinOnlineGame({ userId: user.id, gameId: found.id });
+      }
+      router.push(`/play/${found.id}`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not join with that code.');
+      setBusy(null);
+    }
+  }
+
+  async function handleJoinPublic(g: PublicGame) {
+    if (!user) return;
+    setError(null);
+    setBusy(g.id);
+    try {
+      await joinOnlineGame({ userId: user.id, gameId: g.id });
+      router.push(`/play/${g.id}`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not join.');
+      setBusy(null);
+    }
+  }
+
+  return (
+    <>
+      {/* The 3 hero actions */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <ActionCard
+          icon="🎯"
+          title="Quick Match"
+          desc="Find or create the fastest available match. Starts immediately."
+          accent
+          loading={busy === 'quick'}
+          theme={theme}
+          onClick={onQuickMatch}
+        />
+        <ActionCard
+          icon="👥"
+          title="Play with Friend"
+          desc="Create a private room and share the 6-char code."
+          loading={busy === 'private'}
+          theme={theme}
+          onClick={() => onCreate(false)}
+        />
+        <div
+          className="rounded-xl p-4"
+          style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+        >
+          <div className="text-2xl mb-1">🎟</div>
+          <div className="text-sm font-bold mb-2">Join with Code</div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+              placeholder="ABC123"
+              maxLength={6}
+              className="rounded-md px-2 py-1.5 text-sm flex-1 min-w-0 tracking-widest font-mono"
+              style={{
+                background: theme.inputBg,
+                color: theme.inputText,
+                border: `1px solid ${theme.buttonBorder}`,
+              }}
+            />
+            <button
+              onClick={handleJoinByCode}
+              disabled={!joinCode.trim() || busy === 'code'}
+              className="rounded-md px-3 py-1.5 text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center min-w-[48px]"
+              style={{
+                background: theme.buttonRotateBg,
+                border: `1px solid ${theme.buttonRotateBorder}`,
+                color: theme.buttonRotateText,
+              }}
+            >
+              {busy === 'code' ? <LoadingEmojis size={12} gap={2} /> : 'Go'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Open public games — secondary list */}
+      <details className="mb-4">
+        <summary className="cursor-pointer text-sm font-semibold opacity-80 hover:opacity-100">
+          🌍 Open public rooms ({gamesLoading ? '…' : games.length})
+        </summary>
+        <div className="mt-3">
+          {gamesLoading ? (
+            <div className="flex items-center justify-center py-6"><LoadingEmojis size={22} /></div>
+          ) : games.length === 0 ? (
+            <div className="text-sm opacity-60 py-3 text-center">No open public rooms.</div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {games.map(g => (
+                <motion.div
+                  key={g.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl p-2.5 flex items-center gap-3"
+                  style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+                >
+                  <Avatar
+                    url={g.player1?.avatar_url}
+                    name={g.player1?.display_name}
+                    size={36}
+                    accent="p2"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold truncate text-sm">{g.player1?.display_name ?? 'Anonymous'}</div>
+                    <div className="text-xs opacity-70 truncate">@{g.player1?.username ?? '?'}</div>
+                  </div>
+                  <button
+                    onClick={() => handleJoinPublic(g)}
+                    disabled={busy === g.id}
+                    className="rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-50 inline-flex items-center justify-center min-w-[60px]"
+                    style={{
+                      background: theme.buttonRotateBg,
+                      border: `1px solid ${theme.buttonRotateBorder}`,
+                      color: theme.buttonRotateText,
+                    }}
+                  >
+                    {busy === g.id ? <LoadingEmojis size={12} gap={2} /> : 'Join'}
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </details>
+    </>
+  );
+}
+
+function ActionCard({
+  icon, title, desc, accent, loading, theme, onClick,
+}: {
+  icon: string;
+  title: string;
+  desc: string;
+  accent?: boolean;
+  loading?: boolean;
+  theme: ReturnType<typeof useSettings>['theme'];
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      disabled={loading}
+      className="rounded-xl p-4 text-start transition-all disabled:opacity-50"
+      style={{
+        background: accent ? theme.buttonRotateBg : theme.panelBg,
+        border: `1px solid ${accent ? theme.buttonRotateBorder : theme.panelBorder}`,
+        color: accent ? theme.buttonRotateText : theme.textPrimary,
+        boxShadow: accent ? `0 8px 24px ${theme.p1Color}30` : 'none',
+        minHeight: 120,
+      }}
+    >
+      <div className="text-2xl mb-1">{icon}</div>
+      <div className="text-sm font-bold mb-1">{title}</div>
+      <div className="text-xs opacity-80">{desc}</div>
+      {loading && <div className="mt-2"><LoadingEmojis size={14} gap={2} /></div>}
+    </motion.button>
+  );
+}
+
+// ─── Friends tab ──────────────────────────────────────────────────────────
+
+function FriendsTab({
+  theme, user, setError,
+}: {
+  theme: ReturnType<typeof useSettings>['theme'];
+  user: ReturnType<typeof useUser>['user'];
+  setError: (e: string | null) => void;
+}) {
+  const router = useRouter();
+  const [friends, setFriends] = useState<FriendProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const list = await listFriendships(user.id);
+      setFriends(list);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not load friends.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user, setError]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  // Realtime: refresh on any friendships change.
+  useEffect(() => {
+    if (!user) return;
+    const supabase = getSupabaseBrowser();
+    const ch = supabase
+      .channel('friendships-watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => refresh())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user, refresh]);
+
+  async function handleSearch() {
+    if (!user || !searchQuery.trim()) return;
+    setError(null);
+    setSearching(true);
+    try {
+      const username = searchQuery.trim().replace(/^@/, '').toLowerCase();
+      const found = await findProfileByUsername(username);
+      if (!found) throw new Error(`No user found with username @${username}.`);
+      if (found.id === user.id) throw new Error("That's you :)");
+      await sendFriendRequest({ myId: user.id, addresseeId: found.id });
+      setSearchQuery('');
+      await refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not send request.');
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function handleAccept(f: FriendProfile) {
+    setActionBusy(`accept-${f.friendshipId}`);
+    try {
+      await acceptFriendRequest(f.friendshipId);
+      await refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not accept.');
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleRemove(f: FriendProfile) {
+    if (!confirm(f.status === 'accepted' ? `Remove @${f.username}?` : 'Cancel request?')) return;
+    setActionBusy(`remove-${f.friendshipId}`);
+    try {
+      await removeFriendship(f.friendshipId);
+      await refresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not remove.');
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleChallenge(f: FriendProfile) {
+    if (!user) return;
+    setError(null);
+    setActionBusy(`challenge-${f.friendshipId}`);
+    try {
+      const game = await createOnlineGame({ userId: user.id, isPublic: false });
+      router.push(`/play/${game.id}`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not create game.');
+      setActionBusy(null);
+    }
+  }
+
+  const incoming = friends.filter(f => f.status === 'pending' && !f.outgoing);
+  const outgoing = friends.filter(f => f.status === 'pending' && f.outgoing);
+  const accepted = friends.filter(f => f.status === 'accepted');
+
+  return (
+    <div>
+      {/* Add friend by username */}
+      <div
+        className="rounded-xl p-4 mb-4"
+        style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+      >
+        <div className="text-sm font-bold mb-2">🔎 Add friend by username</div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            placeholder="@username"
+            className="rounded-md px-3 py-2 text-sm flex-1 min-w-0"
+            style={{
+              background: theme.inputBg,
+              color: theme.inputText,
+              border: `1px solid ${theme.buttonBorder}`,
+            }}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={!searchQuery.trim() || searching}
+            className="rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50 inline-flex items-center justify-center min-w-[80px]"
+            style={{
+              background: theme.buttonRotateBg,
+              border: `1px solid ${theme.buttonRotateBorder}`,
+              color: theme.buttonRotateText,
+            }}
+          >
+            {searching ? <LoadingEmojis size={14} gap={2} /> : 'Add'}
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-10"><LoadingEmojis size={26} /></div>
+      ) : (
+        <>
+          {incoming.length > 0 && (
+            <Section title={`📥 Incoming requests (${incoming.length})`} theme={theme}>
+              {incoming.map(f => (
+                <FriendRow
+                  key={f.friendshipId}
+                  friend={f}
+                  theme={theme}
+                  busy={actionBusy}
+                  primary={{ label: 'Accept', onClick: () => handleAccept(f), busyKey: `accept-${f.friendshipId}` }}
+                  secondary={{ label: 'Decline', onClick: () => handleRemove(f), busyKey: `remove-${f.friendshipId}` }}
+                />
+              ))}
+            </Section>
+          )}
+
+          {outgoing.length > 0 && (
+            <Section title={`📤 Sent (${outgoing.length})`} theme={theme}>
+              {outgoing.map(f => (
+                <FriendRow
+                  key={f.friendshipId}
+                  friend={f}
+                  theme={theme}
+                  busy={actionBusy}
+                  badge="Pending"
+                  secondary={{ label: 'Cancel', onClick: () => handleRemove(f), busyKey: `remove-${f.friendshipId}` }}
+                />
+              ))}
+            </Section>
+          )}
+
+          <Section title={`🤝 Friends (${accepted.length})`} theme={theme}>
+            {accepted.length === 0 ? (
+              <div className="text-sm opacity-60 py-3 text-center">
+                No friends yet. Add someone by their @username above!
+              </div>
+            ) : (
+              accepted.map(f => (
+                <FriendRow
+                  key={f.friendshipId}
+                  friend={f}
+                  theme={theme}
+                  busy={actionBusy}
+                  primary={{ label: '⚔️ Challenge', onClick: () => handleChallenge(f), busyKey: `challenge-${f.friendshipId}` }}
+                  secondary={{ label: 'Remove', onClick: () => handleRemove(f), busyKey: `remove-${f.friendshipId}` }}
+                />
+              ))
+            )}
+          </Section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Section({ title, theme, children }: { title: string; theme: ReturnType<typeof useSettings>['theme']; children: React.ReactNode }) {
+  return (
+    <div className="mb-5">
+      <div className="text-sm font-semibold mb-2 opacity-85">{title}</div>
+      <div className="flex flex-col gap-2">{children}</div>
+    </div>
+  );
+}
+
+function FriendRow({
+  friend, theme, busy, primary, secondary, badge,
+}: {
+  friend: FriendProfile;
+  theme: ReturnType<typeof useSettings>['theme'];
+  busy: string | null;
+  primary?: { label: string; onClick: () => void; busyKey: string };
+  secondary?: { label: string; onClick: () => void; busyKey: string };
+  badge?: string;
+}) {
+  return (
+    <div
+      className="rounded-xl p-3 flex items-center gap-3"
+      style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+    >
+      <Avatar url={friend.avatar_url} name={friend.display_name} size={42} />
+      <div className="flex-1 min-w-0">
+        <div className="font-bold truncate">{friend.display_name}</div>
+        <div className="text-xs opacity-70 truncate">@{friend.username} · ★ {friend.rating}</div>
+      </div>
+      {badge && <span className="text-xs opacity-70 px-2 py-1 rounded-full" style={{ background: theme.buttonBg }}>{badge}</span>}
+      {primary && (
+        <button
+          onClick={primary.onClick}
+          disabled={busy === primary.busyKey}
+          className="rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-50 inline-flex items-center justify-center min-w-[80px]"
+          style={{
+            background: theme.buttonRotateBg,
+            border: `1px solid ${theme.buttonRotateBorder}`,
+            color: theme.buttonRotateText,
+          }}
+        >
+          {busy === primary.busyKey ? <LoadingEmojis size={12} gap={2} /> : primary.label}
+        </button>
+      )}
+      {secondary && (
+        <button
+          onClick={secondary.onClick}
+          disabled={busy === secondary.busyKey}
+          className="rounded-lg px-3 py-1.5 text-xs font-semibold opacity-70 hover:opacity-100 disabled:opacity-30"
+          style={{
+            background: theme.buttonBg,
+            border: `1px solid ${theme.buttonBorder}`,
+            color: theme.textPrimary,
+          }}
+        >
+          {busy === secondary.busyKey ? <LoadingEmojis size={12} gap={2} /> : secondary.label}
+        </button>
+      )}
+    </div>
   );
 }

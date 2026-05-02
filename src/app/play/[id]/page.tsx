@@ -9,9 +9,11 @@ import { useSettings } from '@/hooks/useSettings';
 import { useOnlineGame } from '@/hooks/useOnlineGame';
 import GameBoard from '@/components/GameBoard';
 import GameHUD from '@/components/GameHUD';
-import WinScreen from '@/components/WinScreen';
 import AuthBadge from '@/components/AuthBadge';
 import LoadingEmojis from '@/components/LoadingEmojis';
+import Avatar from '@/components/Avatar';
+import type { Player } from '@/game/types';
+import type { Theme } from '@/game/themes';
 
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
 
@@ -41,6 +43,9 @@ export default function OnlineGamePage() {
     switchToShieldedPiece,
     switchToShieldingButterfly,
     resign,
+    toggleReady,
+    iAmReady,
+    opponentReady,
     historyBack,
     historyForward,
     historyToLive,
@@ -51,6 +56,12 @@ export default function OnlineGamePage() {
   useEffect(() => {
     if (!userLoading && !user) router.replace(`/login?next=/play/${gameId}`);
   }, [userLoading, user, router, gameId]);
+
+  // When the match number changes (rematch started), bring back the win
+  // modal pill so the next match's result will surface again.
+  useEffect(() => {
+    setWinDismissed(false);
+  }, [game?.match_number]);
 
   // Responsive cell sizing — same RAF-throttled logic as the local page.
   useEffect(() => {
@@ -251,7 +262,7 @@ export default function OnlineGamePage() {
 
       {/* Player ribbon — shows both players + whose turn it is */}
       <div
-        className="fixed left-1/2 -translate-x-1/2 top-3 z-20 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm"
+        className="fixed left-1/2 -translate-x-1/2 top-3 z-20 flex items-center gap-2 px-2 py-1 rounded-full text-sm max-w-[90vw]"
         style={{
           background: theme.panelBg,
           border: `1px solid ${theme.panelBorder}`,
@@ -260,16 +271,20 @@ export default function OnlineGamePage() {
       >
         <PlayerChip
           name={myPlayerNumber === 1 ? (profile?.display_name ?? 'You') : (game.player1_id ? (opponent?.display_name ?? 'P1') : '…')}
+          avatarUrl={myPlayerNumber === 1 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
           color={theme.p1Color}
           isYou={myPlayerNumber === 1}
           isTurn={state.currentPlayer === 1 && isPlaying}
+          accent="p1"
         />
         <span className="opacity-50 text-xs">vs</span>
         <PlayerChip
           name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : (game.player2_id ? (opponent?.display_name ?? 'P2') : '…')}
+          avatarUrl={myPlayerNumber === 2 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
           color={theme.p2Color}
           isYou={myPlayerNumber === 2}
           isTurn={state.currentPlayer === 2 && isPlaying}
+          accent="p2"
         />
       </div>
 
@@ -353,19 +368,40 @@ export default function OnlineGamePage() {
         </button>
       )}
 
-      {/* Win modal */}
+      {/* Series score chip */}
+      {(game.series_p1_wins + game.series_p2_wins > 0) && (
+        <div
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 rounded-full px-4 py-1.5 text-sm font-bold flex items-center gap-2"
+          style={{
+            background: theme.panelBg,
+            border: `1px solid ${theme.panelBorder}`,
+            color: theme.textPrimary,
+          }}
+        >
+          <span style={{ color: theme.p1Color }}>{game.series_p1_wins}</span>
+          <span className="opacity-50 text-xs">— series —</span>
+          <span style={{ color: theme.p2Color }}>{game.series_p2_wins}</span>
+        </div>
+      )}
+
+      {/* Win modal with rematch */}
       {won && winner !== null && !winDismissed && (
-        <WinScreen
+        <RematchModal
           winner={winner}
-          onRestart={() => router.push('/play')}
-          onMenu={() => router.push('/')}
+          isMyMatch={!isSpectator}
+          iAmReady={iAmReady}
+          opponentReady={opponentReady}
+          onReady={toggleReady}
+          onLeave={() => router.push('/play')}
           onDismiss={() => setWinDismissed(true)}
+          theme={theme}
+          opponentName={opponent?.display_name ?? 'Opponent'}
         />
       )}
       {won && winner !== null && winDismissed && (
         <button
           onClick={() => setWinDismissed(false)}
-          className="fixed bottom-4 z-30 rounded-full px-4 py-2 font-bold text-sm shadow-lg"
+          className="fixed bottom-16 z-30 rounded-full px-4 py-2 font-bold text-sm shadow-lg"
           style={{
             [isRTL ? 'left' : 'right']: 16,
             background: theme.p1AccentBg,
@@ -384,29 +420,142 @@ export default function OnlineGamePage() {
 
 function PlayerChip({
   name,
+  avatarUrl,
   color,
   isYou,
   isTurn,
+  accent,
 }: {
   name: string;
+  avatarUrl: string | null;
   color: string;
   isYou: boolean;
   isTurn: boolean;
+  accent: 'p1' | 'p2';
 }) {
   return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold text-xs"
+    <motion.span
+      animate={isTurn ? { scale: [1, 1.04, 1] } : { scale: 1 }}
+      transition={isTurn ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : {}}
+      className="inline-flex items-center gap-2 px-2 py-1 rounded-full font-semibold text-xs"
       style={{
         background: isTurn ? `color-mix(in srgb, ${color} 25%, transparent)` : 'transparent',
         border: `1px solid ${isTurn ? color : 'transparent'}`,
         color,
       }}
     >
-      <span
-        className="w-2 h-2 rounded-full"
-        style={{ background: color, boxShadow: isTurn ? `0 0 6px ${color}` : 'none' }}
-      />
-      {isYou ? `${name} (you)` : name}
-    </span>
+      <Avatar url={avatarUrl} name={name} size={20} accent={accent} ring={isTurn} />
+      <span className="max-w-[120px] truncate">{isYou ? `${name} (you)` : name}</span>
+    </motion.span>
+  );
+}
+
+function RematchModal({
+  winner,
+  isMyMatch,
+  iAmReady,
+  opponentReady,
+  onReady,
+  onLeave,
+  onDismiss,
+  theme,
+  opponentName,
+}: {
+  winner: Player;
+  isMyMatch: boolean;
+  iAmReady: boolean;
+  opponentReady: boolean;
+  onReady: () => void;
+  onLeave: () => void;
+  onDismiss: () => void;
+  theme: Theme;
+  opponentName: string;
+}) {
+  const isP1 = winner === 1;
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      onClick={onDismiss}
+      className="fixed inset-0 z-50 flex items-center justify-center px-3"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}
+    >
+      <motion.div
+        initial={{ scale: 0.7, y: -40 }}
+        animate={{ scale: 1, y: 0 }}
+        transition={{ type: 'spring', damping: 16, stiffness: 220 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-w-md w-full rounded-3xl overflow-hidden p-6 sm:p-8 text-center"
+        style={{
+          background: isP1
+            ? `linear-gradient(135deg, ${theme.p1Color}30, ${theme.bgGradient})`
+            : `linear-gradient(135deg, ${theme.p2Color}30, ${theme.bgGradient})`,
+          border: `2px solid ${isP1 ? theme.p1Color : theme.p2Color}`,
+          color: theme.textPrimary,
+        }}
+      >
+        <button
+          onClick={onDismiss}
+          aria-label="Close"
+          className="absolute top-3 right-3 z-20 rounded-full w-8 h-8 flex items-center justify-center opacity-70 hover:opacity-100 hover:bg-white/10 transition"
+        >
+          ✕
+        </button>
+
+        <motion.div
+          animate={{ y: [0, -10, 0], rotate: [-4, 4, -4] }}
+          transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+          className="text-6xl mb-3"
+        >
+          👑
+        </motion.div>
+        <h1 className="text-3xl font-extrabold mb-1" style={{ color: isP1 ? theme.p1Color : theme.p2Color }}>
+          VICTORY!
+        </h1>
+        <div className="text-lg font-bold mb-1">Player {winner} Wins</div>
+        <div className="text-sm opacity-70 mb-5">
+          {isP1 ? '⚔️ The Golden Lion claims the Throne!' : '🛡️ The Silver Lion claims the Throne!'}
+        </div>
+
+        {isMyMatch ? (
+          <>
+            <button
+              onClick={onReady}
+              className="w-full rounded-xl py-3 text-lg font-extrabold mb-2 transition-transform active:scale-95"
+              style={{
+                background: iAmReady ? theme.p1AccentBg : theme.buttonRotateBg,
+                border: `2px solid ${iAmReady ? theme.p1Color : theme.buttonRotateBorder}`,
+                color: iAmReady ? theme.p1Color : theme.buttonRotateText,
+              }}
+            >
+              {iAmReady ? '✓ Ready — waiting for opponent…' : '🔁 Ready for rematch'}
+            </button>
+            <div className="text-xs opacity-70 mb-3 flex items-center justify-center gap-3">
+              <span>You: {iAmReady ? '✅' : '⬜'}</span>
+              <span>{opponentName}: {opponentReady ? '✅' : '⬜'}</span>
+            </div>
+          </>
+        ) : (
+          <div className="text-sm opacity-70 mb-4">Spectator view — players can choose to rematch.</div>
+        )}
+
+        <div className="flex gap-2 justify-center">
+          <button
+            onClick={onDismiss}
+            className="px-4 py-2 rounded-lg font-semibold text-sm"
+            style={{ background: theme.buttonBg, border: `1px solid ${theme.buttonBorder}`, color: theme.textPrimary }}
+          >
+            Review board
+          </button>
+          <button
+            onClick={onLeave}
+            className="px-4 py-2 rounded-lg font-semibold text-sm"
+            style={{ background: theme.buttonBg, border: `1px solid ${theme.buttonBorder}`, color: theme.textPrimary }}
+          >
+            🏠 Lobby
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

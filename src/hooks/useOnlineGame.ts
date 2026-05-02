@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { saveGameState, GameRow } from '@/lib/supabase/games';
+import { createInitialState } from '@/game/initialState';
 import { useUser } from '@/hooks/useUser';
 import { applyMove, applyEndTurn, getValidMoves } from '@/game/logic';
 import type { GameState, Player, Orientation } from '@/game/types';
@@ -40,6 +41,12 @@ export interface OnlineGameView {
   switchToShieldedPiece: () => void;
   switchToShieldingButterfly: () => void;
   resign: () => void;
+  // Rematch in same room
+  toggleReady: () => void;
+  /** True if I clicked Ready for the next match. */
+  iAmReady: boolean;
+  /** True if my opponent clicked Ready. */
+  opponentReady: boolean;
   // History review
   historyBack: () => void;
   historyForward: () => void;
@@ -297,6 +304,58 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       .eq('id', game.id);
   }, [game, user, myPlayerNumber]);
 
+  // ── Rematch in same room ────────────────────────────────────────────────
+  // Each player toggles their own ready flag. When both are true, the host
+  // (player1 — to avoid double-resets racing) writes the fresh state and
+  // increments the series score for whoever just won.
+  const iAmReady = !!(game && (
+    (myPlayerNumber === 1 && game.p1_ready) ||
+    (myPlayerNumber === 2 && game.p2_ready)
+  ));
+  const opponentReady = !!(game && (
+    (myPlayerNumber === 1 && game.p2_ready) ||
+    (myPlayerNumber === 2 && game.p1_ready)
+  ));
+
+  const toggleReady = useCallback(async () => {
+    if (!game || !user || myPlayerNumber === null) return;
+    const supabase = getSupabaseBrowser();
+    const field = myPlayerNumber === 1 ? 'p1_ready' : 'p2_ready';
+    const newReady = !iAmReady;
+    const otherReady = myPlayerNumber === 1 ? game.p2_ready : game.p1_ready;
+
+    if (newReady && otherReady && myPlayerNumber === 1) {
+      // Both ready and I'm the host — reset the match.
+      const won = game.winner_id;
+      const p1Wins = won === game.player1_id ? game.series_p1_wins + 1 : game.series_p1_wins;
+      const p2Wins = won === game.player2_id ? game.series_p2_wins + 1 : game.series_p2_wins;
+      const fresh = {
+        ...createInitialState(),
+        phase: 'playing' as const,
+        lastAction: { key: 'action.player1Turn' },
+      };
+      await supabase
+        .from('games')
+        .update({
+          state: fresh,
+          status: 'playing',
+          winner_id: null,
+          finished_at: null,
+          current_turn: 0,
+          p1_ready: false,
+          p2_ready: false,
+          series_p1_wins: p1Wins,
+          series_p2_wins: p2Wins,
+          match_number: game.match_number + 1,
+        })
+        .eq('id', game.id);
+      return;
+    }
+
+    // Otherwise: just flip my own ready flag and wait.
+    await supabase.from('games').update({ [field]: newReady }).eq('id', game.id);
+  }, [game, user, myPlayerNumber, iAmReady]);
+
   // ── History review (local only) ─────────────────────────────────────────
   const historyBack = useCallback(() => {
     if (!state) return;
@@ -335,6 +394,9 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     switchToShieldedPiece,
     switchToShieldingButterfly,
     resign,
+    toggleReady,
+    iAmReady,
+    opponentReady,
     historyBack,
     historyForward,
     historyToLive,

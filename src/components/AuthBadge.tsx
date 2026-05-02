@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
 import LoadingEmojis from './LoadingEmojis';
+import Avatar from './Avatar';
 
 interface Props {
   /** Render position. The page positions us absolutely; we just need the side. */
@@ -66,8 +67,6 @@ export default function AuthBadge({ side }: Props) {
   }
 
   // Signed in — avatar/initial + dropdown.
-  const initial = (profile?.display_name ?? user.email ?? '?').slice(0, 1).toUpperCase();
-
   return (
     <div className="relative" ref={wrapperRef}>
       <button
@@ -79,13 +78,8 @@ export default function AuthBadge({ side }: Props) {
           color: theme.textPrimary,
         }}
       >
-        <span
-          className="rounded-full inline-flex items-center justify-center font-bold"
-          style={{ width: 28, height: 28, background: theme.p1Color, color: '#000' }}
-        >
-          {initial}
-        </span>
-        <span className="hidden sm:inline pe-1">{profile?.display_name ?? user.email}</span>
+        <Avatar url={profile?.avatar_url} name={profile?.display_name} email={user.email} size={28} />
+        <span className="hidden sm:inline pe-1 max-w-[140px] truncate">{profile?.display_name ?? user.email}</span>
       </button>
 
       <AnimatePresence>

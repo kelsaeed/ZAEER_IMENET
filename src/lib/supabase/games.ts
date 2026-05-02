@@ -19,6 +19,12 @@ export interface GameRow {
   updated_at: string;
   started_at: string | null;
   finished_at: string | null;
+  // Rematch state — both players toggle ready, host writes fresh match.
+  p1_ready: boolean;
+  p2_ready: boolean;
+  series_p1_wins: number;
+  series_p2_wins: number;
+  match_number: number;
 }
 
 /** Short, human-friendly invite code: 6 alpha-num chars, no ambiguous letters. */
@@ -114,6 +120,39 @@ export async function saveGameState(opts: {
     })
     .eq('id', opts.gameId);
   if (error) throw new Error(error.message);
+}
+
+/** Quick Match: try to join the oldest open public game, or create one.
+ *  This is the "matchmaking" entry point — the user just gets routed to
+ *  a playable room as fast as possible. */
+export async function quickMatch(opts: { userId: string }): Promise<{ gameId: string; created: boolean }> {
+  const supabase = getSupabaseBrowser();
+
+  // 1. Find an open public game we didn't create.
+  const { data: open, error: searchError } = await supabase
+    .from('games')
+    .select('id')
+    .eq('status', 'waiting')
+    .eq('is_public', true)
+    .neq('player1_id', opts.userId)
+    .is('player2_id', null)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (searchError) throw new Error(searchError.message);
+
+  if (open && open.length > 0) {
+    const target = open[0].id;
+    try {
+      await joinOnlineGame({ userId: opts.userId, gameId: target });
+      return { gameId: target, created: false };
+    } catch {
+      // Lost a race against another joiner — fall through and create one.
+    }
+  }
+
+  // 2. None available (or join lost a race) — create a public game.
+  const newGame = await createOnlineGame({ userId: opts.userId, isPublic: true });
+  return { gameId: newGame.id, created: true };
 }
 
 /** Player gives up — game ends with the other player as winner. */

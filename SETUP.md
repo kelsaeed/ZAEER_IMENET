@@ -31,6 +31,18 @@ sign-up + Google sign-in". Total cost: **$0**.
 3. You should see "Success. No rows returned." This created the
    `profiles` / `games` / `moves` tables, RLS policies, and triggers.
 
+### 2.5) Run the social migration
+
+After the initial schema:
+
+1. **SQL Editor → New query**.
+2. Open `supabase/migrations/0002_friends_avatars_rematch.sql`, paste, **Run**.
+3. This adds the `friendships` table, rematch fields on `games`, and the
+   `avatars` storage bucket with the right RLS policies.
+
+If you've already created users from the older schema, this migration is
+idempotent — it'll just no-op the parts that already exist.
+
 ## 3) Enable Google sign-in (free)
 
 1. <https://console.cloud.google.com> → create a project.

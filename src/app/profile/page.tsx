@@ -6,7 +6,9 @@ import { motion } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
+import { uploadAvatar, saveAvatarUrl } from '@/lib/supabase/avatars';
 import LoadingEmojis from '@/components/LoadingEmojis';
+import Avatar from '@/components/Avatar';
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/i;
 // Hard cap so a hung request can never freeze the UI forever.
@@ -35,6 +37,9 @@ export default function ProfilePage() {
 
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -172,7 +177,34 @@ export default function ProfilePage() {
     }
   }
 
-  const initial = (profile?.display_name ?? user.email ?? '?').slice(0, 1).toUpperCase();
+  async function handleAvatarPick() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setMsg(null); setErr(null); setUploadingAvatar(true);
+    try {
+      const url = await withTimeout(uploadAvatar({ userId: user.id, file }));
+      await withTimeout(saveAvatarUrl({ userId: user.id, url }));
+      await reloadProfile();
+      flashSuccess('Avatar updated.');
+    } catch (e: unknown) {
+      flashError(e instanceof Error ? e.message : 'Could not upload image — try a smaller file.');
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  function copyShareLink() {
+    if (!profile?.username) return;
+    const url = `${window.location.origin}/u/${profile.username}`;
+    navigator.clipboard?.writeText(url);
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 1800);
+  }
 
   return (
     <main
@@ -195,19 +227,34 @@ export default function ProfilePage() {
         >
           {/* Header */}
           <div className="flex items-center gap-4 mb-5">
-            <div
-              className="rounded-full flex items-center justify-center font-extrabold text-2xl shrink-0"
-              style={{
-                width: 64,
-                height: 64,
-                background: theme.p1Color,
-                color: '#000',
-                boxShadow: theme.p1Glow,
-              }}
+            <button
+              onClick={handleAvatarPick}
+              disabled={uploadingAvatar}
+              aria-label="Change avatar"
+              className="relative shrink-0 group rounded-full"
             >
-              {initial}
-            </div>
-            <div className="min-w-0">
+              <Avatar
+                url={profile?.avatar_url}
+                name={profile?.display_name}
+                email={user.email}
+                size={72}
+                ring
+              />
+              <span
+                className="absolute inset-0 rounded-full flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}
+              >
+                {uploadingAvatar ? <LoadingEmojis size={14} gap={2} /> : '📷 Upload'}
+              </span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+            <div className="min-w-0 flex-1">
               <h1
                 className="text-xl sm:text-2xl font-extrabold truncate"
                 style={{ color: theme.p1Color }}
@@ -216,6 +263,15 @@ export default function ProfilePage() {
               </h1>
               <div className="text-sm opacity-70 truncate">@{profile?.username ?? '…'}</div>
               <div className="text-xs opacity-60 truncate">{user.email}</div>
+              {profile?.username && (
+                <button
+                  onClick={copyShareLink}
+                  className="text-xs mt-1 underline opacity-70 hover:opacity-100 inline-flex items-center gap-1"
+                  style={{ color: theme.p1Color }}
+                >
+                  🔗 {shareCopied ? 'Copied!' : 'Copy share link'}
+                </button>
+              )}
               {profile?.is_admin && (
                 <div className="text-xs mt-1" style={{ color: theme.p1Color }}>
                   ★ {t('auth.admin')}
