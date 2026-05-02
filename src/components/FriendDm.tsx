@@ -6,6 +6,7 @@ import {
   listDmThread,
   sendDm,
   fetchDmMessage,
+  markDmThreadRead,
   DmMessage,
 } from '@/lib/supabase/chat';
 import ChatPanel, { ChatPanelMessage } from './ChatPanel';
@@ -34,13 +35,15 @@ export default function FriendDm({ friendId, friendName, friendAvatarUrl, onClos
   const { user } = useUser();
   const [messages, setMessages] = useState<DmMessage[]>([]);
 
-  // Initial fetch.
+  // Initial fetch + mark-as-read so the notification badge clears.
   useEffect(() => {
     if (!user) return;
     let mounted = true;
     listDmThread({ meId: user.id, otherId: friendId })
       .then(msgs => { if (mounted) setMessages(msgs); })
       .catch(() => {});
+    // Fire-and-forget — non-critical if it fails.
+    markDmThreadRead({ meId: user.id, otherId: friendId }).catch(() => {});
     return () => { mounted = false; };
   }, [user, friendId]);
 
@@ -62,6 +65,10 @@ export default function FriendDm({ friendId, friendName, friendAvatarUrl, onClos
           const fresh = await fetchDmMessage(row.id);
           if (!fresh) return;
           setMessages(prev => prev.some(m => m.id === fresh.id) ? prev : [...prev, fresh]);
+          // If they messaged us while the panel is open, mark immediately.
+          if (row.sender_id === friendId) {
+            markDmThreadRead({ meId: user.id, otherId: friendId }).catch(() => {});
+          }
         },
       )
       .subscribe();

@@ -47,6 +47,23 @@ input, select, textarea {
   color-scheme: dark;
 }
 
+/* Notification bell jiggle. Applied to the 🔔 emoji when totalUnread > 0
+ * via the .animate-bell class on the NotificationBell component. */
+@keyframes zi-bell-jiggle {
+  0%, 100% { transform: rotate(0); }
+  10% { transform: rotate(-12deg); }
+  20% { transform: rotate(10deg); }
+  30% { transform: rotate(-8deg); }
+  40% { transform: rotate(6deg); }
+  50% { transform: rotate(-4deg); }
+  60%, 100% { transform: rotate(0); }
+}
+.animate-bell {
+  display: inline-block;
+  animation: zi-bell-jiggle 1.6s ease-in-out infinite;
+  transform-origin: 50% 10%;
+}
+
 /* HUD: full width on small screens (stacked layout), fluid clamp on lg+ so
  * it scales smoothly across laptops, monitors, and 4K displays. Capped at
  * 22rem so the panel never dominates the page. */

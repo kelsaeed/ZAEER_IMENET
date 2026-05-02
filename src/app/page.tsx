@@ -8,6 +8,7 @@ import GameHUD from '@/components/GameHUD';
 import WinScreen from '@/components/WinScreen';
 import StartScreen from '@/components/StartScreen';
 import AuthBadge from '@/components/AuthBadge';
+import NotificationBell from '@/components/NotificationBell';
 
 // Heavy panel — only load it when the user actually opens it.
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
@@ -139,9 +140,10 @@ export default function Home() {
         ⚙️
       </button>
       <div
-        className="fixed top-3 z-30"
+        className="fixed top-3 z-30 flex items-center gap-2"
         style={{ [isRTL ? 'left' : 'right']: 12 } as React.CSSProperties}
       >
+        <NotificationBell />
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>
 

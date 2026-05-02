@@ -9,6 +9,7 @@ import { findProfileByUsername, sendFriendRequest, listFriendships } from '@/lib
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
 import AuthBadge from '@/components/AuthBadge';
+import NotificationBell from '@/components/NotificationBell';
 
 interface PublicProfile {
   id: string;
@@ -120,9 +121,10 @@ export default function PublicProfilePage() {
       style={{ background: theme.bgGradient, color: theme.textPrimary }}
     >
       <div
-        className="fixed top-3 z-30"
+        className="fixed top-3 z-30 flex items-center gap-2"
         style={{ [isRTL ? 'left' : 'right']: 12 } as React.CSSProperties}
       >
+        <NotificationBell />
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>
 

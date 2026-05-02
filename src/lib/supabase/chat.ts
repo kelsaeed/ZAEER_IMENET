@@ -124,6 +124,22 @@ export async function sendDm(opts: {
   }
 }
 
+/** Mark every unread message FROM `otherId` TO `meId` as read.
+ *  Idempotent — already-read rows are filtered out by the WHERE clause.
+ *  RLS allows the recipient to update their own messages. */
+export async function markDmThreadRead(opts: {
+  meId: string;
+  otherId: string;
+}): Promise<void> {
+  const supabase = getSupabaseBrowser();
+  await supabase
+    .from('dm_messages')
+    .update({ read_at: new Date().toISOString() })
+    .eq('recipient_id', opts.meId)
+    .eq('sender_id', opts.otherId)
+    .is('read_at', null);
+}
+
 export async function fetchDmMessage(id: number): Promise<DmMessage | null> {
   const supabase = getSupabaseBrowser();
   const { data } = await supabase

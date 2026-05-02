@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useSettings } from '@/hooks/useSettings';
 import AuthBadge from './AuthBadge';
+import NotificationBell from './NotificationBell';
 
 const AnimatedBackground = dynamic(() => import('./AnimatedBackground'), { ssr: false });
 
@@ -50,9 +51,10 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
         </button>
       )}
       <div
-        className="fixed top-3 z-30"
+        className="fixed top-3 z-30 flex items-center gap-2"
         style={{ [isRTL ? 'left' : 'right']: 12 } as React.CSSProperties}
       >
+        <NotificationBell />
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>
       {/* Background: bouncing emojis (canvas) */}

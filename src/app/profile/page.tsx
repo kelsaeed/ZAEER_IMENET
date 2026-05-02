@@ -10,6 +10,7 @@ import { uploadAvatar, saveAvatarUrl } from '@/lib/supabase/avatars';
 import { listFriendships, FriendProfile } from '@/lib/supabase/friends';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
+import NotificationBell from '@/components/NotificationBell';
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/i;
 // Hard cap so a hung request can never freeze the UI forever.
@@ -223,6 +224,10 @@ export default function ProfilePage() {
       className="min-h-screen px-4 py-8 sm:py-12"
       style={{ background: theme.bgGradient, color: theme.textPrimary }}
     >
+      <div className="fixed top-3 right-3 z-30">
+        <NotificationBell />
+      </div>
+
       <div className="max-w-2xl mx-auto">
         <Link
           href="/"
