@@ -1,7 +1,7 @@
 'use client';
 import { motion } from 'framer-motion';
 import { GameState, Orientation } from '@/game/types';
-import { PIECE_EMOJI } from '@/game/constants';
+import { PIECE_EMOJI, squareLabel } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
 import { format } from '@/game/locales';
 
@@ -120,7 +120,10 @@ export default function GameHUD({ state, onReset, onRotateTo, onEndTurn, onSwitc
             <div>
               <div className="font-bold" style={{ fontSize: fs.medium }}>{pieceName(selectedPiece.type)}</div>
               <div className="opacity-70" style={{ fontSize: fs.small }}>
-                {format(t('hud.position'), { n: selectedPiece.player, r: selectedPiece.row, c: selectedPiece.col })}
+                {format(t('hud.position'), {
+                  n: selectedPiece.player,
+                  sq: squareLabel(selectedPiece.row, selectedPiece.col),
+                })}
               </div>
             </div>
           </div>

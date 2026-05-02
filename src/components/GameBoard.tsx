@@ -1,7 +1,7 @@
 'use client';
 import { GameState } from '@/game/types';
 import BoardCell from './BoardCell';
-import { BOARD_SIZE } from '@/game/constants';
+import { BOARD_SIZE, colLabel, rowLabel } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
 
 interface Props {
@@ -17,11 +17,21 @@ export default function GameBoard({ state, cellSize, onCellClick }: Props) {
 
   return (
     <div className="flex flex-col items-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      {/* Column labels */}
+      {/* Column labels — chess-style A..P */}
       <div className="flex" style={{ display: 'flex', paddingLeft: cellSize * 0.5 }}>
         {Array.from({ length: BOARD_SIZE }).map((_, c) => (
-          <div key={c} style={{ width: cellSize, textAlign: 'center', fontSize: 9, color: labelColor }}>
-            {c}
+          <div
+            key={c}
+            style={{
+              width: cellSize,
+              textAlign: 'center',
+              fontSize: Math.max(10, cellSize * 0.22),
+              fontWeight: 600,
+              color: labelColor,
+              letterSpacing: 0.5,
+            }}
+          >
+            {colLabel(c)}
           </div>
         ))}
       </div>
@@ -41,9 +51,19 @@ export default function GameBoard({ state, cellSize, onCellClick }: Props) {
       >
         {Array.from({ length: BOARD_SIZE }).map((_, row) => (
           <div key={row} className="flex" style={{ display: 'flex' }}>
-            {/* Row label */}
-            <div style={{ width: cellSize * 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: labelColor }}>
-              {row}
+            {/* Row label — chess-style 16..1 (top to bottom) */}
+            <div
+              style={{
+                width: cellSize * 0.5,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: Math.max(10, cellSize * 0.22),
+                fontWeight: 600,
+                color: labelColor,
+              }}
+            >
+              {rowLabel(row)}
             </div>
 
             {Array.from({ length: BOARD_SIZE }).map((_, col) => (

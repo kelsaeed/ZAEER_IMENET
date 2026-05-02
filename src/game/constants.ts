@@ -75,3 +75,22 @@ export function getNextOrientation(current: Orientation): Orientation {
   const i = ORIENTATION_ORDER.indexOf(current);
   return ORIENTATION_ORDER[(i + 1) % ORIENTATION_ORDER.length];
 }
+
+// ─── Chess-style coordinate labels ──────────────────────────────────────────
+// Columns are letters A–P (left to right), rows are numbers 1–16 (bottom to
+// top, like a chess board). So row 0 (top of the array) renders as "16" and
+// row 15 (bottom) renders as "1". A square is then "A1" (bottom-left) through
+// "P16" (top-right).
+
+/** "A".."P" for col 0..15 */
+export function colLabel(col: number): string {
+  return String.fromCharCode('A'.charCodeAt(0) + col);
+}
+/** 16..1 for row 0..15 (chess: row 1 is at the bottom of the board). */
+export function rowLabel(row: number): number {
+  return BOARD_SIZE - row;
+}
+/** Combined chess square name, e.g. (7, 4) → "E9". */
+export function squareLabel(row: number, col: number): string {
+  return `${colLabel(col)}${rowLabel(row)}`;
+}
