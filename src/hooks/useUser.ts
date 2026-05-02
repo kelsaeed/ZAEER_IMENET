@@ -1,5 +1,14 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  ReactNode,
+  createElement,
+} from 'react';
 import type { User } from '@supabase/supabase-js';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 
@@ -16,7 +25,21 @@ export interface Profile {
   draws: number;
 }
 
-export function useUser() {
+interface UserState {
+  user: User | null;
+  profile: Profile | null;
+  loading: boolean;
+  signOut: () => Promise<void>;
+  reloadProfile: () => Promise<void>;
+}
+
+const UserCtx = createContext<UserState | null>(null);
+
+/** App-wide auth provider. Mount once, near the root, so the user state
+ *  persists across React re-renders and conditional render branches.
+ *  Without this, each <AuthBadge> instance had its own `loading -> user`
+ *  cycle and could briefly flash a "Sign in" button after a phase change. */
+export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,7 +53,6 @@ export function useUser() {
         .eq('id', userId)
         .single();
       if (error) {
-        // RLS denied or row missing — don't blow up; just no profile.
         setProfile(null);
         return;
       }
@@ -44,21 +66,21 @@ export function useUser() {
     const supabase = getSupabaseBrowser();
     let mounted = true;
 
-    // Safety net: even if every auth call hangs, never leave the UI stuck on
-    // a loading spinner forever. After 5s assume "no user" and let the page
-    // render. The auth listener will still pick up real changes later.
+    // Safety net: never leave the UI stuck on a loading spinner forever.
     const safetyTimeout = setTimeout(() => {
       if (mounted) setLoading(false);
     }, 5000);
 
+    // getSession() reads from local storage / cookies without a network
+    // round-trip — it's faster and avoids racing with onAuthStateChange.
     (async () => {
       try {
-        const { data } = await supabase.auth.getUser();
+        const { data } = await supabase.auth.getSession();
         if (!mounted) return;
-        setUser(data.user);
-        if (data.user) await loadProfile(data.user.id);
+        setUser(data.session?.user ?? null);
+        if (data.session?.user) await loadProfile(data.session.user.id);
       } catch {
-        // Network or auth error — fall through to "no user" state.
+        // ignore — state stays as "no user"
       } finally {
         if (mounted) {
           clearTimeout(safetyTimeout);
@@ -72,7 +94,6 @@ export function useUser() {
       setUser(session?.user ?? null);
       if (session?.user) await loadProfile(session.user.id);
       else setProfile(null);
-      // Make sure loading clears on auth events (e.g. just signed in).
       setLoading(false);
     });
 
@@ -90,5 +111,32 @@ export function useUser() {
     setProfile(null);
   }, []);
 
-  return { user, profile, loading, signOut, reloadProfile: () => user && loadProfile(user.id) };
+  const reloadProfile = useCallback(async () => {
+    if (user) await loadProfile(user.id);
+  }, [user, loadProfile]);
+
+  const value = useMemo<UserState>(
+    () => ({ user, profile, loading, signOut, reloadProfile }),
+    [user, profile, loading, signOut, reloadProfile],
+  );
+
+  return createElement(UserCtx.Provider, { value }, children);
+}
+
+/** Read the current user / profile / loading state. Must be called inside
+ *  <UserProvider>. */
+export function useUser(): UserState {
+  const v = useContext(UserCtx);
+  if (!v) {
+    // Defensive default — keeps things rendering if a stray <AuthBadge>
+    // somehow ends up outside the provider tree (it shouldn't).
+    return {
+      user: null,
+      profile: null,
+      loading: false,
+      signOut: async () => {},
+      reloadProfile: async () => {},
+    };
+  }
+  return v;
 }

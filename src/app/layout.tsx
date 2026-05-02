@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { SettingsProvider } from '@/hooks/useSettings';
+import { UserProvider } from '@/hooks/useUser';
 
 export const metadata: Metadata = {
   title: 'Zaeer Imenet — Ancient Strategy Game',
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <SettingsProvider>{children}</SettingsProvider>
+        <SettingsProvider>
+          <UserProvider>{children}</UserProvider>
+        </SettingsProvider>
       </body>
     </html>
   );
