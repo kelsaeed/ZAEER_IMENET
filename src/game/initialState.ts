@@ -48,8 +48,10 @@ function createPieces(): GamePiece[] {
 }
 
 export function createInitialState(): GameState {
+  const pieces = createPieces();
+  const startAction = { key: 'action.gameReady' };
   return {
-    pieces: createPieces(),
+    pieces,
     currentPlayer: 1,
     selectedPieceId: null,
     validMoves: [],
@@ -63,6 +65,19 @@ export function createInitialState(): GameState {
     phase: 'menu',
     winner: null,
     turn: 0,
-    lastAction: { key: 'action.gameReady' },
+    lastAction: startAction,
+    history: [
+      // history[0] is always the starting position. Cloning the pieces array
+      // is essential so that subsequent live-state mutations don't bleed back
+      // into the snapshot.
+      {
+        pieces: pieces.map(p => ({ ...p })),
+        currentPlayer: 1,
+        lastAction: startAction,
+        turn: 0,
+      },
+    ],
+    viewingHistoryIndex: null,
+    winScreenDismissed: false,
   };
 }

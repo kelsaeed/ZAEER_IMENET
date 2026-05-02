@@ -7,17 +7,39 @@ import { format } from '@/game/locales';
 
 interface Props {
   state: GameState;
+  reviewing: boolean;
+  historyIndex: number | null;
+  historyLength: number;
   onMainMenu: () => void;
   onRestartMatch: () => void;
   onRotateTo: (orientation: Orientation) => void;
   onEndTurn: () => void;
   onSwitchToShieldedPiece: () => void;
   onSwitchToShieldingButterfly: () => void;
+  onHistoryBack: () => void;
+  onHistoryForward: () => void;
+  onHistoryToLive: () => void;
+  onHistoryJumpTo: (index: number) => void;
 }
 
 const ALL_TYPES = ['monkey', 'bat', 'butterfly', 'ant', 'elephant', 'lion'] as const;
 
-export default function GameHUD({ state, onMainMenu, onRestartMatch, onRotateTo, onEndTurn, onSwitchToShieldedPiece, onSwitchToShieldingButterfly }: Props) {
+export default function GameHUD({
+  state,
+  reviewing,
+  historyIndex,
+  historyLength,
+  onMainMenu,
+  onRestartMatch,
+  onRotateTo,
+  onEndTurn,
+  onSwitchToShieldedPiece,
+  onSwitchToShieldingButterfly,
+  onHistoryBack,
+  onHistoryForward,
+  onHistoryToLive,
+  onHistoryJumpTo,
+}: Props) {
   const { theme, t } = useSettings();
   const { pieces, currentPlayer, selectedPieceId, validRotations, antHasRotated, antMovedThisTurn, lastAction, turn } = state;
   const pieceName = (type: string) => t(`piece.${type}`);
@@ -101,6 +123,48 @@ export default function GameHUD({ state, onMainMenu, onRestartMatch, onRotateTo,
           return format(t(lastAction.key), vars);
         })()}
       </div>
+
+      {/* History review panel — Back / slider / Forward / Live */}
+      {historyLength > 1 && (
+        <div
+          style={{
+            background: reviewing ? theme.p1AccentBg : theme.panelBg,
+            border: `1px solid ${reviewing ? theme.p1AccentBorder : theme.panelBorder}`,
+            padding: sp.padMed,
+            borderRadius: sp.radius,
+          }}
+        >
+          <div className="flex items-center justify-between mb-2" style={{ fontSize: fs.small }}>
+            <span className="opacity-80 font-semibold">{t('hud.review')}</span>
+            <span className="opacity-70">
+              {(historyIndex ?? historyLength - 1) + 1} / {historyLength}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <ReviewBtn label="⏮" disabled={historyLength <= 1} onClick={() => onHistoryJumpTo(0)} theme={theme} title={t('hud.reviewStart')} />
+            <ReviewBtn label="◀" disabled={historyIndex === 0} onClick={onHistoryBack} theme={theme} title={t('hud.reviewBack')} />
+            <ReviewBtn label="▶" disabled={!reviewing} onClick={onHistoryForward} theme={theme} title={t('hud.reviewForward')} />
+            <ReviewBtn
+              label={t('hud.reviewLive')}
+              disabled={!reviewing}
+              onClick={onHistoryToLive}
+              theme={theme}
+              accent
+              title={t('hud.reviewLive')}
+              wide
+            />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={historyLength - 1}
+            value={historyIndex ?? historyLength - 1}
+            onChange={e => onHistoryJumpTo(Number(e.target.value))}
+            className="w-full"
+            style={{ accentColor: theme.p1Color }}
+          />
+        </div>
+      )}
 
       {/* Selected piece info + controls. Fade-only (no scale/translate) so
           the surrounding HUD doesn't visibly shift when this panel appears. */}
@@ -327,5 +391,41 @@ export default function GameHUD({ state, onMainMenu, onRestartMatch, onRotateTo,
         {t('hud.restartMatch')}
       </motion.button>
     </div>
+  );
+}
+
+function ReviewBtn({
+  label,
+  disabled,
+  onClick,
+  theme,
+  accent,
+  title,
+  wide,
+}: {
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+  theme: ReturnType<typeof useSettings>['theme'];
+  accent?: boolean;
+  title?: string;
+  wide?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`rounded-lg text-sm font-bold transition-opacity disabled:opacity-30 disabled:cursor-not-allowed ${wide ? 'flex-1' : ''}`}
+      style={{
+        background: accent ? theme.buttonRotateBg : theme.buttonBg,
+        border: `1px solid ${accent ? theme.buttonRotateBorder : theme.buttonBorder}`,
+        color: accent ? theme.buttonRotateText : theme.textPrimary,
+        padding: '6px 10px',
+        minWidth: wide ? undefined : 36,
+      }}
+    >
+      {label}
+    </button>
   );
 }

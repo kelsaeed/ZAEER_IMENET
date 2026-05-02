@@ -1,5 +1,29 @@
-import { GamePiece, GameState, Player, Position, Orientation, PieceType, BounceEffect, ActionMessage } from './types';
+import { GamePiece, GameState, Player, Position, Orientation, PieceType, BounceEffect, ActionMessage, HistorySnapshot } from './types';
 import { isInBounds, isThrone, isBarrier, canPieceKill, BOARD_SIZE, ORIENTATION_ORDER } from './constants';
+
+// ─── History helper ──────────────────────────────────────────────────────────
+// Cap so a long replay-game doesn't bloat sessionStorage indefinitely.
+const HISTORY_LIMIT = 250;
+
+function pushHistory(
+  state: GameState,
+  pieces: GamePiece[],
+  currentPlayer: Player,
+  lastAction: ActionMessage,
+  turn: number,
+): HistorySnapshot[] {
+  // Deep-clone pieces so subsequent mutations to the live array can't bleed
+  // into the snapshot.
+  const snapshot: HistorySnapshot = {
+    pieces: pieces.map(p => ({ ...p })),
+    currentPlayer,
+    lastAction,
+    turn,
+  };
+  const next = [...state.history, snapshot];
+  if (next.length > HISTORY_LIMIT) next.splice(0, next.length - HISTORY_LIMIT);
+  return next;
+}
 
 // ─── Ant geometry ────────────────────────────────────────────────────────────
 
@@ -701,6 +725,8 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
   if (piece.type === 'ant' && phase !== 'won') {
     const movedAnt = pieces.find(p => p.id === pieceId)!;
     const { validRotations } = getValidMoves(movedAnt, pieces);
+    const finalAction = lastAction ?? state.lastAction;
+    const newTurn = state.turn + 1;
     return {
       ...state,
       pieces,
@@ -716,8 +742,10 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
       bounceEffect,
       phase,
       winner,
-      turn: state.turn + 1,
-      lastAction: lastAction ?? state.lastAction,
+      turn: newTurn,
+      lastAction: finalAction,
+      history: pushHistory(state, pieces, state.currentPlayer, finalAction, newTurn),
+      viewingHistoryIndex: null,
     };
   }
 
@@ -729,6 +757,8 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
   );
 
   const newPlayer = phase === 'won' ? state.currentPlayer : (state.currentPlayer === 1 ? 2 : 1);
+  const finalAction = lastAction || state.lastAction;
+  const newTurn = state.turn + 1;
 
   return {
     ...state,
@@ -745,8 +775,10 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
     bounceEffect,
     phase,
     winner,
-    turn: state.turn + 1,
-    lastAction: lastAction || state.lastAction,
+    turn: newTurn,
+    lastAction: finalAction,
+    history: pushHistory(state, pieces, newPlayer, finalAction, newTurn),
+    viewingHistoryIndex: null,
   };
 }
 
@@ -793,10 +825,13 @@ export function applyEndTurn(state: GameState): GameState {
       ? { ...p, cooldown: (p.cooldown ?? 0) - 1 }
       : p
   );
+  const newPlayer: Player = state.currentPlayer === 1 ? 2 : 1;
+  const newTurn = state.turn + 1;
+  const lastAction = state.antMovedThisTurn ? { key: 'action.turnEnded' } : { key: 'action.antRotated' };
   return {
     ...state,
     pieces,
-    currentPlayer: state.currentPlayer === 1 ? 2 : 1,
+    currentPlayer: newPlayer,
     selectedPieceId: null,
     validMoves: [],
     canRotate: false,
@@ -805,7 +840,9 @@ export function applyEndTurn(state: GameState): GameState {
     antOriginalOrientation: undefined,
     antOriginalPosition: undefined,
     antMovedThisTurn: false,
-    turn: state.turn + 1,
-    lastAction: state.antMovedThisTurn ? { key: 'action.turnEnded' } : { key: 'action.antRotated' },
+    history: pushHistory(state, pieces, newPlayer, lastAction, newTurn),
+    viewingHistoryIndex: null,
+    turn: newTurn,
+    lastAction,
   };
 }

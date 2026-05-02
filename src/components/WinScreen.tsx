@@ -8,9 +8,10 @@ interface Props {
   winner: Player;
   onRestart: () => void;
   onMenu: () => void;
+  onDismiss?: () => void;
 }
 
-export default function WinScreen({ winner, onRestart, onMenu }: Props) {
+export default function WinScreen({ winner, onRestart, onMenu, onDismiss }: Props) {
   const { t } = useSettings();
   const isP1 = winner === 1;
 
@@ -19,18 +20,31 @@ export default function WinScreen({ winner, onRestart, onMenu }: Props) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}
+      onClick={onDismiss}
+      role={onDismiss ? 'button' : undefined}
+      aria-label={onDismiss ? 'Close result and review the board' : undefined}
     >
       <motion.div
         initial={{ scale: 0.5, y: -60 }}
         animate={{ scale: 1, y: 0 }}
         transition={{ type: 'spring', damping: 15, stiffness: 200 }}
+        onClick={(e) => e.stopPropagation()}
         className={`rounded-3xl p-6 sm:p-10 text-center max-w-md w-full mx-3 sm:mx-4 border-2 relative overflow-hidden ${
           isP1
             ? 'bg-gradient-to-br from-amber-950 to-yellow-900 border-amber-400'
             : 'bg-gradient-to-br from-blue-950 to-indigo-900 border-blue-400'
         }`}
       >
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            aria-label="Close"
+            className="absolute top-3 right-3 z-20 rounded-full w-8 h-8 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            ✕
+          </button>
+        )}
         {/* Background glow */}
         <div
           className="absolute inset-0 opacity-20"
@@ -98,6 +112,15 @@ export default function WinScreen({ winner, onRestart, onMenu }: Props) {
               {t('win.mainMenu')}
             </button>
           </div>
+
+          {onDismiss && (
+            <button
+              onClick={onDismiss}
+              className="mt-4 text-sm opacity-70 hover:opacity-100 transition-opacity"
+            >
+              {t('win.reviewBoard')} →
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>

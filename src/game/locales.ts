@@ -65,6 +65,11 @@ const en: Record<string, string> = {
   'hud.reset': '🔁 Reset Game',
   'hud.mainMenu': '🏠 Main Menu',
   'hud.restartMatch': '🔁 Restart Match',
+  'hud.review': 'Review',
+  'hud.reviewStart': 'Jump to start',
+  'hud.reviewBack': 'Step back',
+  'hud.reviewForward': 'Step forward',
+  'hud.reviewLive': 'Live',
   'hud.settings': '⚙️',
 
   // Orientation labels
@@ -94,6 +99,7 @@ const en: Record<string, string> = {
   'win.silverLion': '🛡️ The Silver Lion claims the Throne!',
   'win.playAgain': '🔄 Play Again',
   'win.mainMenu': '🏠 Main Menu',
+  'win.reviewBoard': 'Close & review the game',
 
   // Settings panel
   'settings.title': 'Settings',
@@ -202,6 +208,11 @@ const ar: Record<string, string> = {
   'hud.reset': '🔁 إعادة اللعبة',
   'hud.mainMenu': '🏠 القائمة الرئيسية',
   'hud.restartMatch': '🔁 مباراة جديدة',
+  'hud.review': 'إعادة المشاهدة',
+  'hud.reviewStart': 'البداية',
+  'hud.reviewBack': 'خطوة للخلف',
+  'hud.reviewForward': 'خطوة للأمام',
+  'hud.reviewLive': 'الحالي',
   'hud.settings': '⚙️',
 
   'orientation.horizontal': 'أفقي',
@@ -228,6 +239,7 @@ const ar: Record<string, string> = {
   'win.silverLion': '🛡️ الأسد الفضي يستولي على العرش!',
   'win.playAgain': '🔄 العب مجدداً',
   'win.mainMenu': '🏠 القائمة الرئيسية',
+  'win.reviewBoard': 'إغلاق ومراجعة المباراة',
 
   'settings.title': 'الإعدادات',
   'settings.theme': 'المظهر',

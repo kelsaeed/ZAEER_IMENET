@@ -41,6 +41,16 @@ export interface ActionMessage {
   vars?: Record<string, string | number>;
 }
 
+/** A frozen snapshot of the board after one action. Stored on every state
+ *  change so the user can step backward through the game (and forward
+ *  again) without ever mutating the live state. */
+export interface HistorySnapshot {
+  pieces: GamePiece[];
+  currentPlayer: Player;
+  lastAction: ActionMessage;
+  turn: number;
+}
+
 export interface GameState {
   pieces: GamePiece[];
   currentPlayer: Player;
@@ -62,4 +72,12 @@ export interface GameState {
   winner: Player | null;
   turn: number;
   lastAction: ActionMessage;
+  /** Snapshots after every state change. history[0] is the starting position. */
+  history: HistorySnapshot[];
+  /** null = viewing the live state. Otherwise an index into `history` we are
+   *  reviewing — UI is read-only while this is non-null. */
+  viewingHistoryIndex: number | null;
+  /** Win modal state: true = the user has dismissed it; a small floating
+   *  pill remains so they can pop it back open at any time. */
+  winScreenDismissed: boolean;
 }

@@ -13,10 +13,44 @@ import AuthBadge from '@/components/AuthBadge';
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
 
 export default function Home() {
-  const { state, startGame, resetGame, restartMatch, rotateAntTo, endTurn, switchToShieldedPiece, switchToShieldingButterfly, clickCell } = useGame();
+  const {
+    state,
+    startGame,
+    resetGame,
+    restartMatch,
+    rotateAntTo,
+    endTurn,
+    switchToShieldedPiece,
+    switchToShieldingButterfly,
+    clickCell,
+    historyBack,
+    historyForward,
+    historyToLive,
+    historyJumpTo,
+    dismissWinScreen,
+    showWinScreen,
+  } = useGame();
   const { theme, isRTL } = useSettings();
   const [cellSize, setCellSize] = useState(42);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // While reviewing history, render the historical pieces but keep the live
+  // selection state empty so highlights don't bleed into the review.
+  const reviewing = state.viewingHistoryIndex !== null;
+  const displayState = reviewing
+    ? {
+        ...state,
+        pieces: state.history[state.viewingHistoryIndex!].pieces,
+        currentPlayer: state.history[state.viewingHistoryIndex!].currentPlayer,
+        lastAction: state.history[state.viewingHistoryIndex!].lastAction,
+        turn: state.history[state.viewingHistoryIndex!].turn,
+        selectedPieceId: null,
+        validMoves: [],
+        canRotate: false,
+        validRotations: [],
+        bounceEffect: undefined,
+      }
+    : state;
 
   useEffect(() => {
     function calc() {
@@ -111,26 +145,66 @@ export default function Home() {
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>
 
-      <div className="flex flex-col gap-3 sm:gap-4 items-center lg:shrink-0">
+      <div className="flex flex-col gap-3 sm:gap-4 items-center lg:shrink-0 relative">
         <GameBoard
-          state={state}
+          state={displayState}
           cellSize={cellSize}
           onCellClick={clickCell}
         />
+        {reviewing && (
+          <div
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
+            style={{
+              background: theme.panelBg,
+              border: `1px solid ${theme.p1AccentBorder}`,
+              color: theme.p1Color,
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            ⏪ Reviewing turn {state.viewingHistoryIndex! + 1} / {state.history.length}
+          </div>
+        )}
       </div>
 
       <GameHUD
-        state={state}
+        state={displayState}
+        reviewing={reviewing}
+        historyIndex={state.viewingHistoryIndex}
+        historyLength={state.history.length}
         onMainMenu={resetGame}
         onRestartMatch={restartMatch}
         onRotateTo={rotateAntTo}
         onEndTurn={endTurn}
         onSwitchToShieldedPiece={switchToShieldedPiece}
         onSwitchToShieldingButterfly={switchToShieldingButterfly}
+        onHistoryBack={historyBack}
+        onHistoryForward={historyForward}
+        onHistoryToLive={historyToLive}
+        onHistoryJumpTo={historyJumpTo}
       />
 
-      {state.phase === 'won' && state.winner && (
-        <WinScreen winner={state.winner} onRestart={startGame} onMenu={resetGame} />
+      {state.phase === 'won' && state.winner && !state.winScreenDismissed && (
+        <WinScreen
+          winner={state.winner}
+          onRestart={restartMatch}
+          onMenu={resetGame}
+          onDismiss={dismissWinScreen}
+        />
+      )}
+
+      {state.phase === 'won' && state.winner && state.winScreenDismissed && (
+        <button
+          onClick={showWinScreen}
+          className="fixed bottom-4 z-30 rounded-full px-4 py-2 font-bold text-sm shadow-lg transition-transform hover:scale-105"
+          style={{
+            [isRTL ? 'left' : 'right']: 16,
+            background: theme.p1AccentBg,
+            border: `1px solid ${theme.p1AccentBorder}`,
+            color: theme.p1Color,
+          } as React.CSSProperties}
+        >
+          🏆 Player {state.winner} won — view result
+        </button>
       )}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}

@@ -5,10 +5,10 @@ import { createInitialState } from '@/game/initialState';
 import { getValidMoves, applyMove, applyEndTurn, getAntCells, getInteractiveAtCell } from '@/game/logic';
 import { isInBounds, isBarrier } from '@/game/constants';
 
-// Bumped to v2: the lastAction shape changed from string to ActionMessage,
-// the elephantAttackedThisTurn state field was removed, and elephant
-// cooldown is now per-piece. Older saved games are dropped.
-const STORAGE_KEY = 'zaeer-imenet-state-v2';
+// Bumped to v3 with the history / review feature: GameState now contains a
+// history array, viewingHistoryIndex, and winScreenDismissed. Older saved
+// games are dropped instead of partially loaded (would crash the review UI).
+const STORAGE_KEY = 'zaeer-imenet-state-v3';
 
 function getStoredState(): GameState | null {
   if (typeof window === 'undefined') return null;
@@ -19,6 +19,7 @@ function getStoredState(): GameState | null {
     if (parsed.phase !== 'playing' && parsed.phase !== 'won') return null;
     if (!Array.isArray(parsed.pieces) || !Number.isFinite(parsed.currentPlayer)) return null;
     if (!parsed.lastAction || typeof parsed.lastAction !== 'object' || typeof (parsed.lastAction as { key?: string }).key !== 'string') return null;
+    if (!Array.isArray(parsed.history)) return null;
     return parsed;
   } catch {
     return null;
@@ -73,6 +74,61 @@ export function useGame() {
    *  stays on the board instead of returning to the menu. */
   const restartMatch = useCallback(() => {
     setState({ ...createInitialState(), phase: 'playing', lastAction: { key: 'action.player1Turn' } });
+  }, []);
+
+  // ─── History review ─────────────────────────────────────────────────────
+  // While viewingHistoryIndex !== null the board renders a frozen snapshot
+  // and clicks are ignored. The "live" state is unaffected; pressing Live
+  // returns to interactive play.
+
+  /** Step backward one snapshot. From the live state, jumps to the previous
+   *  turn (so you immediately see the change you'd undo). */
+  const historyBack = useCallback(() => {
+    setState(prev => {
+      if (prev.history.length === 0) return prev;
+      const cur = prev.viewingHistoryIndex;
+      // history[length - 1] equals the live state, so "back from live"
+      // jumps to length - 2 — the position one move ago.
+      const next = cur === null ? prev.history.length - 2 : cur - 1;
+      return { ...prev, viewingHistoryIndex: Math.max(0, next), selectedPieceId: null, validMoves: [] };
+    });
+  }, []);
+
+  /** Step forward one snapshot. Stepping past the end returns to live mode. */
+  const historyForward = useCallback(() => {
+    setState(prev => {
+      if (prev.viewingHistoryIndex === null) return prev;
+      const next = prev.viewingHistoryIndex + 1;
+      if (next >= prev.history.length - 1) {
+        return { ...prev, viewingHistoryIndex: null };
+      }
+      return { ...prev, viewingHistoryIndex: next };
+    });
+  }, []);
+
+  /** Jump straight back to the live state. */
+  const historyToLive = useCallback(() => {
+    setState(prev => (prev.viewingHistoryIndex === null ? prev : { ...prev, viewingHistoryIndex: null }));
+  }, []);
+
+  /** Jump to a specific snapshot index (used by the slider). */
+  const historyJumpTo = useCallback((index: number) => {
+    setState(prev => {
+      if (index < 0 || index >= prev.history.length) return prev;
+      // Top of the slider == live.
+      if (index === prev.history.length - 1) return { ...prev, viewingHistoryIndex: null };
+      return { ...prev, viewingHistoryIndex: index, selectedPieceId: null, validMoves: [] };
+    });
+  }, []);
+
+  /** Hide the victory modal so the user can browse the board / history. */
+  const dismissWinScreen = useCallback(() => {
+    setState(prev => ({ ...prev, winScreenDismissed: true }));
+  }, []);
+
+  /** Re-open the victory modal from the floating pill. */
+  const showWinScreen = useCallback(() => {
+    setState(prev => ({ ...prev, winScreenDismissed: false }));
   }, []);
 
   /** Rotate the currently selected ant to the given orientation. Only valid options are allowed.
@@ -165,6 +221,8 @@ export function useGame() {
   const clickCell = useCallback((row: number, col: number) => {
     setState(prev => {
       if (prev.phase !== 'playing') return prev;
+      // Read-only mode while reviewing history.
+      if (prev.viewingHistoryIndex !== null) return prev;
 
       // If a piece is selected, check for valid move first
       if (prev.selectedPieceId) {
@@ -320,5 +378,23 @@ export function useGame() {
     });
   }, []);
 
-  return { state, startGame, resetGame, restartMatch, rotateAntTo, endTurn, switchToShieldedPiece, switchToShieldingButterfly, clickCell };
+  return {
+    state,
+    startGame,
+    resetGame,
+    restartMatch,
+    rotateAntTo,
+    endTurn,
+    switchToShieldedPiece,
+    switchToShieldingButterfly,
+    clickCell,
+    // History review
+    historyBack,
+    historyForward,
+    historyToLive,
+    historyJumpTo,
+    // Win modal
+    dismissWinScreen,
+    showWinScreen,
+  };
 }
