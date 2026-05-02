@@ -1,0 +1,343 @@
+'use client';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getSupabaseBrowser } from '@/lib/supabase/client';
+import { saveGameState, GameRow } from '@/lib/supabase/games';
+import { useUser } from '@/hooks/useUser';
+import { applyMove, applyEndTurn, getValidMoves } from '@/game/logic';
+import type { GameState, Player, Orientation } from '@/game/types';
+
+interface OpponentInfo {
+  id: string | null;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+export interface OnlineGameView {
+  /** Loading the initial game record. */
+  loading: boolean;
+  /** Network/permission errors. */
+  error: string | null;
+  /** Raw row from Supabase. */
+  game: GameRow | null;
+  /** Convenient handle on the game state. */
+  state: GameState | null;
+  /** 1 if I'm player1, 2 if player2, null if I'm a spectator. */
+  myPlayerNumber: Player | null;
+  /** Opponent profile (null until joined). */
+  opponent: OpponentInfo | null;
+  /** Both players have joined and the game is active. */
+  isPlaying: boolean;
+  /** True if the local user can act right now. */
+  isMyTurn: boolean;
+  /** History review (pure UI). */
+  viewingHistoryIndex: number | null;
+
+  // Actions
+  clickCell: (row: number, col: number) => void;
+  rotateAntTo: (orientation: Orientation) => void;
+  endTurn: () => void;
+  switchToShieldedPiece: () => void;
+  switchToShieldingButterfly: () => void;
+  resign: () => void;
+  // History review
+  historyBack: () => void;
+  historyForward: () => void;
+  historyToLive: () => void;
+  historyJumpTo: (index: number) => void;
+}
+
+/** Online game state hook.
+ *
+ * Source of truth = the `games.state` JSON column. Local UI state for the
+ * currently-selected piece and valid-move highlights lives client-side and
+ * is wiped on every server update so opponent's selections don't leak.
+ *
+ * Move flow:
+ *   1. Player taps a cell.
+ *   2. Locally compute the new state (applyMove / getValidMoves).
+ *   3. Optimistically render the new state.
+ *   4. Persist to DB. Realtime then fans the same state to the opponent.
+ *
+ * Echo handling: when our own write comes back via Realtime we just adopt
+ * the canonical version — usually a no-op visual change. */
+export function useOnlineGame(gameId: string | null): OnlineGameView {
+  const { user } = useUser();
+  const [game, setGame] = useState<GameRow | null>(null);
+  const [opponent, setOpponent] = useState<OpponentInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Local-only review state (not synced).
+  const [viewingHistoryIndex, setViewingHistoryIndex] = useState<number | null>(null);
+
+  // Subscribe to game changes.
+  useEffect(() => {
+    if (!gameId) {
+      setLoading(false);
+      return;
+    }
+    const supabase = getSupabaseBrowser();
+    let mounted = true;
+
+    supabase
+      .from('games')
+      .select('*')
+      .eq('id', gameId)
+      .single()
+      .then(({ data, error }) => {
+        if (!mounted) return;
+        if (error || !data) {
+          setError(error?.message ?? 'Game not found');
+        } else {
+          setGame(data as GameRow);
+        }
+        setLoading(false);
+      });
+
+    const channel = supabase
+      .channel(`game:${gameId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` },
+        (payload) => {
+          if (!mounted) return;
+          setGame(payload.new as GameRow);
+          // Server pushed a new state — exit any review-only mode so the
+          // player isn't stuck looking at an old turn after their opponent
+          // moves. They can still scrub back if they want.
+          setViewingHistoryIndex(null);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
+
+  // Fetch opponent's public profile whenever the game's player ids change.
+  useEffect(() => {
+    if (!game || !user) return;
+    const opponentId =
+      game.player1_id === user.id ? game.player2_id :
+      game.player2_id === user.id ? game.player1_id :
+      null;
+    if (!opponentId) {
+      setOpponent(null);
+      return;
+    }
+    const supabase = getSupabaseBrowser();
+    supabase
+      .from('profiles')
+      .select('id, username, display_name, avatar_url')
+      .eq('id', opponentId)
+      .single()
+      .then(({ data }) => {
+        if (data) setOpponent(data as OpponentInfo);
+      });
+  }, [game, user]);
+
+  const myPlayerNumber: Player | null = useMemo(() => {
+    if (!user || !game) return null;
+    if (game.player1_id === user.id) return 1;
+    if (game.player2_id === user.id) return 2;
+    return null;
+  }, [user, game]);
+
+  const state = game?.state ?? null;
+  const isPlaying = game?.status === 'playing';
+  const isMyTurn = !!(state && myPlayerNumber !== null && state.currentPlayer === myPlayerNumber && isPlaying && viewingHistoryIndex === null);
+
+  /** Persist a state change. Falls back to optimistic local update if the
+   *  network call fails (we'll re-sync from the next Realtime event). */
+  const persist = useCallback(async (newState: GameState) => {
+    if (!game || !user) return;
+    // Optimistic local update.
+    setGame(prev => prev ? { ...prev, state: newState, current_turn: newState.turn } : prev);
+    try {
+      await saveGameState({
+        gameId: game.id,
+        state: newState,
+        player1Id: game.player1_id,
+        player2Id: game.player2_id,
+      });
+    } catch (e) {
+      console.error('[online] saveGameState failed', e);
+    }
+  }, [game, user]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  // These mirror the local useGame actions but their results go through the
+  // network. Selection / valid-move state is part of GameState so it shows
+  // up correctly for the acting player; the opponent sees a no-op until
+  // a real move (piece position change) happens on their Realtime feed.
+
+  const clickCell = useCallback((row: number, col: number) => {
+    if (!state || !isMyTurn) return;
+
+    let newState = state;
+
+    if (state.selectedPieceId) {
+      const isValid = state.validMoves.some(m => m.row === row && m.col === col);
+      if (isValid) {
+        newState = applyMove(state, state.selectedPieceId, row, col);
+        persist(newState);
+        return;
+      }
+    }
+
+    // Try to (re)select a piece at this cell.
+    const piece = state.pieces.find(p =>
+      p.row === row && p.col === col && p.player === state.currentPlayer
+    );
+    if (piece) {
+      const { moves, canRotate, validRotations } = getValidMoves(piece, state.pieces);
+      newState = {
+        ...state,
+        selectedPieceId: piece.id,
+        validMoves: moves,
+        canRotate,
+        validRotations,
+        antOriginalOrientation: piece.type === 'ant' ? piece.orientation : undefined,
+        antOriginalPosition: piece.type === 'ant' ? { row: piece.row, col: piece.col } : undefined,
+      };
+      persist(newState);
+      return;
+    }
+
+    // Click on empty / not-mine cell: deselect.
+    if (state.selectedPieceId) {
+      newState = {
+        ...state,
+        selectedPieceId: null,
+        validMoves: [],
+        canRotate: false,
+        validRotations: [],
+      };
+      persist(newState);
+    }
+  }, [state, isMyTurn, persist]);
+
+  const rotateAntTo = useCallback((orientation: Orientation) => {
+    if (!state || !isMyTurn || !state.selectedPieceId) return;
+    const piece = state.pieces.find(p => p.id === state.selectedPieceId);
+    if (!piece || piece.type !== 'ant') return;
+    if (!state.validRotations.includes(orientation)) return;
+
+    const newPieces = state.pieces.map(p =>
+      p.id === state.selectedPieceId ? { ...p, orientation } : p
+    );
+    const updatedPiece = { ...piece, orientation };
+    const { moves, canRotate, validRotations } = getValidMoves(updatedPiece, newPieces);
+    const newState: GameState = {
+      ...state,
+      pieces: newPieces,
+      validMoves: state.antMovedThisTurn ? [] : moves,
+      canRotate,
+      validRotations,
+      antHasRotated: true,
+      antOriginalOrientation: state.antOriginalOrientation ?? piece.orientation,
+    };
+    persist(newState);
+  }, [state, isMyTurn, persist]);
+
+  const endTurn = useCallback(() => {
+    if (!state || !isMyTurn || !state.selectedPieceId) return;
+    const piece = state.pieces.find(p => p.id === state.selectedPieceId);
+    if (!piece || piece.type !== 'ant') return;
+    if (!state.antMovedThisTurn && !state.antHasRotated) return;
+    persist(applyEndTurn(state));
+  }, [state, isMyTurn, persist]);
+
+  const switchToShieldedPiece = useCallback(() => {
+    if (!state || !isMyTurn || !state.selectedPieceId) return;
+    const piece = state.pieces.find(p => p.id === state.selectedPieceId);
+    if (!piece || piece.type !== 'butterfly' || !piece.shielding) return;
+    const shielded = state.pieces.find(p => p.id === piece.shielding);
+    if (!shielded) return;
+    const { moves, canRotate, validRotations } = getValidMoves(shielded, state.pieces);
+    persist({
+      ...state,
+      selectedPieceId: shielded.id,
+      validMoves: moves,
+      canRotate,
+      validRotations,
+    });
+  }, [state, isMyTurn, persist]);
+
+  const switchToShieldingButterfly = useCallback(() => {
+    if (!state || !isMyTurn || !state.selectedPieceId) return;
+    const shielded = state.pieces.find(p => p.id === state.selectedPieceId);
+    if (!shielded || !shielded.shieldedBy) return;
+    const butterfly = state.pieces.find(p => p.id === shielded.shieldedBy);
+    if (!butterfly) return;
+    const { moves, canRotate, validRotations } = getValidMoves(butterfly, state.pieces);
+    persist({
+      ...state,
+      selectedPieceId: butterfly.id,
+      validMoves: moves,
+      canRotate,
+      validRotations,
+    });
+  }, [state, isMyTurn, persist]);
+
+  const resign = useCallback(async () => {
+    if (!game || !user || myPlayerNumber === null) return;
+    if (!confirm('Resign this match?')) return;
+    const supabase = getSupabaseBrowser();
+    const winnerId = myPlayerNumber === 1 ? game.player2_id : game.player1_id;
+    await supabase
+      .from('games')
+      .update({
+        status: 'abandoned',
+        winner_id: winnerId,
+        finished_at: new Date().toISOString(),
+      })
+      .eq('id', game.id);
+  }, [game, user, myPlayerNumber]);
+
+  // ── History review (local only) ─────────────────────────────────────────
+  const historyBack = useCallback(() => {
+    if (!state) return;
+    const cur = viewingHistoryIndex;
+    const next = cur === null ? state.history.length - 2 : cur - 1;
+    setViewingHistoryIndex(Math.max(0, next));
+  }, [state, viewingHistoryIndex]);
+
+  const historyForward = useCallback(() => {
+    if (!state || viewingHistoryIndex === null) return;
+    const next = viewingHistoryIndex + 1;
+    setViewingHistoryIndex(next >= state.history.length - 1 ? null : next);
+  }, [state, viewingHistoryIndex]);
+
+  const historyToLive = useCallback(() => setViewingHistoryIndex(null), []);
+
+  const historyJumpTo = useCallback((index: number) => {
+    if (!state) return;
+    if (index < 0 || index >= state.history.length) return;
+    setViewingHistoryIndex(index === state.history.length - 1 ? null : index);
+  }, [state]);
+
+  return {
+    loading,
+    error,
+    game,
+    state,
+    myPlayerNumber,
+    opponent,
+    isPlaying,
+    isMyTurn,
+    viewingHistoryIndex,
+    clickCell,
+    rotateAntTo,
+    endTurn,
+    switchToShieldedPiece,
+    switchToShieldingButterfly,
+    resign,
+    historyBack,
+    historyForward,
+    historyToLive,
+    historyJumpTo,
+  };
+}

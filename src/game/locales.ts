@@ -15,6 +15,7 @@ const en: Record<string, string> = {
   'app.subtitle': 'The Ancient Strategy Game',
   'app.boardSummary': '16×16 Board · 2 Players · Round-based',
   'app.startButton': '⚔️ Start Game ⚔️',
+  'app.playOnline': 'Play Online',
 
   // Win conditions
   'win.title': 'Win Conditions',
@@ -163,6 +164,7 @@ const ar: Record<string, string> = {
   'app.subtitle': 'لعبة الاستراتيجية القديمة',
   'app.boardSummary': 'لوحة 16×16 · لاعبان · بالأدوار',
   'app.startButton': '⚔️ ابدأ اللعبة ⚔️',
+  'app.playOnline': 'العب أونلاين',
 
   'win.title': 'شروط الفوز',
   'win.lionThrone': 'حرّك الأسد إلى العرش الأحمر في المنتصف (منطقة 4×4)',

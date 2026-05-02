@@ -71,30 +71,33 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (mounted) setLoading(false);
     }, 5000);
 
-    // getSession() reads from local storage / cookies without a network
-    // round-trip — it's faster and avoids racing with onAuthStateChange.
-    (async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) return;
-        setUser(data.session?.user ?? null);
-        if (data.session?.user) await loadProfile(data.session.user.id);
-      } catch {
-        // ignore — state stays as "no user"
-      } finally {
-        if (mounted) {
-          clearTimeout(safetyTimeout);
-          setLoading(false);
-        }
+    // Resolve the session FIRST and clear loading immediately so the badge
+    // shows up instantly. The profile fetch (a separate network request)
+    // runs in the background and updates the avatar/display name when it
+    // arrives — non-blocking. Previously we awaited the profile and any
+    // ~300-800ms latency to the profiles table delayed the entire UI.
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setUser(data.session?.user ?? null);
+      clearTimeout(safetyTimeout);
+      setLoading(false);
+      if (data.session?.user) {
+        // Fire-and-forget: profile state will fill in once it arrives.
+        void loadProfile(data.session.user.id);
       }
-    })();
+    }).catch(() => {
+      if (mounted) {
+        clearTimeout(safetyTimeout);
+        setLoading(false);
+      }
+    });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       setUser(session?.user ?? null);
-      if (session?.user) await loadProfile(session.user.id);
-      else setProfile(null);
       setLoading(false);
+      if (session?.user) void loadProfile(session.user.id);
+      else setProfile(null);
     });
 
     return () => {

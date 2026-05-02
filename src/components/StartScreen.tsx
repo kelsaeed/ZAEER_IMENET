@@ -147,6 +147,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
         </div>
       </motion.div>
 
+      <div className="flex flex-col sm:flex-row gap-3 relative z-10 w-full max-w-md sm:max-w-none sm:w-auto">
       <motion.button
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -154,11 +155,31 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
         onClick={onStart}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className="relative z-10 px-8 sm:px-12 py-3 sm:py-4 rounded-2xl text-lg sm:text-xl font-extrabold w-full max-w-xs sm:max-w-none sm:w-auto transition-all duration-300"
+        className="px-8 sm:px-10 py-3 sm:py-4 rounded-2xl text-lg sm:text-xl font-extrabold w-full sm:w-auto transition-all duration-300"
         style={{ position: 'relative', zIndex: 10, fontWeight: 800, color: '#000', background: `linear-gradient(to right, ${theme.p1Color}, ${theme.selectedRing}, ${theme.p1Color})`, boxShadow: `0 0 30px ${theme.p1Color}80` }}
       >
         {t('app.startButton')}
       </motion.button>
+
+      <motion.a
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 1.2, type: 'spring' }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        href="/play"
+        className="px-8 sm:px-10 py-3 sm:py-4 rounded-2xl text-lg sm:text-xl font-extrabold text-center w-full sm:w-auto transition-all duration-300 flex items-center justify-center gap-2"
+        style={{
+          fontWeight: 800,
+          color: theme.textPrimary,
+          background: theme.panelBg,
+          border: `1px solid ${theme.p2AccentBorder}`,
+          backdropFilter: 'blur(8px)',
+        }}
+      >
+        🌐 <span>{t('app.playOnline')}</span>
+      </motion.a>
+      </div>
     </div>
   );
 }
