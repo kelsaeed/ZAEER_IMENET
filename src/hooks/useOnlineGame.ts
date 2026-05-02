@@ -106,12 +106,19 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` },
-        (payload) => {
+        async () => {
+          // Re-fetch the row instead of trusting the Realtime payload —
+          // some hosts strip the JSON `state` column from the broadcast,
+          // which would otherwise leave us with a partial row and trigger
+          // the "Game not found" fallback after every move.
           if (!mounted) return;
-          setGame(payload.new as GameRow);
-          // Server pushed a new state — exit any review-only mode so the
-          // player isn't stuck looking at an old turn after their opponent
-          // moves. They can still scrub back if they want.
+          const { data } = await supabase
+            .from('games')
+            .select('*')
+            .eq('id', gameId)
+            .single();
+          if (!mounted || !data) return;
+          setGame(data as GameRow);
           setViewingHistoryIndex(null);
         },
       )
@@ -290,19 +297,32 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
   }, [state, isMyTurn, persist]);
 
   const resign = useCallback(async () => {
-    if (!game || !user || myPlayerNumber === null) return;
+    if (!game || !user || myPlayerNumber === null || !state) return;
     if (!confirm('Resign this match?')) return;
     const supabase = getSupabaseBrowser();
     const winnerId = myPlayerNumber === 1 ? game.player2_id : game.player1_id;
+    const winnerNumber: Player = myPlayerNumber === 1 ? 2 : 1;
+    // Update state.phase too so the in-game UI stops accepting clicks
+    // and the win screen has a winner to display.
+    const finalState: GameState = {
+      ...state,
+      phase: 'won',
+      winner: winnerNumber,
+      selectedPieceId: null,
+      validMoves: [],
+      canRotate: false,
+      validRotations: [],
+    };
     await supabase
       .from('games')
       .update({
+        state: finalState,
         status: 'abandoned',
         winner_id: winnerId,
         finished_at: new Date().toISOString(),
       })
       .eq('id', game.id);
-  }, [game, user, myPlayerNumber]);
+  }, [game, user, myPlayerNumber, state]);
 
   // ── Rematch in same room ────────────────────────────────────────────────
   // Each player toggles their own ready flag. When both are true, the host
@@ -324,8 +344,10 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     const newReady = !iAmReady;
     const otherReady = myPlayerNumber === 1 ? game.p2_ready : game.p1_ready;
 
-    if (newReady && otherReady && myPlayerNumber === 1) {
-      // Both ready and I'm the host — reset the match.
+    // Either player triggers the rematch reset once both are ready. The
+    // updates are idempotent so a race between both clients just produces
+    // two identical writes — the second is a no-op.
+    if (newReady && otherReady) {
       const won = game.winner_id;
       const p1Wins = won === game.player1_id ? game.series_p1_wins + 1 : game.series_p1_wins;
       const p2Wins = won === game.player2_id ? game.series_p2_wins + 1 : game.series_p2_wins;
@@ -352,7 +374,7 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       return;
     }
 
-    // Otherwise: just flip my own ready flag and wait.
+    // Otherwise: just flip my own ready flag and wait for the opponent.
     await supabase.from('games').update({ [field]: newReady }).eq('id', game.id);
   }, [game, user, myPlayerNumber, iAmReady]);
 

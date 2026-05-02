@@ -137,7 +137,13 @@ export default function OnlineGamePage() {
     );
   }
   if (!user) return null; // useEffect already redirected
-  if (error || !game || !state) {
+
+  // Only show "Game not found" if the initial fetch errored AND we never
+  // got a game row. Once `game` is loaded, treat any later render glitch
+  // as transient and show the loading screen instead — this keeps the
+  // page from flashing the error after a resign / rematch / move when
+  // the Realtime echo briefly returns a partial row.
+  if (error && !game) {
     return (
       <main
         className="min-h-screen flex items-center justify-center px-4"
@@ -146,7 +152,7 @@ export default function OnlineGamePage() {
         <div className="max-w-sm text-center">
           <div className="text-4xl mb-3">😕</div>
           <div className="font-bold mb-1">Game not found</div>
-          <div className="text-sm opacity-70 mb-4">{error ?? 'It may have ended or been deleted.'}</div>
+          <div className="text-sm opacity-70 mb-4">{error}</div>
           <Link
             href="/play"
             className="rounded-lg px-4 py-2 inline-block font-semibold"
@@ -159,6 +165,19 @@ export default function OnlineGamePage() {
             ← Back to lobby
           </Link>
         </div>
+      </main>
+    );
+  }
+  if (!game || !state) {
+    // Game record exists but the state JSON is momentarily missing
+    // (e.g. between a Realtime UPDATE event and our re-fetch). Show
+    // the loading screen — never the "not found" error.
+    return (
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: theme.bgGradient, color: theme.textPrimary }}
+      >
+        <LoadingEmojis size={26} />
       </main>
     );
   }
@@ -263,13 +282,20 @@ export default function OnlineGamePage() {
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>
 
-      {/* Player ribbon — shows both players + whose turn it is */}
+      {/* Player ribbon — responsive: tight pill on phones, comfortable on
+          desktop. Left-anchored so the AuthBadge / NotificationBell don't
+          collide with it on small screens. */}
       <div
-        className="fixed left-1/2 -translate-x-1/2 top-3 z-20 flex items-center gap-2 px-2 py-1 rounded-full text-sm max-w-[90vw]"
+        className="fixed top-3 z-20 flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full text-sm shadow-sm"
         style={{
           background: theme.panelBg,
           border: `1px solid ${theme.panelBorder}`,
           color: theme.textPrimary,
+          // Center between the corner buttons. Wide enough on desktop,
+          // tight enough on phones to not overlap the bell / badge.
+          left: '50%',
+          transform: 'translateX(-50%)',
+          maxWidth: 'min(560px, calc(100vw - 132px))',
         }}
       >
         <PlayerChip
@@ -280,7 +306,7 @@ export default function OnlineGamePage() {
           isTurn={state.currentPlayer === 1 && isPlaying}
           accent="p1"
         />
-        <span className="opacity-50 text-xs">vs</span>
+        <span className="opacity-40 text-xs px-0.5">vs</span>
         <PlayerChip
           name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : (game.player2_id ? (opponent?.display_name ?? 'P2') : '…')}
           avatarUrl={myPlayerNumber === 2 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
@@ -387,10 +413,11 @@ export default function OnlineGamePage() {
         </div>
       )}
 
-      {/* Win modal with rematch */}
+      {/* Win modal with rematch (winner sees Victory, loser sees Defeat) */}
       {won && winner !== null && !winDismissed && (
         <RematchModal
           winner={winner}
+          myPlayerNumber={myPlayerNumber}
           isMyMatch={!isSpectator}
           iAmReady={iAmReady}
           opponentReady={opponentReady}
@@ -439,25 +466,34 @@ function PlayerChip({
   isTurn: boolean;
   accent: 'p1' | 'p2';
 }) {
+  // Show only the first word of the name in the chip — full name shown
+  // on hover. Keeps the ribbon narrow enough to fit two chips + "vs"
+  // without overflowing on phone-sized screens.
+  const shortName = (name?.split(/\s+/)[0] ?? name ?? '?').slice(0, 12);
   return (
     <motion.span
       animate={isTurn ? { scale: [1, 1.04, 1] } : { scale: 1 }}
       transition={isTurn ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : {}}
-      className="inline-flex items-center gap-2 px-2 py-1 rounded-full font-semibold text-xs"
+      className="inline-flex items-center gap-1.5 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full font-semibold text-xs min-w-0"
       style={{
         background: isTurn ? `color-mix(in srgb, ${color} 25%, transparent)` : 'transparent',
         border: `1px solid ${isTurn ? color : 'transparent'}`,
         color,
       }}
+      title={isYou ? `${name} (you)` : name}
     >
       <Avatar url={avatarUrl} name={name} size={20} accent={accent} ring={isTurn} />
-      <span className="max-w-[120px] truncate">{isYou ? `${name} (you)` : name}</span>
+      <span className="max-w-[60px] sm:max-w-[120px] truncate">
+        {shortName}
+        {isYou && <span className="opacity-70 ms-1 hidden sm:inline">(you)</span>}
+      </span>
     </motion.span>
   );
 }
 
 function RematchModal({
   winner,
+  myPlayerNumber,
   isMyMatch,
   iAmReady,
   opponentReady,
@@ -468,6 +504,7 @@ function RematchModal({
   opponentName,
 }: {
   winner: Player;
+  myPlayerNumber: Player | null;
   isMyMatch: boolean;
   iAmReady: boolean;
   opponentReady: boolean;
@@ -478,6 +515,15 @@ function RematchModal({
   opponentName: string;
 }) {
   const isP1 = winner === 1;
+  const winnerColor = isP1 ? theme.p1Color : theme.p2Color;
+  const iWon = myPlayerNumber !== null && myPlayerNumber === winner;
+  const iLost = myPlayerNumber !== null && myPlayerNumber !== winner;
+  const headlineColor = iWon
+    ? winnerColor
+    : iLost
+    ? '#fb7185' // soft rose for defeat
+    : winnerColor; // spectator → neutral, winner-tinted
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -493,10 +539,10 @@ function RematchModal({
         onClick={(e) => e.stopPropagation()}
         className="relative max-w-md w-full rounded-3xl overflow-hidden p-6 sm:p-8 text-center"
         style={{
-          background: isP1
-            ? `linear-gradient(135deg, ${theme.p1Color}30, ${theme.bgGradient})`
-            : `linear-gradient(135deg, ${theme.p2Color}30, ${theme.bgGradient})`,
-          border: `2px solid ${isP1 ? theme.p1Color : theme.p2Color}`,
+          background: iLost
+            ? `linear-gradient(135deg, rgba(120,40,60,0.35), ${theme.bgGradient})`
+            : `linear-gradient(135deg, ${winnerColor}30, ${theme.bgGradient})`,
+          border: `2px solid ${iLost ? '#fb7185' : winnerColor}`,
           color: theme.textPrimary,
         }}
       >
@@ -509,18 +555,29 @@ function RematchModal({
         </button>
 
         <motion.div
-          animate={{ y: [0, -10, 0], rotate: [-4, 4, -4] }}
-          transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+          animate={iWon
+            ? { y: [0, -10, 0], rotate: [-4, 4, -4] }
+            : iLost
+            ? { y: [0, 4, 0] }
+            : { y: [0, -8, 0] }
+          }
+          transition={{ duration: iLost ? 1.4 : 2.2, repeat: Infinity, ease: 'easeInOut' }}
           className="text-6xl mb-3"
         >
-          👑
+          {iWon ? '👑' : iLost ? '😕' : '🏁'}
         </motion.div>
-        <h1 className="text-3xl font-extrabold mb-1" style={{ color: isP1 ? theme.p1Color : theme.p2Color }}>
-          VICTORY!
+        <h1 className="text-3xl font-extrabold mb-1" style={{ color: headlineColor }}>
+          {iWon ? 'VICTORY!' : iLost ? 'DEFEAT' : 'GAME OVER'}
         </h1>
-        <div className="text-lg font-bold mb-1">Player {winner} Wins</div>
-        <div className="text-sm opacity-70 mb-5">
-          {isP1 ? '⚔️ The Golden Lion claims the Throne!' : '🛡️ The Silver Lion claims the Throne!'}
+        <div className="text-base font-semibold mb-1 opacity-90">
+          {iWon
+            ? 'You claim the Throne 👑'
+            : iLost
+            ? `${opponentName} took it this time.`
+            : `Player ${winner} wins.`}
+        </div>
+        <div className="text-sm opacity-60 mb-5">
+          {isP1 ? '⚔️ Golden Lion victory' : '🛡️ Silver Lion victory'}
         </div>
 
         {isMyMatch ? (

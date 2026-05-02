@@ -64,6 +64,14 @@ let a non-participant update the row.
    - `join_open_game(game_id)` — atomically swaps the joiner into
      `player2_id` and flips status to `playing`.
 
+### 2.8) Run the ELO/stats trigger migration
+
+1. **SQL Editor → New query**.
+2. Open `supabase/migrations/0005_elo_trigger.sql`, paste, **Run**.
+3. This installs an `after update of status` trigger that increments
+   wins/losses and adjusts ELO ratings whenever a game ends (via win,
+   resign, or rematch reset).
+
 ## 3) Enable Google sign-in (free)
 
 1. <https://console.cloud.google.com> → create a project.

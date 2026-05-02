@@ -513,32 +513,44 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
       // Find the paralyzed piece - bat and paralyzed piece are at the same cell
       const paralyzedPiece = batParalyzing ? pieces.find(p => p.id === top.paralyzing) : null;
 
-      // Monkey kills bat (cycle) first: lunge animation, stand in front — not "attack paralyzed under bat"
+      // Monkey kills bat. Two cases:
+      //  - Bat alone (not paralyzing): monkey moves INTO the bat's square.
+      //  - Bat paralyzing another piece: monkey lunges, kills the bat,
+      //    and stands in front — bounce animation, paralyzed piece freed.
       if (mp.type === 'monkey' && top.type === 'bat' && canPieceKill('monkey', 'bat')) {
         const paralyzingId = top.paralyzing;
         const result = killPiece(pieces, top.id, mp);
         pieces = result.pieces;
         lastAction = result.action;
-        const adjacentRow = targetRow - dr;
-        const adjacentCol = targetCol - dc;
         const mp2 = pieces.find(p => p.id === pieceId)!;
-        mp2.row = adjacentRow;
-        mp2.col = adjacentCol;
-        if (mp2.shieldedBy) {
-          const butterfly = pieces.find(p => p.id === mp2.shieldedBy);
-          if (butterfly) {
-            butterfly.row = adjacentRow;
-            butterfly.col = adjacentCol;
-          }
-        }
-        bounceEffect = { pieceId, dr, dc };
+
         if (paralyzingId) {
+          // Bat WAS paralyzing — keep the lunge animation and stand adjacent.
+          const adjacentRow = targetRow - dr;
+          const adjacentCol = targetCol - dc;
+          mp2.row = adjacentRow;
+          mp2.col = adjacentCol;
+          bounceEffect = { pieceId, dr, dc };
           const released = pieces.find(p => p.id === paralyzingId);
           if (released) {
             released.isParalyzed = false;
             released.paralyzedBy = undefined;
           }
+        } else {
+          // Bat alone — monkey lands on the bat's square (normal kill move).
+          mp2.row = targetRow;
+          mp2.col = targetCol;
         }
+
+        // Bring along any butterfly shielding the monkey.
+        if (mp2.shieldedBy) {
+          const butterfly = pieces.find(p => p.id === mp2.shieldedBy);
+          if (butterfly) {
+            butterfly.row = mp2.row;
+            butterfly.col = mp2.col;
+          }
+        }
+
         targetSurvived = false;
         monkeyKilledBat = true;
       }
