@@ -739,6 +739,11 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
     const { validRotations } = getValidMoves(movedAnt, pieces);
     const finalAction = lastAction ?? state.lastAction;
     const newTurn = state.turn + 1;
+    // An "attack" is any move that resolved combat (kill OR damage). Once
+    // it's flagged, clickCell must refuse every cell click so the player
+    // can't snap back to undo a kill, nor switch to another piece. Only
+    // rotation and End Turn remain (HUD-driven).
+    const wasAttack = enemyAtTarget != null;
     return {
       ...state,
       pieces,
@@ -751,6 +756,7 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
       antOriginalOrientation: state.antOriginalOrientation,
       antOriginalPosition: antOriginalPosition,
       antMovedThisTurn: true,
+      antAttackedThisTurn: wasAttack,
       bounceEffect,
       phase,
       winner,
@@ -784,6 +790,7 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
     antOriginalOrientation: undefined,
     antOriginalPosition: undefined,
     antMovedThisTurn: false,
+    antAttackedThisTurn: false,
     bounceEffect,
     phase,
     winner,
@@ -852,6 +859,7 @@ export function applyEndTurn(state: GameState): GameState {
     antOriginalOrientation: undefined,
     antOriginalPosition: undefined,
     antMovedThisTurn: false,
+    antAttackedThisTurn: false,
     history: pushHistory(state, pieces, newPlayer, lastAction, newTurn),
     viewingHistoryIndex: null,
     turn: newTurn,

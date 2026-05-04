@@ -66,6 +66,11 @@ export interface GameState {
   antOriginalPosition?: Position; // Track original position to revert if needed
   // Ant can move then rotate; turn ends only when player clicks End Turn
   antMovedThisTurn: boolean;
+  /** True when the ant's move this turn killed or damaged an enemy.
+   *  Once set, the move is irreversible: the player cannot snap the ant
+   *  back, switch pieces, or click anywhere on the board — only rotate
+   *  the ant (optional) or End Turn. Cleared on End Turn. */
+  antAttackedThisTurn: boolean;
   // Bounce animation: set when an attack partially succeeds (target survives)
   bounceEffect?: BounceEffect;
   phase: 'menu' | 'playing' | 'won';

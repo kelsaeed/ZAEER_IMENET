@@ -224,6 +224,12 @@ export function useGame() {
       // Read-only mode while reviewing history.
       if (prev.viewingHistoryIndex !== null) return prev;
 
+      // Ant attack lock: once the ant killed/damaged an enemy, the only
+      // legal follow-ups are HUD-driven (rotateAntTo / endTurn). Refuse
+      // every cell click so the player can't snap back to undo the kill,
+      // can't move the ant elsewhere, and can't switch to another piece.
+      if (prev.antAttackedThisTurn) return prev;
+
       // If a piece is selected, check for valid move first
       if (prev.selectedPieceId) {
         const isValidMove = prev.validMoves.some(m => m.row === row && m.col === col);
@@ -255,12 +261,12 @@ export function useGame() {
       // If clicking on a shielded piece, select it (default: move with butterfly)
       // User can still select butterfly alone if they want
 
-      // If ant has moved and user clicks an empty / non-mine cell, snap the
-      // ant back to its original square and deselect. The move slot stays
-      // CONSUMED for this turn (antMovedThisTurn remains true) — rotation
-      // and End Turn are the only remaining options. The lock above already
-      // returns when the click would switch to a different own-piece, so
-      // the !myPiece path is the only one that reaches here.
+      // Ant moved (without attacking) and user clicked an empty / non-mine
+      // cell → "I changed my mind". Snap the ant fully back to its origin
+      // AND clear antMovedThisTurn so the player can move it again (or pick
+      // another piece). antAttackedThisTurn would have short-circuited at
+      // the top of clickCell, so reaching here guarantees the move was just
+      // a positional change with no irreversible combat.
       if (selectedPiece?.type === 'ant' && prev.antMovedThisTurn && !myPiece) {
         const sel = prev.pieces.find(p => p.id === prev.selectedPieceId);
         const butterfly = sel?.shieldedBy ? prev.pieces.find(p => p.id === sel.shieldedBy) : null;
@@ -293,7 +299,7 @@ export function useGame() {
           canRotate: false,
           validRotations: [],
           antHasRotated: false,
-          // antMovedThisTurn intentionally NOT reset — one move per turn.
+          antMovedThisTurn: false,
           antOriginalOrientation: undefined,
           antOriginalPosition: undefined,
         };

@@ -190,6 +190,12 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
   const clickCell = useCallback((row: number, col: number) => {
     if (!state || !isMyTurn) return;
 
+    // 0. Ant attack lock: once the ant killed/damaged an enemy, the only
+    //    legal follow-ups are HUD-driven (rotateAntTo / endTurn). Refuse
+    //    every cell click so the player can't snap back to undo the kill,
+    //    can't move the ant elsewhere, and can't switch to another piece.
+    if (state.antAttackedThisTurn) return;
+
     // 1. Selected piece + valid move target → execute move.
     if (state.selectedPieceId) {
       const isValid = state.validMoves.some(m => m.row === row && m.col === col);
@@ -219,13 +225,12 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       if (myPiece && myPiece.id !== state.selectedPieceId) return;
     }
 
-    // 4. Ant moved + clicked away → snap back to its original square and
-    //    fully deselect. The move slot is still considered consumed for
-    //    this turn (antMovedThisTurn stays true), so the ant cannot be
-    //    moved a second time — only rotated, then End Turn. The block-3
-    //    lock above already returns when the click would switch to a
-    //    different piece, so the only path that reaches here is "click
-    //    on an empty / enemy / non-mine cell".
+    // 4. Ant moved (without attacking) + clicked away → "I changed my mind".
+    //    Snap the ant fully back to its origin AND clear antMovedThisTurn so
+    //    the player can move it again or pick another piece. The block-0
+    //    attack lock above already returns when the move was an attack, so
+    //    reaching here guarantees the move was a positional change with no
+    //    irreversible combat.
     if (selectedPiece?.type === 'ant' && state.antMovedThisTurn && !myPiece) {
       const sel = state.pieces.find(p => p.id === state.selectedPieceId);
       const butterfly = sel?.shieldedBy ? state.pieces.find(p => p.id === sel.shieldedBy) : null;
@@ -252,8 +257,7 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
         canRotate: false,
         validRotations: [],
         antHasRotated: false,
-        // antMovedThisTurn intentionally NOT reset — one move per turn
-        // means the slot is gone even after the visual revert.
+        antMovedThisTurn: false,
         antOriginalOrientation: undefined,
         antOriginalPosition: undefined,
       });

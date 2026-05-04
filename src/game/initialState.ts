@@ -61,6 +61,7 @@ export function createInitialState(): GameState {
     antOriginalOrientation: undefined,
     antOriginalPosition: undefined,
     antMovedThisTurn: false,
+    antAttackedThisTurn: false,
     bounceEffect: undefined,
     phase: 'menu',
     winner: null,
