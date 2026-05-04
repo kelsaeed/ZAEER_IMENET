@@ -6,8 +6,15 @@ import { motion } from 'framer-motion';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
 import LoadingEmojis from '@/components/LoadingEmojis';
+import { FloatingPiecesBackdrop, PieceParade, IconInput } from '@/components/AuthDecor';
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED === 'true';
+
+// Stable framer-motion targets (see PieceDisplay / BoardCell — inline literals
+// trigger animation restarts on re-renders).
+const CARD_INITIAL = { opacity: 0, y: 20, scale: 0.96 };
+const CARD_ANIMATE = { opacity: 1, y: 0, scale: 1 };
+const CARD_TRANSITION = { type: 'spring' as const, damping: 18, stiffness: 200 };
 
 export default function LoginPage() {
   const router = useRouter();
@@ -49,26 +56,48 @@ export default function LoginPage() {
 
   return (
     <main
-      className="min-h-screen flex items-center justify-center px-4 py-10"
+      className="min-h-screen flex items-center justify-center px-4 py-10 relative overflow-hidden"
       style={{ background: theme.bgGradient, color: theme.textPrimary }}
     >
+      {/* Decorative pieces drifting in the background */}
+      <FloatingPiecesBackdrop />
+
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md rounded-2xl p-6"
-        style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+        initial={CARD_INITIAL}
+        animate={CARD_ANIMATE}
+        transition={CARD_TRANSITION}
+        className="w-full max-w-md rounded-3xl p-7 relative z-10 shadow-2xl"
+        style={{
+          background: `linear-gradient(160deg, color-mix(in srgb, ${theme.p1Color} 8%, ${theme.panelBg}) 0%, ${theme.panelBg} 60%)`,
+          border: `1px solid ${theme.p1AccentBorder}`,
+          boxShadow: `0 30px 80px -20px rgba(0,0,0,0.55), 0 0 0 1px color-mix(in srgb, ${theme.p1Color} 25%, transparent) inset`,
+        }}
       >
-        <h1 className="text-2xl font-extrabold mb-1" style={{ color: theme.p1Color }}>
-          {t('auth.signInTitle')}
+        {/* Bouncy piece parade at the top — tells the player at a glance
+            what kind of place this is. */}
+        <PieceParade />
+
+        {/* Gradient stamp title — reads like an arcade marquee. */}
+        <h1
+          className="text-3xl sm:text-[2rem] font-black tracking-tight text-center mb-1"
+          style={{
+            backgroundImage: `linear-gradient(90deg, ${theme.p1Color}, color-mix(in srgb, ${theme.p1Color} 40%, ${theme.p2Color}))`,
+            WebkitBackgroundClip: 'text',
+            backgroundClip: 'text',
+            color: 'transparent',
+            filter: `drop-shadow(0 2px 0 color-mix(in srgb, ${theme.p1Color} 25%, transparent))`,
+          }}
+        >
+          {t('auth.signInTitle')} 👋
         </h1>
-        <p className="text-sm opacity-70 mb-5">{t('auth.signInSubtitle')}</p>
+        <p className="text-sm opacity-80 mb-6 text-center">{t('auth.signInSubtitle')}</p>
 
         {GOOGLE_ENABLED && (
           <>
             <button
               type="button"
               onClick={signInWithGoogle}
-              className="w-full rounded-lg py-2.5 mb-3 font-semibold flex items-center justify-center gap-2"
+              className="w-full rounded-xl py-2.5 mb-3 font-semibold flex items-center justify-center gap-2 transition-transform active:scale-[0.98] hover:scale-[1.01] shadow-md"
               style={{ background: '#fff', color: '#1f2937' }}
             >
               <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
@@ -89,56 +118,65 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={signInWithPassword} className="flex flex-col gap-3">
-          <input
+          <IconInput
+            icon="✉️"
             type="email"
             required
             autoComplete="email"
             placeholder={t('auth.email')}
             value={email}
             onChange={e => setEmail(e.target.value)}
-            className="rounded-lg px-3 py-2"
-            style={{ background: theme.inputBg, color: theme.inputText, border: `1px solid ${theme.buttonBorder}` }}
           />
-          <input
+          <IconInput
+            icon="🔒"
             type="password"
             required
             autoComplete="current-password"
             placeholder={t('auth.password')}
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="rounded-lg px-3 py-2"
-            style={{ background: theme.inputBg, color: theme.inputText, border: `1px solid ${theme.buttonBorder}` }}
           />
           {error && (
-            <div className="text-sm rounded-md px-3 py-2" style={{ background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.4)', color: '#fecaca' }}>
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-sm rounded-lg px-3 py-2 flex items-center gap-2"
+              style={{ background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.4)', color: '#fecaca' }}
+            >
+              <span aria-hidden>⚠️</span>
               {error}
-            </div>
+            </motion.div>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg py-2.5 font-bold disabled:opacity-70 flex items-center justify-center"
+            className="rounded-xl py-3 font-extrabold text-base disabled:opacity-70 flex items-center justify-center gap-2 transition-transform active:scale-[0.98] hover:scale-[1.01] mt-1"
             style={{
-              background: theme.buttonRotateBg,
-              border: `1px solid ${theme.buttonRotateBorder}`,
-              color: theme.buttonRotateText,
-              minHeight: 48,
+              background: `linear-gradient(135deg, ${theme.p1Color}, color-mix(in srgb, ${theme.p1Color} 60%, ${theme.p2Color}))`,
+              border: `1px solid ${theme.p1Color}`,
+              color: '#0a0a14',
+              minHeight: 50,
+              boxShadow: `0 8px 22px -8px ${theme.p1Color}, 0 0 0 1px rgba(255,255,255,0.1) inset`,
             }}
           >
-            {loading ? <LoadingEmojis size={20} gap={3} /> : t('auth.signIn')}
+            {loading ? <LoadingEmojis size={20} gap={3} /> : <>🎮 {t('auth.signIn')}</>}
           </button>
         </form>
 
-        <div className="text-sm mt-5 flex items-center justify-between opacity-80">
-          <Link href="/auth/forgot-password" className="hover:underline">
-            {t('auth.forgotPassword')}
+        <div className="text-sm mt-5 flex items-center justify-between opacity-85">
+          <Link href="/auth/forgot-password" className="hover:underline inline-flex items-center gap-1">
+            🔑 <span>{t('auth.forgotPassword')}</span>
           </Link>
-          <Link href="/signup" className="hover:underline" style={{ color: theme.p1Color }}>
-            {t('auth.createAccount')}
+          <Link
+            href="/signup"
+            className="hover:underline font-semibold inline-flex items-center gap-1"
+            style={{ color: theme.p1Color }}
+          >
+            ✨ <span>{t('auth.createAccount')}</span>
           </Link>
         </div>
 
-        <Link href="/" className="block text-center text-xs opacity-60 mt-4 hover:opacity-100">
+        <Link href="/" className="block text-center text-xs opacity-60 mt-5 hover:opacity-100">
           ← {t('auth.backHome')}
         </Link>
       </motion.div>

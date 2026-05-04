@@ -11,10 +11,19 @@ import { listFriendships, FriendProfile } from '@/lib/supabase/friends';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
 import NotificationBell from '@/components/NotificationBell';
+import { FloatingPiecesBackdrop } from '@/components/AuthDecor';
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/i;
 // Hard cap so a hung request can never freeze the UI forever.
 const REQUEST_TIMEOUT_MS = 8000;
+
+// Stable framer-motion targets — see PieceDisplay / BoardCell.
+const CARD_INITIAL = { opacity: 0, y: 12 };
+const CARD_ANIMATE = { opacity: 1, y: 0 };
+const AVATAR_BOB = { y: [0, -3, 0] };
+const AVATAR_BOB_TRANSITION = { duration: 3.2, repeat: Infinity, ease: 'easeInOut' as const };
+const CROWN_WIGGLE = { rotate: [-8, 8, -8], y: [0, -2, 0] };
+const CROWN_TRANSITION = { duration: 2.5, repeat: Infinity, ease: 'easeInOut' as const };
 
 function withTimeout<T>(p: PromiseLike<T>, ms = REQUEST_TIMEOUT_MS): Promise<T> {
   // Wrap with Promise.resolve so Supabase's "thenable" query builder is
@@ -25,6 +34,16 @@ function withTimeout<T>(p: PromiseLike<T>, ms = REQUEST_TIMEOUT_MS): Promise<T> 
       setTimeout(() => reject(new Error('Request timed out — try again.')), ms),
     ),
   ]);
+}
+
+/** A rating threshold gets a fun rank emoji + label, gives the player
+ *  something to grow toward. */
+function ratingRank(rating: number): { emoji: string; label: string } {
+  if (rating >= 1600) return { emoji: '👑', label: 'Throne Holder' };
+  if (rating >= 1400) return { emoji: '🦁', label: 'Lion Tamer' };
+  if (rating >= 1200) return { emoji: '⚔️', label: 'Warrior' };
+  if (rating >= 1050) return { emoji: '🛡️', label: 'Defender' };
+  return { emoji: '🌱', label: 'Newcomer' };
 }
 
 export default function ProfilePage() {
@@ -219,16 +238,26 @@ export default function ProfilePage() {
     setTimeout(() => setShareCopied(false), 1800);
   }
 
+  const rating = profile?.rating ?? 1000;
+  const wins = profile?.wins ?? 0;
+  const losses = profile?.losses ?? 0;
+  const draws = profile?.draws ?? 0;
+  const totalGames = wins + losses + draws;
+  const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
+  const rank = ratingRank(rating);
+
   return (
     <main
-      className="min-h-screen px-4 py-8 sm:py-12"
+      className="min-h-screen px-4 py-8 sm:py-12 relative overflow-hidden"
       style={{ background: theme.bgGradient, color: theme.textPrimary }}
     >
+      <FloatingPiecesBackdrop />
+
       <div className="fixed top-3 right-3 z-30">
         <NotificationBell />
       </div>
 
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto relative z-10">
         <Link
           href="/"
           className="inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100 mb-4"
@@ -236,27 +265,51 @@ export default function ProfilePage() {
           ← {t('auth.backHome')}
         </Link>
 
+        {/* Hero banner — wide gradient with the player accent, big animated
+            avatar, name + rank badge. Sets the mood for the whole page. */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl p-5 sm:p-7"
-          style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+          initial={CARD_INITIAL}
+          animate={CARD_ANIMATE}
+          className="rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden"
+          style={{
+            background: `linear-gradient(135deg, color-mix(in srgb, ${theme.p1Color} 22%, ${theme.panelBg}) 0%, color-mix(in srgb, ${theme.p2Color} 14%, ${theme.panelBg}) 100%)`,
+            border: `1px solid ${theme.p1AccentBorder}`,
+            boxShadow: `0 30px 80px -20px rgba(0,0,0,0.5)`,
+          }}
         >
-          {/* Header */}
-          <div className="flex items-center gap-4 mb-5">
+          {/* Soft radial glow behind the avatar */}
+          <div
+            className="absolute pointer-events-none"
+            aria-hidden
+            style={{
+              top: '-30%', left: '-10%',
+              width: '50%', height: '120%',
+              background: `radial-gradient(ellipse at center, color-mix(in srgb, ${theme.p1Color} 40%, transparent), transparent 60%)`,
+              opacity: 0.6,
+              filter: 'blur(20px)',
+            }}
+          />
+
+          <div className="flex items-center gap-4 sm:gap-5 relative">
             <button
               onClick={handleAvatarPick}
               disabled={uploadingAvatar}
               aria-label="Change avatar"
               className="relative shrink-0 group rounded-full"
             >
-              <Avatar
-                url={profile?.avatar_url}
-                name={profile?.display_name}
-                email={user.email}
-                size={72}
-                ring
-              />
+              <motion.div
+                animate={AVATAR_BOB}
+                transition={AVATAR_BOB_TRANSITION}
+                style={{ display: 'inline-block' }}
+              >
+                <Avatar
+                  url={profile?.avatar_url}
+                  name={profile?.display_name}
+                  email={user.email}
+                  size={88}
+                  ring
+                />
+              </motion.div>
               <span
                 className="absolute inset-0 rounded-full flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"
                 style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}
@@ -271,24 +324,67 @@ export default function ProfilePage() {
               className="hidden"
               onChange={handleAvatarChange}
             />
+
             <div className="min-w-0 flex-1">
-              <h1
-                className="text-xl sm:text-2xl font-extrabold truncate"
-                style={{ color: theme.p1Color }}
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1
+                  className="text-2xl sm:text-3xl font-black truncate"
+                  style={{
+                    backgroundImage: `linear-gradient(90deg, ${theme.p1Color}, color-mix(in srgb, ${theme.p1Color} 50%, ${theme.p2Color}))`,
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                  }}
+                >
+                  {profile?.display_name ?? '—'}
+                </h1>
+                {rating >= 1200 && (
+                  <motion.span
+                    animate={CROWN_WIGGLE}
+                    transition={CROWN_TRANSITION}
+                    className="text-2xl"
+                    style={{ display: 'inline-block', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }}
+                    aria-hidden
+                  >
+                    👑
+                  </motion.span>
+                )}
+              </div>
+              <div className="text-sm opacity-80 truncate font-mono">@{profile?.username ?? '…'}</div>
+
+              {/* Rank chip */}
+              <div
+                className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-xs font-bold"
+                style={{
+                  background: theme.p1AccentBg,
+                  border: `1px solid ${theme.p1AccentBorder}`,
+                  color: theme.p1Color,
+                }}
               >
-                {profile?.display_name ?? '—'}
-              </h1>
-              <div className="text-sm opacity-70 truncate">@{profile?.username ?? '…'}</div>
-              <div className="text-xs opacity-60 truncate">{user.email}</div>
+                <span aria-hidden>{rank.emoji}</span>
+                <span>{rank.label}</span>
+                <span className="opacity-60">·</span>
+                <span>{rating}</span>
+              </div>
+
               {profile?.is_admin && (
-                <div className="text-xs mt-1" style={{ color: theme.p1Color }}>
+                <div className="text-xs mt-1.5" style={{ color: theme.p1Color }}>
                   ★ {t('auth.admin')}
                 </div>
               )}
             </div>
           </div>
+        </motion.div>
 
-          {/* Share link card — gradient frame + monospaced URL preview + copy button */}
+        {/* Body card holds everything else */}
+        <motion.div
+          initial={CARD_INITIAL}
+          animate={CARD_ANIMATE}
+          transition={{ delay: 0.05 }}
+          className="rounded-2xl p-5 sm:p-7"
+          style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+        >
+          {/* Share link card */}
           {profile?.username && (
             <motion.div
               initial={{ opacity: 0, y: 4 }}
@@ -335,20 +431,45 @@ export default function ProfilePage() {
             </motion.div>
           )}
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <Stat label="Rating" value={profile?.rating ?? 1000} theme={theme} />
-            <Stat label="Wins"   value={profile?.wins ?? 0}   theme={theme} />
-            <Stat label="Losses" value={profile?.losses ?? 0} theme={theme} />
+          {/* Stats — emoji-led tiles + a winrate bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+            <Stat icon="🏆" label="Rating" value={rating} accent={theme.p1Color} theme={theme} />
+            <Stat icon="⚔️" label="Wins"   value={wins}   accent="#22c55e"     theme={theme} />
+            <Stat icon="🛡️" label="Losses" value={losses} accent="#fb7185"     theme={theme} />
+            <Stat icon="🤝" label="Draws"  value={draws}  accent={theme.p2Color} theme={theme} />
           </div>
+          {totalGames > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center justify-between text-xs opacity-80 mb-1">
+                <span className="font-semibold">Win rate</span>
+                <span className="font-mono">{winRate}% · {totalGames} game{totalGames === 1 ? '' : 's'}</span>
+              </div>
+              <div
+                className="h-2 rounded-full overflow-hidden"
+                style={{ background: theme.inputBg, border: `1px solid ${theme.buttonBorder}` }}
+              >
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${winRate}%` }}
+                  transition={{ duration: 0.9, ease: 'easeOut' }}
+                  className="h-full"
+                  style={{
+                    background: `linear-gradient(90deg, ${theme.p1Color}, #22c55e)`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Friends preview */}
           <FriendsCard friends={friends} />
 
           {/* Toast */}
           {(msg || err) && (
-            <div
-              className="text-sm rounded-md px-3 py-2 mb-4"
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-sm rounded-lg px-3 py-2 mb-4 flex items-center gap-2"
               style={
                 err
                   ? {
@@ -363,12 +484,13 @@ export default function ProfilePage() {
                     }
               }
             >
+              <span aria-hidden>{err ? '⚠️' : '✅'}</span>
               {err ?? msg}
-            </div>
+            </motion.div>
           )}
 
           {/* Profile form */}
-          <h2 className="text-lg font-bold mb-3">Profile</h2>
+          <SectionHeader icon="📝" title="Edit my hero" theme={theme} />
           <div className="flex flex-col gap-3 mb-6">
             <Field label="Username" hint="3–20 letters, digits or underscore">
               <input
@@ -376,7 +498,7 @@ export default function ProfilePage() {
                 value={username}
                 onChange={e => setUsername(e.target.value.replace(/\s+/g, ''))}
                 maxLength={20}
-                className="rounded-lg px-3 py-2 w-full"
+                className="rounded-lg px-3 py-2 w-full transition-shadow focus:outline-none"
                 style={{
                   background: theme.inputBg,
                   color: theme.inputText,
@@ -391,7 +513,7 @@ export default function ProfilePage() {
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
                 maxLength={50}
-                className="rounded-lg px-3 py-2 w-full"
+                className="rounded-lg px-3 py-2 w-full focus:outline-none"
                 style={{
                   background: theme.inputBg,
                   color: theme.inputText,
@@ -404,10 +526,10 @@ export default function ProfilePage() {
               <textarea
                 value={bio}
                 onChange={e => setBio(e.target.value)}
-                placeholder="A short line about you"
+                placeholder="A short line about you ✨"
                 maxLength={280}
                 rows={3}
-                className="rounded-lg px-3 py-2 w-full resize-y"
+                className="rounded-lg px-3 py-2 w-full resize-y focus:outline-none"
                 style={{
                   background: theme.inputBg,
                   color: theme.inputText,
@@ -419,19 +541,22 @@ export default function ProfilePage() {
             <button
               onClick={saveProfile}
               disabled={savingProfile || !isDirty}
-              className="self-start rounded-lg px-4 py-2 font-semibold disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center min-w-[140px] min-h-[40px]"
+              className="self-start rounded-xl px-5 py-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 min-w-[150px] min-h-[44px] transition-transform active:scale-95 hover:scale-[1.02]"
               style={{
-                background: theme.buttonRotateBg,
-                border: `1px solid ${theme.buttonRotateBorder}`,
-                color: theme.buttonRotateText,
+                background: isDirty
+                  ? `linear-gradient(135deg, ${theme.p1Color}, color-mix(in srgb, ${theme.p1Color} 60%, ${theme.p2Color}))`
+                  : theme.buttonRotateBg,
+                border: `1px solid ${isDirty ? theme.p1Color : theme.buttonRotateBorder}`,
+                color: isDirty ? '#0a0a14' : theme.buttonRotateText,
+                boxShadow: isDirty ? `0 6px 18px -8px ${theme.p1Color}` : undefined,
               }}
             >
-              {savingProfile ? <LoadingEmojis size={16} gap={2} /> : 'Save profile'}
+              {savingProfile ? <LoadingEmojis size={16} gap={2} /> : <>💾 Save profile</>}
             </button>
           </div>
 
           {/* Password form */}
-          <h2 className="text-lg font-bold mb-3">Change password</h2>
+          <SectionHeader icon="🔑" title="Change the secret" theme={theme} />
           <div className="flex flex-col gap-3">
             <input
               type="password"
@@ -439,7 +564,7 @@ export default function ProfilePage() {
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               placeholder="New password (10+ characters)"
-              className="rounded-lg px-3 py-2 w-full"
+              className="rounded-lg px-3 py-2 w-full focus:outline-none"
               style={{
                 background: theme.inputBg,
                 color: theme.inputText,
@@ -449,14 +574,14 @@ export default function ProfilePage() {
             <button
               onClick={changePassword}
               disabled={savingPassword || newPassword.length < 10}
-              className="self-start rounded-lg px-4 py-2 font-semibold disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center min-w-[160px] min-h-[40px]"
+              className="self-start rounded-xl px-5 py-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 min-w-[170px] min-h-[44px] transition-transform active:scale-95 hover:scale-[1.02]"
               style={{
                 background: theme.buttonRotateBg,
                 border: `1px solid ${theme.buttonRotateBorder}`,
                 color: theme.buttonRotateText,
               }}
             >
-              {savingPassword ? <LoadingEmojis size={16} gap={2} /> : 'Update password'}
+              {savingPassword ? <LoadingEmojis size={16} gap={2} /> : <>🔄 Update password</>}
             </button>
           </div>
         </motion.div>
@@ -466,21 +591,47 @@ export default function ProfilePage() {
 }
 
 function Stat({
+  icon,
   label,
   value,
+  accent,
   theme,
 }: {
+  icon: string;
   label: string;
   value: number;
+  accent: string;
   theme: ReturnType<typeof useSettings>['theme'];
 }) {
   return (
     <div
-      className="rounded-lg p-3 text-center"
-      style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+      className="rounded-xl p-3 text-center transition-transform hover:scale-[1.03]"
+      style={{
+        background: `linear-gradient(160deg, color-mix(in srgb, ${accent} 14%, ${theme.panelBg}), ${theme.panelBg})`,
+        border: `1px solid color-mix(in srgb, ${accent} 35%, ${theme.panelBorder})`,
+      }}
     >
+      <div className="text-xl mb-0.5" aria-hidden>{icon}</div>
       <div className="text-xs opacity-70">{label}</div>
-      <div className="text-xl font-bold" style={{ color: theme.p1Color }}>{value}</div>
+      <div className="text-xl font-black" style={{ color: accent }}>{value}</div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  icon,
+  title,
+  theme,
+}: {
+  icon: string;
+  title: string;
+  theme: ReturnType<typeof useSettings>['theme'];
+}) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <span aria-hidden className="text-lg">{icon}</span>
+      <h2 className="text-lg font-bold" style={{ color: theme.p1Color }}>{title}</h2>
+      <span className="flex-1 h-px opacity-25" style={{ background: theme.p1Color }} />
     </div>
   );
 }
