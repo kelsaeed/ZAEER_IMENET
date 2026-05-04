@@ -7,6 +7,17 @@ import { getAntCells, getPiecesAtCell } from '@/game/logic';
 import { useSettings } from '@/hooks/useSettings';
 import PieceDisplay from './PieceDisplay';
 
+// Stable references for the valid-move pulse so framer-motion doesn't restart
+// the loop on every re-render (was a visible flicker during resize / zoom).
+// (Not using `as const` — framer-motion's prop types want mutable arrays.)
+const VALID_MOVE_INITIAL = { opacity: 0, scale: 0.5 };
+const VALID_MOVE_ANIMATE = { opacity: 1, scale: 1 };
+const VALID_MOVE_EXIT = { opacity: 0, scale: 0.5 };
+const VALID_MOVE_PULSE = { scale: [0.55, 0.75, 0.55] };
+const VALID_MOVE_PULSE_TRANSITION = { duration: 1.3, repeat: Infinity };
+const PIECE_INITIAL = { scale: 0.8, opacity: 0 };
+const PIECE_ANIMATE = { scale: 1, opacity: 1 };
+
 interface Props {
   row: number;
   col: number;
@@ -114,14 +125,14 @@ function BoardCellImpl({
       <AnimatePresence>
         {isValidMove && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.5 }}
+            initial={VALID_MOVE_INITIAL}
+            animate={VALID_MOVE_ANIMATE}
+            exit={VALID_MOVE_EXIT}
             className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
           >
             <motion.div
-              animate={{ scale: [0.55, 0.75, 0.55] }}
-              transition={{ duration: 1.3, repeat: Infinity }}
+              animate={VALID_MOVE_PULSE}
+              transition={VALID_MOVE_PULSE_TRANSITION}
               style={{
                 width: piecesHere.length > 0 ? cellSize - 2 : cellSize * 0.36,
                 height: piecesHere.length > 0 ? cellSize - 2 : cellSize * 0.36,
@@ -139,8 +150,8 @@ function BoardCellImpl({
         <motion.div
           key={`${mainPiece.id}-${row}-${col}`}
           layoutId={`${mainPiece.id}-${isAntCenter ? 'center' : `wing-${row}-${col}`}`}
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
+          initial={PIECE_INITIAL}
+          animate={PIECE_ANIMATE}
           className="z-20 flex items-center justify-center"
         >
           <PieceDisplay

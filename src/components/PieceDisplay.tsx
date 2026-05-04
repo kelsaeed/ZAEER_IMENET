@@ -4,6 +4,21 @@ import { GamePiece, BounceEffect } from '@/game/types';
 import { PIECE_EMOJI, PIECE_NAME } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
 
+// Module-level constants for framer-motion targets and transitions.
+// Inline literals like `animate={{ scale: [1,1.08,1] }}` are a fresh object
+// reference each render, which framer-motion treats as a value change and
+// restarts the animation — visible as a flicker on resize / zoom. Stable
+// references let the same loop run continuously across re-renders.
+// (Not using `as const` — framer-motion's prop types want mutable arrays.)
+const PULSE_SELECTED = { scale: [1, 1.08, 1] };
+const PULSE_SELECTED_TRANSITION = { duration: 0.8, repeat: Infinity };
+const RESET_POSITION = { scale: 1, x: 0, y: 0 };
+const RESET_TRANSITION = { duration: 0.8, repeat: 0 };
+const WING_RESET = { x: 0, y: 0 };
+const WING_RESET_TRANSITION = {};
+const OVERLAY_WIGGLE = { rotate: [0, 10, -10, 0] };
+const OVERLAY_WIGGLE_TRANSITION = { duration: 2, repeat: Infinity };
+
 interface Props {
   piece: GamePiece;
   isCenter: boolean;
@@ -72,8 +87,8 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
         animate={hasBounce ? {
           x: [0, bounceX, 0],
           y: [0, bounceY, 0],
-        } : { x: 0, y: 0 }}
-        transition={hasBounce ? { duration: 0.45, ease: 'easeInOut' } : {}}
+        } : WING_RESET}
+        transition={hasBounce ? { duration: 0.45, ease: 'easeInOut' } : WING_RESET_TRANSITION}
       >
         <span style={{ opacity: 0.7 }}>━</span>
       </motion.div>
@@ -87,13 +102,15 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
         hasBounce
           ? { x: [0, bounceX, 0], y: [0, bounceY, 0], scale: 1 }
           : isSelected
-          ? { scale: [1, 1.08, 1] }
-          : { scale: 1, x: 0, y: 0 }
+          ? PULSE_SELECTED
+          : RESET_POSITION
       }
       transition={
         hasBounce
           ? { duration: 0.45, ease: 'easeInOut' }
-          : { duration: 0.8, repeat: isSelected ? Infinity : 0 }
+          : isSelected
+          ? PULSE_SELECTED_TRANSITION
+          : RESET_TRANSITION
       }
     >
       <span style={{ lineHeight: 1, filter: piece.isParalyzed ? 'grayscale(0.6)' : 'none' }}>
@@ -148,8 +165,8 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
             fontSize: Math.floor(size * 0.32), lineHeight: 1,
             filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.8))',
           }}
-          animate={{ rotate: [0, 10, -10, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
+          animate={OVERLAY_WIGGLE}
+          transition={OVERLAY_WIGGLE_TRANSITION}
         >
           {PIECE_EMOJI[overlay.type]}
         </motion.span>

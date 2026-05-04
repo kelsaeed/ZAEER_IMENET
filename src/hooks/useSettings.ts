@@ -140,26 +140,38 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const isBuiltIn = useCallback((id: string) => builtInLocaleIds().includes(id), []);
 
-  const value: SettingsValue = {
-    theme,
-    themeId,
-    setThemeId,
-    themes: THEMES,
-    customColors,
-    setCustomColor,
-    resetCustomColors,
-    locale,
-    localeId: locale.id,
-    setLocaleId,
-    locales: allLocales,
-    isRTL: locale.dir === 'rtl',
-    t,
-    addCustomLocale,
-    removeCustomLocale,
-    setTranslation,
-    resetTranslation,
-    isBuiltIn,
-  };
+  // Memoize the context value. Without this, every render of SettingsProvider
+  // produces a fresh `value` object reference, which forces every consumer of
+  // useSettings to re-render — and the GameBoard alone has 256 cells calling
+  // useSettings inside React.memo. That single missed memo was the dominant
+  // cause of resize / zoom jank.
+  const value = useMemo<SettingsValue>(
+    () => ({
+      theme,
+      themeId,
+      setThemeId,
+      themes: THEMES,
+      customColors,
+      setCustomColor,
+      resetCustomColors,
+      locale,
+      localeId: locale.id,
+      setLocaleId,
+      locales: allLocales,
+      isRTL: locale.dir === 'rtl',
+      t,
+      addCustomLocale,
+      removeCustomLocale,
+      setTranslation,
+      resetTranslation,
+      isBuiltIn,
+    }),
+    [
+      theme, themeId, customColors, locale, allLocales, t,
+      setThemeId, setCustomColor, resetCustomColors, setLocaleId,
+      addCustomLocale, removeCustomLocale, setTranslation, resetTranslation, isBuiltIn,
+    ],
+  );
 
   return createElement(Ctx.Provider, { value }, children);
 }

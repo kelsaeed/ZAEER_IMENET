@@ -1,17 +1,22 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useGame } from '@/hooks/useGame';
 import { useSettings } from '@/hooks/useSettings';
-import GameBoard from '@/components/GameBoard';
-import GameHUD from '@/components/GameHUD';
-import WinScreen from '@/components/WinScreen';
 import StartScreen from '@/components/StartScreen';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
 
 // Heavy panel — only load it when the user actually opens it.
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
+
+// In-game components are lazy-loaded so the menu screen's initial JS payload
+// doesn't drag along the board, HUD, framer-motion piece animations, etc.
+// We preload them in the background once the menu mounts (see useEffect below)
+// so by the time the player clicks Start, the chunks are already cached.
+const GameBoard = dynamic(() => import('@/components/GameBoard'), { ssr: false });
+const GameHUD = dynamic(() => import('@/components/GameHUD'), { ssr: false });
+const WinScreen = dynamic(() => import('@/components/WinScreen'), { ssr: false });
 
 export default function Home() {
   const {
@@ -38,20 +43,34 @@ export default function Home() {
   // While reviewing history, render the historical pieces but keep the live
   // selection state empty so highlights don't bleed into the review.
   const reviewing = state.viewingHistoryIndex !== null;
-  const displayState = reviewing
-    ? {
-        ...state,
-        pieces: state.history[state.viewingHistoryIndex!].pieces,
-        currentPlayer: state.history[state.viewingHistoryIndex!].currentPlayer,
-        lastAction: state.history[state.viewingHistoryIndex!].lastAction,
-        turn: state.history[state.viewingHistoryIndex!].turn,
-        selectedPieceId: null,
-        validMoves: [],
-        canRotate: false,
-        validRotations: [],
-        bounceEffect: undefined,
-      }
-    : state;
+  // Memoized so we don't hand the board a fresh `displayState` reference on
+  // unrelated re-renders (e.g. cellSize changes from a resize). The play page
+  // already does this; the home page was missing it.
+  const displayState = useMemo(() => {
+    if (!reviewing) return state;
+    const snap = state.history[state.viewingHistoryIndex!];
+    return {
+      ...state,
+      pieces: snap.pieces,
+      currentPlayer: snap.currentPlayer,
+      lastAction: snap.lastAction,
+      turn: snap.turn,
+      selectedPieceId: null,
+      validMoves: [],
+      canRotate: false,
+      validRotations: [],
+      bounceEffect: undefined,
+    };
+  }, [state, reviewing]);
+
+  // Preload the in-game chunks while the menu is visible so the click-to-play
+  // transition feels instant. Fire-and-forget — webpack caches the modules.
+  useEffect(() => {
+    if (state.phase !== 'menu') return;
+    void import('@/components/GameBoard');
+    void import('@/components/GameHUD');
+    void import('@/components/WinScreen');
+  }, [state.phase]);
 
   useEffect(() => {
     function calc() {
