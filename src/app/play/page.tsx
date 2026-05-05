@@ -11,6 +11,8 @@ import {
   joinOnlineGame,
   findGameByInviteCode,
   quickMatch,
+  listMyActiveGames,
+  ActiveGame,
 } from '@/lib/supabase/games';
 import {
   listFriendships,
@@ -183,6 +185,18 @@ function PlayTab({
   const [joinCode, setJoinCode] = useState('');
   const [games, setGames] = useState<PublicGame[]>([]);
   const [gamesLoading, setGamesLoading] = useState(true);
+  // Caller's in-progress games — surfaced at the top so a player who hit
+  // Main Menu mid-match can hop right back in.
+  const [active, setActive] = useState<ActiveGame[] | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+    listMyActiveGames(user.id)
+      .then(list => { if (mounted) setActive(list); })
+      .catch(() => { if (mounted) setActive([]); });
+    return () => { mounted = false; };
+  }, [user]);
 
   // Live list of public open games (small section, collapsed).
   useEffect(() => {
@@ -248,6 +262,13 @@ function PlayTab({
 
   return (
     <>
+      {/* Resume strip — shown only when the caller has at least one match
+          they can step back into. We deliberately put it ABOVE the hero
+          actions so it's the first thing a returning player sees. */}
+      {active && active.length > 0 && (
+        <ResumeGames games={active} theme={theme} router={router} />
+      )}
+
       {/* The 3 hero actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <ActionCard
@@ -386,6 +407,82 @@ function ActionCard({
       <div className="text-xs opacity-80">{desc}</div>
       {loading && <div className="mt-2"><LoadingEmojis size={14} gap={2} /></div>}
     </motion.button>
+  );
+}
+
+// ─── Resume games strip ────────────────────────────────────────────────────
+
+function ResumeGames({
+  games, theme, router,
+}: {
+  games: ActiveGame[];
+  theme: ReturnType<typeof useSettings>['theme'];
+  router: ReturnType<typeof useRouter>;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-4 mb-5"
+      style={{
+        background: `linear-gradient(135deg, color-mix(in srgb, ${theme.p1Color} 14%, ${theme.panelBg}), ${theme.panelBg})`,
+        border: `1px solid ${theme.p1AccentBorder}`,
+      }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-extrabold flex items-center gap-2" style={{ color: theme.p1Color }}>
+          <span aria-hidden>🎮</span>
+          <span>Pick up where you left off</span>
+          <span
+            className="text-xs px-2 py-0.5 rounded-full font-bold"
+            style={{
+              background: theme.p1AccentBg,
+              border: `1px solid ${theme.p1AccentBorder}`,
+              color: theme.p1Color,
+            }}
+          >
+            {games.length}
+          </span>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {games.map(g => {
+          const oppName = g.opponent?.display_name ?? (g.status === 'waiting' ? 'Waiting…' : 'Opponent');
+          const accent = g.myPlayer === 1 ? 'p1' : 'p2';
+          const accentColor = g.myPlayer === 1 ? theme.p1Color : theme.p2Color;
+          return (
+            <button
+              key={g.id}
+              onClick={() => router.push(`/play/${g.id}`)}
+              className="rounded-xl p-3 flex items-center gap-3 text-start transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: theme.inputBg,
+                border: `1px solid ${g.myTurn ? accentColor : theme.buttonBorder}`,
+                boxShadow: g.myTurn ? `0 0 0 2px color-mix(in srgb, ${accentColor} 40%, transparent)` : 'none',
+              }}
+            >
+              <Avatar
+                url={g.opponent?.avatar_url ?? null}
+                name={g.opponent?.display_name ?? null}
+                size={40}
+                accent={accent}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold truncate">vs {oppName}</div>
+                <div className="text-xs opacity-75 truncate flex items-center gap-2">
+                  {g.status === 'waiting' ? (
+                    <>⏳ Waiting for opponent</>
+                  ) : g.myTurn ? (
+                    <span style={{ color: accentColor, fontWeight: 700 }}>● Your turn</span>
+                  ) : (
+                    <>Turn {g.current_turn}</>
+                  )}
+                </div>
+              </div>
+              <span aria-hidden style={{ color: accentColor }}>↗</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

@@ -28,6 +28,8 @@ export default function OnlineGamePage() {
   const [cellSize, setCellSize] = useState(42);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [winDismissed, setWinDismissed] = useState(false);
+  // Visual feedback for the waiting-room invite-code copy button.
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   const {
     loading,
@@ -71,21 +73,23 @@ export default function OnlineGamePage() {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const sideBySide = vw >= 1024;
-      const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 24 : 20;
+      const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 16 : 20;
+      // Slimmer HUD reserve on desktop so the board can grow into the
+      // breathing room. Lower bound trimmed from 16rem to 14rem.
       const hudReserve = sideBySide
-        ? Math.max(16 * 16, Math.min(30 * 16, Math.floor(vw * 0.22)))
+        ? Math.max(14 * 16, Math.min(28 * 16, Math.floor(vw * 0.2)))
         : 0;
       const flexGap = sideBySide ? 16 : 0;
       const widthBudget = vw - padX * 2 - hudReserve - flexGap;
       const maxFromW = Math.floor(widthBudget / 16.6);
-      // Reserve enough vertical space for the fixed player ribbon at the top
-      // AND the in-flow status pill (Waiting / Spectating / Reviewing) that
-      // sits above the board, plus bottom controls.
-      const padY = sideBySide ? 150 : 130;
+      // Vertical reserve: on mobile we still keep the fixed ribbon + the
+      // in-flow status pill above the board. On desktop the status pill
+      // now lives inline with the ribbon, so we can claw back ~40px.
+      const padY = sideBySide ? 110 : 130;
       const maxFromH = Math.floor((vh - padY) / 16.6);
       const minCell = vw < 360 ? 14 : 16;
       const maxCell = sideBySide
-        ? (vw >= 1600 ? 96 : vw >= 1280 ? 84 : 68)
+        ? (vw >= 1600 ? 110 : vw >= 1280 ? 92 : 76)
         : 60;
       setCellSize(Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH)));
     }
@@ -215,17 +219,25 @@ export default function OnlineGamePage() {
               >
                 {game.invite_code}
               </div>
-              <button
-                onClick={() => navigator.clipboard?.writeText(game.invite_code!)}
-                className="rounded-lg px-3 py-1.5 text-sm font-semibold mb-4"
+              <motion.button
+                onClick={() => {
+                  navigator.clipboard?.writeText(game.invite_code!);
+                  setInviteCopied(true);
+                  setTimeout(() => setInviteCopied(false), 1800);
+                }}
+                whileTap={{ scale: 0.94 }}
+                animate={inviteCopied ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+                transition={{ duration: 0.4 }}
+                className="rounded-lg px-4 py-2 text-sm font-bold mb-4 inline-flex items-center gap-1.5"
                 style={{
-                  background: theme.buttonBg,
-                  border: `1px solid ${theme.buttonBorder}`,
-                  color: theme.textPrimary,
+                  background: inviteCopied ? theme.p1Color : theme.buttonRotateBg,
+                  border: `1px solid ${inviteCopied ? theme.p1Color : theme.buttonRotateBorder}`,
+                  color: inviteCopied ? '#000' : theme.buttonRotateText,
+                  transition: 'background 200ms, color 200ms, border-color 200ms',
                 }}
               >
-                Copy code
-              </button>
+                {inviteCopied ? <>✓ Copied!</> : <>📋 Copy code</>}
+              </motion.button>
             </>
           )}
           <div className="flex gap-2 justify-center mt-2">
@@ -285,47 +297,75 @@ export default function OnlineGamePage() {
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>
 
-      {/* Player ribbon — responsive: tight pill on phones, comfortable on
-          desktop. Left-anchored so the AuthBadge / NotificationBell don't
-          collide with it on small screens. */}
-      <div
-        className="fixed top-3 z-20 flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full text-sm shadow-sm"
-        style={{
-          background: theme.panelBg,
-          border: `1px solid ${theme.panelBorder}`,
-          color: theme.textPrimary,
-          // Center between the corner buttons. Wide enough on desktop,
-          // tight enough on phones to not overlap the bell / badge.
-          left: '50%',
-          transform: 'translateX(-50%)',
-          maxWidth: 'min(560px, calc(100vw - 132px))',
-        }}
-      >
-        <PlayerChip
-          name={myPlayerNumber === 1 ? (profile?.display_name ?? 'You') : (game.player1_id ? (opponent?.display_name ?? 'P1') : '…')}
-          avatarUrl={myPlayerNumber === 1 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
-          color={theme.p1Color}
-          isYou={myPlayerNumber === 1}
-          isTurn={state.currentPlayer === 1 && isPlaying}
-          accent="p1"
-        />
-        <span className="opacity-40 text-xs px-0.5">vs</span>
-        <PlayerChip
-          name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : (game.player2_id ? (opponent?.display_name ?? 'P2') : '…')}
-          avatarUrl={myPlayerNumber === 2 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
-          color={theme.p2Color}
-          isYou={myPlayerNumber === 2}
-          isTurn={state.currentPlayer === 2 && isPlaying}
-          accent="p2"
-        />
-      </div>
+      {/* Player ribbon — on phones, centered between the corner buttons. On
+          desktop (lg+), shifted toward the right side of the viewport so it
+          doesn't squat over the board, and the in-flow status pill is folded
+          in beside the chips on the same line. */}
+      {(() => {
+        const statusInfo: { icon: string; text: string; tone: 'muted' | 'accent' } | null =
+          reviewing
+            ? { icon: '⏪', text: `Reviewing turn ${viewingHistoryIndex! + 1} / ${state.history.length}`, tone: 'accent' }
+            : isSpectator && !won
+            ? { icon: '👀', text: 'Spectating', tone: 'accent' }
+            : !isMyTurn && !won && !isSpectator
+            ? { icon: '⏳', text: `Waiting for ${opponent?.display_name ?? 'opponent'}…`, tone: 'muted' }
+            : null;
+
+        return (
+          <div
+            className="fixed top-3 z-20 flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full text-sm shadow-sm
+                       left-1/2 -translate-x-1/2
+                       lg:left-auto lg:translate-x-0 lg:right-[60px]"
+            style={{
+              background: theme.panelBg,
+              border: `1px solid ${theme.panelBorder}`,
+              color: theme.textPrimary,
+              maxWidth: 'min(720px, calc(100vw - 132px))',
+            }}
+          >
+            <PlayerChip
+              name={myPlayerNumber === 1 ? (profile?.display_name ?? 'You') : (game.player1_id ? (opponent?.display_name ?? 'P1') : '…')}
+              avatarUrl={myPlayerNumber === 1 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
+              color={theme.p1Color}
+              isYou={myPlayerNumber === 1}
+              isTurn={state.currentPlayer === 1 && isPlaying}
+              accent="p1"
+            />
+            <span className="opacity-40 text-xs px-0.5">vs</span>
+            <PlayerChip
+              name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : (game.player2_id ? (opponent?.display_name ?? 'P2') : '…')}
+              avatarUrl={myPlayerNumber === 2 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
+              color={theme.p2Color}
+              isYou={myPlayerNumber === 2}
+              isTurn={state.currentPlayer === 2 && isPlaying}
+              accent="p2"
+            />
+            {/* Inline status pill (desktop only) — keeps it on the same line
+                as the player chips and frees up vertical space below. */}
+            {statusInfo && (
+              <span
+                className="hidden lg:inline-flex items-center gap-1.5 ml-2 ps-2 pe-1 py-0.5 text-xs font-semibold border-l"
+                style={{
+                  borderColor: 'rgba(255,255,255,0.12)',
+                  color: statusInfo.tone === 'accent' ? theme.p1Color : theme.textMuted,
+                  maxWidth: 240,
+                }}
+              >
+                <span aria-hidden>{statusInfo.icon}</span>
+                <span className="truncate">{statusInfo.text}</span>
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="flex flex-col gap-2 sm:gap-3 items-center lg:shrink-0 relative">
-        {/* Status pill — in-flow above the board so it never overlaps the
-            fixed player ribbon at the top of the page. */}
+        {/* Status pill above the board — phones only. On desktop the same
+            info lives inline with the player ribbon (see above), saving a
+            row of vertical space and letting the board grow. */}
         {!isMyTurn && !reviewing && !won && !isSpectator && (
           <div
-            className="rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
+            className="lg:hidden rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
             style={{
               background: theme.panelBg,
               border: `1px solid ${theme.panelBorder}`,
@@ -338,7 +378,7 @@ export default function OnlineGamePage() {
         )}
         {isSpectator && !won && (
           <div
-            className="rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
+            className="lg:hidden rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
             style={{
               background: theme.panelBg,
               border: `1px solid ${theme.p1AccentBorder}`,
@@ -351,7 +391,7 @@ export default function OnlineGamePage() {
         )}
         {reviewing && (
           <div
-            className="rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
+            className="lg:hidden rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
             style={{
               background: theme.panelBg,
               border: `1px solid ${theme.p1AccentBorder}`,

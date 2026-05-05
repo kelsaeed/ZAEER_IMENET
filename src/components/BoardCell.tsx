@@ -15,8 +15,6 @@ const VALID_MOVE_ANIMATE = { opacity: 1, scale: 1 };
 const VALID_MOVE_EXIT = { opacity: 0, scale: 0.5 };
 const VALID_MOVE_PULSE = { scale: [0.55, 0.75, 0.55] };
 const VALID_MOVE_PULSE_TRANSITION = { duration: 1.3, repeat: Infinity };
-const PIECE_INITIAL = { scale: 0.8, opacity: 0 };
-const PIECE_ANIMATE = { scale: 1, opacity: 1 };
 
 interface Props {
   row: number;
@@ -145,13 +143,14 @@ function BoardCellImpl({
         )}
       </AnimatePresence>
 
-      {/* Piece */}
+      {/* Piece — `layoutId` carries the piece smoothly across cells when it
+          moves. We dropped the previous initial/animate fade-in because it
+          fired on every re-mount in the new cell on top of the layout
+          transition, producing the "moves then stops then jumps" glitch. */}
       {mainPiece && !barrier && (
         <motion.div
-          key={`${mainPiece.id}-${row}-${col}`}
+          key={mainPiece.id}
           layoutId={`${mainPiece.id}-${isAntCenter ? 'center' : `wing-${row}-${col}`}`}
-          initial={PIECE_INITIAL}
-          animate={PIECE_ANIMATE}
           className="z-20 flex items-center justify-center"
         >
           <PieceDisplay

@@ -63,6 +63,13 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
       ? '0 2px 6px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08) inset'  // raised
       : '0 0 0 1px rgba(0,0,0,0.55) inset, 0 0 6px rgba(0,0,0,0.3) inset';     // recessed
 
+  // Emoji size: bumped up considerably so pieces are recognisable on small
+  // mobile cells. We also keep a small floor so the symbol stays legible
+  // even at the minimum cell size.
+  const emojiSize = isCenter
+    ? Math.max(14, Math.floor(size * 0.6))
+    : Math.max(10, Math.floor(size * 0.3));
+
   const baseStyle: React.CSSProperties = {
     width: size - 4,
     height: size - 4,
@@ -71,7 +78,7 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    fontSize: isCenter ? Math.floor(size * 0.38) : Math.floor(size * 0.22),
+    fontSize: emojiSize,
     cursor: 'pointer',
     userSelect: 'none',
     border: ownerBorder,
@@ -117,17 +124,10 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
         {PIECE_EMOJI[piece.type]}
       </span>
 
-      {/* Player marker — shape differs per player so colorblind users can also
-          tell sides apart at a glance: P1 = filled circle, P2 = diamond. */}
-      <span style={{
-        position: 'absolute', bottom: 1, right: 1,
-        width: Math.max(7, size * 0.18), height: Math.max(7, size * 0.18),
-        borderRadius: isP1 ? '50%' : '2px',
-        background: isP1 ? theme.p1Color : theme.p2Color,
-        border: '1.5px solid rgba(0,0,0,0.65)',
-        transform: isP1 ? undefined : 'rotate(45deg)',
-        boxShadow: isP1 ? '0 0 4px rgba(0,0,0,0.4)' : '0 0 3px rgba(0,0,0,0.5)',
-      }} />
+      {/* (Player marker dot was removed — on small mobile cells it covered
+          part of the emoji and made pieces hard to read. Sides are still
+          clearly distinguished by the player colour, raised vs recessed
+          look, and solid-vs-dashed border on the piece itself.) */}
 
       {/* Broken heart (elephant 1 HP) */}
       {piece.isDamaged && piece.type === 'elephant' && (

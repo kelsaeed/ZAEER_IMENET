@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
 import LoadingEmojis from '@/components/LoadingEmojis';
-import { FloatingPiecesBackdrop, PieceParade, IconInput } from '@/components/AuthDecor';
+import { PieceParade, IconInput } from '@/components/AuthDecor';
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED === 'true';
 
@@ -56,17 +56,14 @@ export default function LoginPage() {
 
   return (
     <main
-      className="min-h-screen flex items-center justify-center px-4 py-10 relative overflow-hidden"
+      className="min-h-screen flex items-center justify-center px-4 py-10"
       style={{ background: theme.bgGradient, color: theme.textPrimary }}
     >
-      {/* Decorative pieces drifting in the background */}
-      <FloatingPiecesBackdrop />
-
       <motion.div
         initial={CARD_INITIAL}
         animate={CARD_ANIMATE}
         transition={CARD_TRANSITION}
-        className="w-full max-w-md rounded-3xl p-7 relative z-10 shadow-2xl"
+        className="w-full max-w-md rounded-3xl p-7 shadow-2xl"
         style={{
           background: `linear-gradient(160deg, color-mix(in srgb, ${theme.p1Color} 8%, ${theme.panelBg}) 0%, ${theme.panelBg} 60%)`,
           border: `1px solid ${theme.p1AccentBorder}`,
@@ -88,7 +85,7 @@ export default function LoginPage() {
             filter: `drop-shadow(0 2px 0 color-mix(in srgb, ${theme.p1Color} 25%, transparent))`,
           }}
         >
-          {t('auth.signInTitle')} 👋
+          {t('auth.signInTitle')}
         </h1>
         <p className="text-sm opacity-80 mb-6 text-center">{t('auth.signInSubtitle')}</p>
 

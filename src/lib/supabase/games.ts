@@ -149,6 +149,75 @@ export async function quickMatch(opts: { userId: string }): Promise<{ gameId: st
   return { gameId: newGame.id, created: true };
 }
 
+export interface ActiveGame {
+  id: string;
+  status: GameStatus;
+  current_turn: number;
+  is_public: boolean;
+  invite_code: string | null;
+  updated_at: string;
+  /** True if it's the caller's turn to play. */
+  myTurn: boolean;
+  /** Side the caller is on (so the lobby can colour the chip). */
+  myPlayer: Player;
+  opponent: {
+    id: string | null;
+    username: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+  } | null;
+}
+
+/** Games where the caller is a participant and the match isn't finished
+ *  yet — used by the lobby to offer "Resume" tiles so a player who
+ *  navigated away can jump straight back in. */
+export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
+  const supabase = getSupabaseBrowser();
+  const { data, error } = await supabase
+    .from('games')
+    .select(`
+      id, status, current_turn, is_public, invite_code, updated_at,
+      player1_id, player2_id, state,
+      p1:profiles!games_player1_id_fkey(id, username, display_name, avatar_url),
+      p2:profiles!games_player2_id_fkey(id, username, display_name, avatar_url)
+    `)
+    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+    .in('status', ['waiting', 'playing'])
+    .order('updated_at', { ascending: false });
+  if (error || !data) return [];
+
+  type Row = {
+    id: string;
+    status: GameStatus;
+    current_turn: number;
+    is_public: boolean;
+    invite_code: string | null;
+    updated_at: string;
+    player1_id: string | null;
+    player2_id: string | null;
+    state: GameState | null;
+    p1: { id: string; username: string; display_name: string; avatar_url: string | null } | null;
+    p2: { id: string; username: string; display_name: string; avatar_url: string | null } | null;
+  };
+
+  return (data as unknown as Row[]).map(r => {
+    const myPlayer: Player = r.player1_id === userId ? 1 : 2;
+    const opp = myPlayer === 1 ? r.p2 : r.p1;
+    const myTurn = r.status === 'playing' && r.state?.currentPlayer === myPlayer;
+    return {
+      id: r.id,
+      status: r.status,
+      current_turn: r.current_turn,
+      is_public: r.is_public,
+      invite_code: r.invite_code,
+      updated_at: r.updated_at,
+      myTurn,
+      myPlayer,
+      opponent: opp,
+    };
+  });
+}
+
 /** Player gives up — game ends with the other player as winner. */
 export async function resignGame(opts: {
   gameId: string;

@@ -11,7 +11,6 @@ import { listFriendships, FriendProfile } from '@/lib/supabase/friends';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
 import NotificationBell from '@/components/NotificationBell';
-import { FloatingPiecesBackdrop } from '@/components/AuthDecor';
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/i;
 // Hard cap so a hung request can never freeze the UI forever.
@@ -20,10 +19,6 @@ const REQUEST_TIMEOUT_MS = 8000;
 // Stable framer-motion targets — see PieceDisplay / BoardCell.
 const CARD_INITIAL = { opacity: 0, y: 12 };
 const CARD_ANIMATE = { opacity: 1, y: 0 };
-const AVATAR_BOB = { y: [0, -3, 0] };
-const AVATAR_BOB_TRANSITION = { duration: 3.2, repeat: Infinity, ease: 'easeInOut' as const };
-const CROWN_WIGGLE = { rotate: [-8, 8, -8], y: [0, -2, 0] };
-const CROWN_TRANSITION = { duration: 2.5, repeat: Infinity, ease: 'easeInOut' as const };
 
 function withTimeout<T>(p: PromiseLike<T>, ms = REQUEST_TIMEOUT_MS): Promise<T> {
   // Wrap with Promise.resolve so Supabase's "thenable" query builder is
@@ -248,16 +243,14 @@ export default function ProfilePage() {
 
   return (
     <main
-      className="min-h-screen px-4 py-8 sm:py-12 relative overflow-hidden"
+      className="min-h-screen px-4 py-8 sm:py-12"
       style={{ background: theme.bgGradient, color: theme.textPrimary }}
     >
-      <FloatingPiecesBackdrop />
-
       <div className="fixed top-3 right-3 z-30">
         <NotificationBell />
       </div>
 
-      <div className="max-w-2xl mx-auto relative z-10">
+      <div className="max-w-2xl mx-auto">
         <Link
           href="/"
           className="inline-flex items-center gap-1 text-sm opacity-70 hover:opacity-100 mb-4"
@@ -297,19 +290,13 @@ export default function ProfilePage() {
               aria-label="Change avatar"
               className="relative shrink-0 group rounded-full"
             >
-              <motion.div
-                animate={AVATAR_BOB}
-                transition={AVATAR_BOB_TRANSITION}
-                style={{ display: 'inline-block' }}
-              >
-                <Avatar
-                  url={profile?.avatar_url}
-                  name={profile?.display_name}
-                  email={user.email}
-                  size={88}
-                  ring
-                />
-              </motion.div>
+              <Avatar
+                url={profile?.avatar_url}
+                name={profile?.display_name}
+                email={user.email}
+                size={88}
+                ring
+              />
               <span
                 className="absolute inset-0 rounded-full flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"
                 style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}
@@ -339,15 +326,13 @@ export default function ProfilePage() {
                   {profile?.display_name ?? '—'}
                 </h1>
                 {rating >= 1200 && (
-                  <motion.span
-                    animate={CROWN_WIGGLE}
-                    transition={CROWN_TRANSITION}
+                  <span
                     className="text-2xl"
-                    style={{ display: 'inline-block', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }}
+                    style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }}
                     aria-hidden
                   >
                     👑
-                  </motion.span>
+                  </span>
                 )}
               </div>
               <div className="text-sm opacity-80 truncate font-mono">@{profile?.username ?? '…'}</div>
