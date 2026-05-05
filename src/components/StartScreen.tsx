@@ -66,14 +66,11 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
         className="text-center mb-8 relative z-10"
         style={{ textAlign: 'center', marginBottom: '2rem', position: 'relative', zIndex: 10 }}
       >
-        {/* Crown animation */}
-        <motion.div
-          animate={{ y: [0, -10, 0] }}
-          transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-          className="text-5xl sm:text-6xl mb-4"
-        >
+        {/* Crown bob — pure CSS so it doesn't restart on parent re-renders.
+            See zi-crown-bob in globals.css. */}
+        <div className="zi-crown-bob text-5xl sm:text-6xl mb-4" aria-hidden>
           👑
-        </motion.div>
+        </div>
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold mb-2 px-1" style={{ fontWeight: 800, color: theme.p1Color, marginBottom: '0.5rem' }}>
           {t('app.title')}
         </h1>

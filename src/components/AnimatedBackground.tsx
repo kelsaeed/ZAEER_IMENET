@@ -2,7 +2,13 @@
 import { useEffect, useRef } from 'react';
 
 const EMOJIS = ['🦁', '🐘', '🐒', '🦇', '🦋', '🐜', '👑'];
-const PARTICLE_COUNT = 36;
+// Tuned down from 36 → 18 after the user reported the canvas looked
+// glitchy on a desktop browser. With 36 emojis the pairwise collision
+// pass (O(n²) = 1296 ops/frame) plus 36 emoji-glyph paints per frame
+// could pip the 16ms frame budget on weaker GPUs / Chromium with HW
+// acceleration partially disabled. Halving it keeps the same vibe at
+// roughly a quarter of the per-frame cost.
+const PARTICLE_COUNT = 18;
 
 interface Particle {
   x: number;
@@ -26,6 +32,12 @@ export default function AnimatedBackground() {
   const lastRef = useRef<number>(0);
 
   useEffect(() => {
+    // If the user has asked the OS to reduce motion, don't render
+    // anything — a moving background is the first thing to drop.
+    if (typeof window !== 'undefined' &&
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: true });

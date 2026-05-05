@@ -2,12 +2,19 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, ReactNode, createElement } from 'react';
 import { THEMES, DEFAULT_THEME_ID, Theme, CustomThemeColors, DEFAULT_CUSTOM_COLORS, buildCustomTheme } from '@/game/themes';
 import { LOCALES, DEFAULT_LOCALE_ID, Locale, builtInLocale, builtInLocaleIds } from '@/game/locales';
+import { getSupabaseBrowser } from '@/lib/supabase/client';
+import {
+  listAppLocales, listOverrides,
+  addAppLocale, removeAppLocale,
+  upsertOverride, deleteOverride,
+} from '@/lib/supabase/locales';
 
+// Personal preferences stay in localStorage (theme, language pick, custom
+// theme colours). Custom locales and translation overrides moved to the
+// database — they're system-wide content edited by an admin.
 const THEME_KEY = 'zaeer-imenet-theme';
 const CUSTOM_COLORS_KEY = 'zaeer-imenet-custom-colors';
 const LOCALE_KEY = 'zaeer-imenet-locale';
-const CUSTOM_LOCALES_KEY = 'zaeer-imenet-custom-locales';
-const TRANSLATION_OVERRIDES_KEY = 'zaeer-imenet-translation-overrides';
 
 type Overrides = Record<string, Record<string, string>>; // localeId → key → value
 
@@ -58,22 +65,60 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<Overrides>({});
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate from localStorage on mount
+  // Hydrate personal prefs from localStorage on mount.
   useEffect(() => {
     setThemeIdState(localStorage.getItem(THEME_KEY) || DEFAULT_THEME_ID);
     setCustomColors(readJSON<CustomThemeColors>(CUSTOM_COLORS_KEY, DEFAULT_CUSTOM_COLORS));
     setLocaleIdState(localStorage.getItem(LOCALE_KEY) || DEFAULT_LOCALE_ID);
-    setCustomLocales(readJSON<Locale[]>(CUSTOM_LOCALES_KEY, []));
-    setOverrides(readJSON<Overrides>(TRANSLATION_OVERRIDES_KEY, {}));
     setHydrated(true);
   }, []);
 
-  // Persist
+  // Persist personal prefs back to localStorage. (Custom locales and
+  // overrides are NOT persisted here anymore — they live in Supabase.)
   useEffect(() => { if (hydrated) localStorage.setItem(THEME_KEY, themeId); }, [themeId, hydrated]);
   useEffect(() => { if (hydrated) localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(customColors)); }, [customColors, hydrated]);
   useEffect(() => { if (hydrated) localStorage.setItem(LOCALE_KEY, localeId); }, [localeId, hydrated]);
-  useEffect(() => { if (hydrated) localStorage.setItem(CUSTOM_LOCALES_KEY, JSON.stringify(customLocales)); }, [customLocales, hydrated]);
-  useEffect(() => { if (hydrated) localStorage.setItem(TRANSLATION_OVERRIDES_KEY, JSON.stringify(overrides)); }, [overrides, hydrated]);
+
+  // ── Hydrate shared content from the database ────────────────────────────
+  // Custom locales and translation overrides are admin-edited and visible
+  // to every player. We pull them on mount and subscribe to Realtime so
+  // edits propagate live.
+  const refreshFromDb = useCallback(async () => {
+    const [rows, ovRows] = await Promise.all([listAppLocales(), listOverrides()]);
+    const locs: Locale[] = rows.map(r => {
+      const base = builtInLocale(r.base_id) ?? builtInLocale('en')!;
+      return {
+        id: r.id,
+        name: r.name,
+        flag: r.flag,
+        dir: r.dir,
+        // Start from the base locale's strings; overrides apply on top via t().
+        strings: { ...base.strings },
+      };
+    });
+    const ov: Overrides = {};
+    for (const o of ovRows) {
+      if (!ov[o.locale_id]) ov[o.locale_id] = {};
+      ov[o.locale_id][o.key] = o.value;
+    }
+    setCustomLocales(locs);
+    setOverrides(ov);
+  }, []);
+
+  useEffect(() => {
+    void refreshFromDb();
+    const supabase = getSupabaseBrowser();
+    const channel = supabase
+      .channel('app-locales-overrides')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'app_locales' },
+        () => { void refreshFromDb(); })
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'app_translation_overrides' },
+        () => { void refreshFromDb(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refreshFromDb]);
 
   const allLocales = useMemo(() => [...LOCALES, ...customLocales], [customLocales]);
   const builtTheme = useMemo(() => THEMES.find(t => t.id === themeId) ?? THEMES[0], [themeId]);
@@ -102,16 +147,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
   const resetCustomColors = useCallback(() => setCustomColors(DEFAULT_CUSTOM_COLORS), []);
 
+  // Add/remove a custom locale. RLS rejects writes from non-admins; we
+  // apply the change locally first so the admin sees instant feedback,
+  // then let the Realtime fan-out reconcile every other connected client.
   const addCustomLocale = useCallback((id: string, name: string, flag: string, baseId = 'en', dir: 'ltr' | 'rtl' = 'ltr') => {
-    setCustomLocales(prev => {
-      if (prev.some(l => l.id === id) || builtInLocaleIds().includes(id)) return prev;
-      const base = builtInLocale(baseId) ?? builtInLocale('en')!;
-      return [...prev, { id, name, flag, dir, strings: { ...base.strings } }];
+    if (builtInLocaleIds().includes(id)) return;
+    const base = builtInLocale(baseId) ?? builtInLocale('en')!;
+    setCustomLocales(prev =>
+      prev.some(l => l.id === id) ? prev : [...prev, { id, name, flag, dir, strings: { ...base.strings } }],
+    );
+    void addAppLocale({ id, name, flag, base_id: baseId, dir }).catch(err => {
+      // Roll back the optimistic insert on error.
+      setCustomLocales(prev => prev.filter(l => l.id !== id));
+      console.error('[settings] addAppLocale rejected (admin only):', err);
     });
   }, []);
 
   const removeCustomLocale = useCallback((id: string) => {
     if (builtInLocaleIds().includes(id)) return;
+    const before = customLocales;
     setCustomLocales(prev => prev.filter(l => l.id !== id));
     setOverrides(prev => {
       const next = { ...prev };
@@ -119,13 +173,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       return next;
     });
     setLocaleIdState(prev => (prev === id ? DEFAULT_LOCALE_ID : prev));
-  }, []);
+    void removeAppLocale(id).catch(err => {
+      // Roll back if the DB rejected the delete (non-admin caller).
+      setCustomLocales(before);
+      console.error('[settings] removeAppLocale rejected (admin only):', err);
+    });
+  }, [customLocales]);
 
   const setTranslation = useCallback((targetLocaleId: string, key: string, value: string) => {
     setOverrides(prev => ({
       ...prev,
       [targetLocaleId]: { ...(prev[targetLocaleId] ?? {}), [key]: value },
     }));
+    void upsertOverride(targetLocaleId, key, value).catch(err => {
+      console.error('[settings] upsertOverride rejected (admin only):', err);
+    });
   }, []);
 
   const resetTranslation = useCallback((targetLocaleId: string, key: string) => {
@@ -135,6 +197,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const next = { ...cur };
       delete next[key];
       return { ...prev, [targetLocaleId]: next };
+    });
+    void deleteOverride(targetLocaleId, key).catch(err => {
+      console.error('[settings] deleteOverride rejected (admin only):', err);
     });
   }, []);
 

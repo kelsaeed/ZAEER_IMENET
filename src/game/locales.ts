@@ -160,7 +160,7 @@ const en: Record<string, string> = {
 };
 
 const ar: Record<string, string> = {
-  'app.title': 'زائر إيمنت',
+  'app.title': 'زئير ايمينيت',
   'app.subtitle': 'لعبة الاستراتيجية القديمة',
   'app.boardSummary': 'لوحة 16×16 · لاعبان · بالأدوار',
   'app.startButton': '⚔️ ابدأ اللعبة ⚔️',

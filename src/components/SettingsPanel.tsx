@@ -1,7 +1,8 @@
 'use client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSettings } from '@/hooks/useSettings';
+import { useUser } from '@/hooks/useUser';
 import { builtInLocale } from '@/game/locales';
 
 interface Props {
@@ -18,8 +19,20 @@ export default function SettingsPanel({ onClose }: Props) {
     t, addCustomLocale, removeCustomLocale, isBuiltIn,
     setTranslation, resetTranslation,
   } = useSettings();
+  // Admin gate for the "Add Language" form and "Edit translations" tab.
+  // These edit shared content stored in Supabase and broadcast to every
+  // player; non-admins only get to pick which language to use.
+  const { profile } = useUser();
+  const isAdmin = !!profile?.is_admin;
 
   const [tab, setTab] = useState<Tab>('theme');
+
+  // If a non-admin has the panel open while the translations tab is
+  // selected (e.g. via stale state from before they signed out as admin),
+  // bounce them back to the theme tab.
+  useEffect(() => {
+    if (!isAdmin && tab === 'translations') setTab('theme');
+  }, [isAdmin, tab]);
 
   // Custom-language form
   const [newId, setNewId] = useState('');
@@ -87,11 +100,14 @@ export default function SettingsPanel({ onClose }: Props) {
 
           {/* Tabs */}
           <div className="flex gap-1 p-2 border-b" style={{ borderColor: theme.panelBorder }}>
-            {([
+            {(([
               ['theme', t('settings.theme')],
               ['language', t('settings.language')],
-              ['translations', t('settings.editTranslations')],
-            ] as [Tab, string][]).map(([id, label]) => (
+              // Admin-only: the translation editor writes to a shared DB
+              // table that every player reads from. Hide it from regular
+              // players entirely so they don't see a tab they can't use.
+              ...(isAdmin ? [['translations', `🛡️ ${t('settings.editTranslations')}`]] : []),
+            ] as [Tab, string][])).map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
@@ -236,7 +252,9 @@ export default function SettingsPanel({ onClose }: Props) {
                       >
                         <span className="text-xl">{l.flag}</span>
                         <span className="font-semibold flex-1 text-start">{l.name}</span>
-                        {!isBuiltIn(l.id) && (
+                        {/* Only admins can delete custom locales — they're
+                            shared across the whole player base. */}
+                        {!isBuiltIn(l.id) && isAdmin && (
                           <span
                             role="button"
                             onClick={(e) => { e.stopPropagation(); removeCustomLocale(l.id); }}
@@ -251,8 +269,12 @@ export default function SettingsPanel({ onClose }: Props) {
                   </div>
                 </div>
 
+                {/* "Add language" form — admin only. The new locale is
+                    written to the app_locales table and immediately visible
+                    to every player via Realtime. */}
+                {isAdmin && (
                 <div className="rounded-xl p-3" style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}>
-                  <div className="text-sm font-semibold mb-2 opacity-80">{t('settings.addLanguage')}</div>
+                  <div className="text-sm font-semibold mb-2 opacity-80">🛡️ {t('settings.addLanguage')}</div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       placeholder={t('settings.langName')}
@@ -306,10 +328,11 @@ export default function SettingsPanel({ onClose }: Props) {
                     + {t('settings.add')}
                   </button>
                 </div>
+                )}
               </div>
             )}
 
-            {tab === 'translations' && (
+            {tab === 'translations' && isAdmin && (
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2 items-center flex-wrap">
                   <select

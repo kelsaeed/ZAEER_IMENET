@@ -96,3 +96,26 @@ input, select, textarea {
    * own compositing layer — keeps the wave smooth at 60fps. */
   will-change: transform, opacity;
 }
+
+/* Start-screen crown bob. Used to be a framer-motion `animate={{y:[0,-10,0]}}`
+ * with an inline literal that restarted on every parent re-render — visible
+ * stutter on PC. Pure CSS keeps it on the compositor and never restarts. */
+@keyframes zi-crown-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.zi-crown-bob {
+  display: inline-block;
+  animation: zi-crown-bob 2.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Respect a user's reduced-motion preference: kill all infinite-loop
+ * decoration so screens reading slowly aren't bombarded with movement. */
+@media (prefers-reduced-motion: reduce) {
+  .zi-emoji-bob,
+  .zi-crown-bob,
+  .animate-bell {
+    animation: none !important;
+  }
+}
