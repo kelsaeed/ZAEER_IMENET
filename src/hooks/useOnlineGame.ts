@@ -130,6 +130,33 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     };
   }, [gameId]);
 
+  // Polling safety net for the waiting room. If Realtime drops the UPDATE
+  // event that fires when player 2 joins (race against the channel's
+  // subscribe handshake, flaky network, etc.), the host would otherwise be
+  // stuck staring at "Waiting for opponent…" forever. Cheap re-fetch every
+  // 3s while status='waiting' and we stop the moment the game starts.
+  useEffect(() => {
+    if (!gameId) return;
+    if (game?.status !== 'waiting') return;
+    const supabase = getSupabaseBrowser();
+    let cancelled = false;
+    const id = setInterval(async () => {
+      const { data } = await supabase
+        .from('games')
+        .select('*')
+        .eq('id', gameId)
+        .single();
+      if (cancelled || !data) return;
+      const next = data as GameRow;
+      // Only swap state in if something actually changed — avoids an
+      // unnecessary re-render every 3s on a quiet waiting room.
+      if (next.status !== 'waiting' || next.player2_id) {
+        setGame(next);
+      }
+    }, 3000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [gameId, game?.status]);
+
   // Fetch opponent's public profile whenever the game's player ids change.
   useEffect(() => {
     if (!game || !user) return;

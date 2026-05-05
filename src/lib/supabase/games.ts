@@ -168,9 +168,15 @@ export interface ActiveGame {
   } | null;
 }
 
-/** Games where the caller is a participant and the match isn't finished
- *  yet — used by the lobby to offer "Resume" tiles so a player who
- *  navigated away can jump straight back in. */
+/** Games where the caller is currently playing — used by the lobby to offer
+ *  "Resume" tiles so a player who navigated away can jump straight back in.
+ *
+ *  We deliberately exclude `waiting` rooms here. Those are open invites
+ *  with no opponent yet, and a stale waiting room from days ago looked
+ *  identical to a "real" resumeable game in the panel — clicking it took
+ *  the player into an empty waiting screen, which felt like "a brand new
+ *  game with a brand new code". Only matches that have actually started
+ *  show up. */
 export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
   const supabase = getSupabaseBrowser();
   const { data, error } = await supabase
@@ -182,7 +188,7 @@ export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
       p2:profiles!games_player2_id_fkey(id, username, display_name, avatar_url)
     `)
     .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-    .in('status', ['waiting', 'playing'])
+    .eq('status', 'playing')
     .order('updated_at', { ascending: false });
   if (error || !data) return [];
 

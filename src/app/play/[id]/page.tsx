@@ -75,21 +75,22 @@ export default function OnlineGamePage() {
       const sideBySide = vw >= 1024;
       const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 16 : 20;
       // Slimmer HUD reserve on desktop so the board can grow into the
-      // breathing room. Lower bound trimmed from 16rem to 14rem.
+      // breathing room. Lower bound trimmed from 16rem to 12rem.
       const hudReserve = sideBySide
-        ? Math.max(14 * 16, Math.min(28 * 16, Math.floor(vw * 0.2)))
+        ? Math.max(12 * 16, Math.min(26 * 16, Math.floor(vw * 0.18)))
         : 0;
       const flexGap = sideBySide ? 16 : 0;
       const widthBudget = vw - padX * 2 - hudReserve - flexGap;
       const maxFromW = Math.floor(widthBudget / 16.6);
-      // Vertical reserve: on mobile we still keep the fixed ribbon + the
-      // in-flow status pill above the board. On desktop the status pill
-      // now lives inline with the ribbon, so we can claw back ~40px.
-      const padY = sideBySide ? 110 : 130;
+      // Vertical reserve: ribbon + status now live in-flow above the board
+      // (one compact line on both mobile and desktop). Mobile needs more
+      // breathing room because the resign + chat float buttons live near
+      // the bottom of the viewport.
+      const padY = sideBySide ? 90 : 140;
       const maxFromH = Math.floor((vh - padY) / 16.6);
       const minCell = vw < 360 ? 14 : 16;
       const maxCell = sideBySide
-        ? (vw >= 1600 ? 110 : vw >= 1280 ? 92 : 76)
+        ? (vw >= 1600 ? 124 : vw >= 1280 ? 104 : 86)
         : 60;
       setCellSize(Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH)));
     }
@@ -267,14 +268,16 @@ export default function OnlineGamePage() {
   return (
     <main
       dir={isRTL ? 'rtl' : 'ltr'}
-      className="min-h-screen w-full max-w-full flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-center gap-3 lg:gap-4 px-2 sm:px-3 lg:px-4 py-3 sm:py-3 lg:py-3 pt-24 lg:pt-20 overflow-x-hidden overflow-y-auto box-border"
+      className="min-h-screen w-full max-w-full flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-center gap-2 lg:gap-3 px-2 sm:px-3 lg:px-3 py-2 sm:py-3 lg:py-3 pt-16 lg:pt-14 overflow-x-hidden overflow-y-auto box-border"
       style={{
         minHeight: '100dvh',
         background: theme.bgGradient,
         color: theme.textPrimary,
       }}
     >
-      {/* Top bar: settings / auth + player ribbon */}
+      {/* Top corner buttons (settings on one side, bell + auth on the
+          other). Player chips no longer live up here — they sit in-flow
+          above the board so they're centred over it on every viewport. */}
       <button
         onClick={() => setSettingsOpen(true)}
         aria-label="Open settings"
@@ -297,111 +300,64 @@ export default function OnlineGamePage() {
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>
 
-      {/* Player ribbon — on phones, centered between the corner buttons. On
-          desktop (lg+), shifted toward the right side of the viewport so it
-          doesn't squat over the board, and the in-flow status pill is folded
-          in beside the chips on the same line. */}
-      {(() => {
-        const statusInfo: { icon: string; text: string; tone: 'muted' | 'accent' } | null =
-          reviewing
-            ? { icon: '⏪', text: `Reviewing turn ${viewingHistoryIndex! + 1} / ${state.history.length}`, tone: 'accent' }
-            : isSpectator && !won
-            ? { icon: '👀', text: 'Spectating', tone: 'accent' }
-            : !isMyTurn && !won && !isSpectator
-            ? { icon: '⏳', text: `Waiting for ${opponent?.display_name ?? 'opponent'}…`, tone: 'muted' }
-            : null;
-
-        return (
-          <div
-            className="fixed top-3 z-20 flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full text-sm shadow-sm
-                       left-1/2 -translate-x-1/2
-                       lg:left-auto lg:translate-x-0 lg:right-[60px]"
-            style={{
-              background: theme.panelBg,
-              border: `1px solid ${theme.panelBorder}`,
-              color: theme.textPrimary,
-              maxWidth: 'min(720px, calc(100vw - 132px))',
-            }}
-          >
-            <PlayerChip
-              name={myPlayerNumber === 1 ? (profile?.display_name ?? 'You') : (game.player1_id ? (opponent?.display_name ?? 'P1') : '…')}
-              avatarUrl={myPlayerNumber === 1 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
-              color={theme.p1Color}
-              isYou={myPlayerNumber === 1}
-              isTurn={state.currentPlayer === 1 && isPlaying}
-              accent="p1"
-            />
-            <span className="opacity-40 text-xs px-0.5">vs</span>
-            <PlayerChip
-              name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : (game.player2_id ? (opponent?.display_name ?? 'P2') : '…')}
-              avatarUrl={myPlayerNumber === 2 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
-              color={theme.p2Color}
-              isYou={myPlayerNumber === 2}
-              isTurn={state.currentPlayer === 2 && isPlaying}
-              accent="p2"
-            />
-            {/* Inline status pill (desktop only) — keeps it on the same line
-                as the player chips and frees up vertical space below. */}
-            {statusInfo && (
-              <span
-                className="hidden lg:inline-flex items-center gap-1.5 ml-2 ps-2 pe-1 py-0.5 text-xs font-semibold border-l"
-                style={{
-                  borderColor: 'rgba(255,255,255,0.12)',
-                  color: statusInfo.tone === 'accent' ? theme.p1Color : theme.textMuted,
-                  maxWidth: 240,
-                }}
-              >
-                <span aria-hidden>{statusInfo.icon}</span>
-                <span className="truncate">{statusInfo.text}</span>
-              </span>
-            )}
-          </div>
-        );
-      })()}
-
       <div className="flex flex-col gap-2 sm:gap-3 items-center lg:shrink-0 relative">
-        {/* Status pill above the board — phones only. On desktop the same
-            info lives inline with the player ribbon (see above), saving a
-            row of vertical space and letting the board grow. */}
-        {!isMyTurn && !reviewing && !won && !isSpectator && (
-          <div
-            className="lg:hidden rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
-            style={{
-              background: theme.panelBg,
-              border: `1px solid ${theme.panelBorder}`,
-              color: theme.textMuted,
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            ⏳ Waiting for {opponent?.display_name ?? 'opponent'}…
-          </div>
-        )}
-        {isSpectator && !won && (
-          <div
-            className="lg:hidden rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
-            style={{
-              background: theme.panelBg,
-              border: `1px solid ${theme.p1AccentBorder}`,
-              color: theme.p1Color,
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            👀 Spectating
-          </div>
-        )}
-        {reviewing && (
-          <div
-            className="lg:hidden rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none"
-            style={{
-              background: theme.panelBg,
-              border: `1px solid ${theme.p1AccentBorder}`,
-              color: theme.p1Color,
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            ⏪ Reviewing turn {viewingHistoryIndex! + 1} / {state.history.length}
-          </div>
-        )}
+        {/* Player ribbon + status — single compact line, centred above
+            the board on every viewport. (Was previously fixed to the top
+            of the page on mobile and shifted right on desktop, which
+            caused the chips to overlap the corner buttons and the status
+            pill to stack on its own row underneath.) */}
+        {(() => {
+          const statusInfo: { icon: string; text: string; tone: 'muted' | 'accent' } | null =
+            reviewing
+              ? { icon: '⏪', text: `Reviewing ${viewingHistoryIndex! + 1}/${state.history.length}`, tone: 'accent' }
+              : isSpectator && !won
+              ? { icon: '👀', text: 'Spectating', tone: 'accent' }
+              : !isMyTurn && !won && !isSpectator
+              ? { icon: '⏳', text: `Waiting for ${opponent?.display_name ?? 'opponent'}…`, tone: 'muted' }
+              : null;
+          return (
+            <div
+              className="flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full text-xs sm:text-sm shadow-sm"
+              style={{
+                background: theme.panelBg,
+                border: `1px solid ${theme.panelBorder}`,
+                color: theme.textPrimary,
+                maxWidth: 'calc(100vw - 24px)',
+              }}
+            >
+              <PlayerChip
+                name={myPlayerNumber === 1 ? (profile?.display_name ?? 'You') : (game.player1_id ? (opponent?.display_name ?? 'P1') : '…')}
+                avatarUrl={myPlayerNumber === 1 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
+                color={theme.p1Color}
+                isYou={myPlayerNumber === 1}
+                isTurn={state.currentPlayer === 1 && isPlaying}
+                accent="p1"
+              />
+              <span className="opacity-40 text-[10px] sm:text-xs px-0.5">vs</span>
+              <PlayerChip
+                name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : (game.player2_id ? (opponent?.display_name ?? 'P2') : '…')}
+                avatarUrl={myPlayerNumber === 2 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
+                color={theme.p2Color}
+                isYou={myPlayerNumber === 2}
+                isTurn={state.currentPlayer === 2 && isPlaying}
+                accent="p2"
+              />
+              {statusInfo && (
+                <span
+                  className="inline-flex items-center gap-1 ms-1 ps-2 pe-1 py-0.5 text-[10px] sm:text-xs font-semibold border-s"
+                  style={{
+                    borderColor: 'rgba(255,255,255,0.12)',
+                    color: statusInfo.tone === 'accent' ? theme.p1Color : theme.textMuted,
+                    maxWidth: 220,
+                  }}
+                >
+                  <span aria-hidden>{statusInfo.icon}</span>
+                  <span className="truncate">{statusInfo.text}</span>
+                </span>
+              )}
+            </div>
+          );
+        })()}
         <GameBoard
           state={displayState!}
           cellSize={cellSize}

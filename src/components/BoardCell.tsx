@@ -79,7 +79,7 @@ function BoardCellImpl({
   const borderColor = throne ? theme.throneBorder : barrier ? theme.barrierBorder : 'rgba(255,255,255,0.06)';
 
   return (
-    <motion.div
+    <div
       className="relative flex items-center justify-center cursor-pointer touch-manipulation select-none"
       style={{
         width: cellSize,
@@ -143,14 +143,15 @@ function BoardCellImpl({
         )}
       </AnimatePresence>
 
-      {/* Piece — `layoutId` carries the piece smoothly across cells when it
-          moves. We dropped the previous initial/animate fade-in because it
-          fired on every re-mount in the new cell on top of the layout
-          transition, producing the "moves then stops then jumps" glitch. */}
+      {/* Piece — instant snap on a state change. We removed the framer-motion
+          layoutId/animation entirely after the user reported pieces still
+          felt glitchy and slow on mobile (the layout transition was driving
+          a JS-per-frame transform on top of the React reconciliation, which
+          was the root cause). Pieces now move like chess pieces: simply
+          appear at the new cell. */}
       {mainPiece && !barrier && (
-        <motion.div
+        <div
           key={mainPiece.id}
-          layoutId={`${mainPiece.id}-${isAntCenter ? 'center' : `wing-${row}-${col}`}`}
           className="z-20 flex items-center justify-center"
         >
           <PieceDisplay
@@ -161,9 +162,9 @@ function BoardCellImpl({
             overlay={overlayPiece}
             bounceEffect={bounceEffect}
           />
-        </motion.div>
+        </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 

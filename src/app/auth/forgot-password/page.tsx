@@ -57,10 +57,8 @@ export default function ForgotPasswordPage() {
           <h1
             className="text-2xl font-black mb-2"
             style={{
-              backgroundImage: `linear-gradient(90deg, ${theme.p1Color}, color-mix(in srgb, ${theme.p1Color} 40%, ${theme.p2Color}))`,
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
+              color: theme.textPrimary,
+              textShadow: `0 0 18px color-mix(in srgb, ${theme.p1Color} 50%, transparent)`,
             }}
           >
             Check your inbox
@@ -107,11 +105,8 @@ export default function ForgotPasswordPage() {
         <h1
           className="text-3xl sm:text-[2rem] font-black tracking-tight text-center mb-1"
           style={{
-            backgroundImage: `linear-gradient(90deg, ${theme.p1Color}, color-mix(in srgb, ${theme.p1Color} 40%, ${theme.p2Color}))`,
-            WebkitBackgroundClip: 'text',
-            backgroundClip: 'text',
-            color: 'transparent',
-            filter: `drop-shadow(0 2px 0 color-mix(in srgb, ${theme.p1Color} 25%, transparent))`,
+            color: theme.textPrimary,
+            textShadow: `0 0 18px color-mix(in srgb, ${theme.p1Color} 50%, transparent)`,
           }}
         >
           Reset password

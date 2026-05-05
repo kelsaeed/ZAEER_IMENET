@@ -317,10 +317,8 @@ export default function ProfilePage() {
                 <h1
                   className="text-2xl sm:text-3xl font-black truncate"
                   style={{
-                    backgroundImage: `linear-gradient(90deg, ${theme.p1Color}, color-mix(in srgb, ${theme.p1Color} 50%, ${theme.p2Color}))`,
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    color: 'transparent',
+                    color: theme.textPrimary,
+                    textShadow: `0 0 18px color-mix(in srgb, ${theme.p1Color} 50%, transparent)`,
                   }}
                 >
                   {profile?.display_name ?? '—'}

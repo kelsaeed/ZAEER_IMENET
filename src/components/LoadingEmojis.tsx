@@ -1,5 +1,4 @@
 'use client';
-import { motion } from 'framer-motion';
 
 const ICONS = ['🦁', '🐘', '🐜', '🦋', '🦇', '🐒'] as const;
 
@@ -13,30 +12,25 @@ interface Props {
 }
 
 /** A playful in-brand loading animation: the six game pieces bob up and down
- *  in a wave, looping forever. Used in auth flows so the user knows the
- *  request is in flight without reading "loading…". */
+ *  in a wave, looping forever. Driven by a CSS @keyframes (zi-emoji-bob in
+ *  globals.css) so the wave runs on the compositor — no JS per frame, no
+ *  restart on parent re-renders. */
 export default function LoadingEmojis({ size = 22, gap = 4, label }: Props) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
       <span style={{ display: 'inline-flex', gap }} aria-hidden>
         {ICONS.map((e, i) => (
-          <motion.span
+          <span
             key={i}
-            animate={{
-              y: [0, -size * 0.3, 0],
-              opacity: [0.35, 1, 0.35],
-              scale: [0.92, 1, 0.92],
+            className="zi-emoji-bob"
+            style={{
+              fontSize: size,
+              lineHeight: 1,
+              animationDelay: `${i * 0.13}s`,
             }}
-            transition={{
-              duration: 1.2,
-              repeat: Infinity,
-              delay: i * 0.13,
-              ease: 'easeInOut',
-            }}
-            style={{ fontSize: size, lineHeight: 1 }}
           >
             {e}
-          </motion.span>
+          </span>
         ))}
       </span>
       {label && <span className="text-sm opacity-80">{label}</span>}

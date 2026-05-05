@@ -70,7 +70,29 @@ input, select, textarea {
  * board on wide monitors instead of looking pinned at a fixed width. */
 @media (min-width: 1024px) {
   .zi-hud {
-    width: clamp(16rem, 22vw, 30rem);
-    min-width: 14rem;
+    width: clamp(14rem, 20vw, 28rem);
+    min-width: 12rem;
   }
+}
+
+/* LoadingEmojis "wave" animation — pure CSS so it runs on the compositor
+ * instead of being driven by framer-motion's per-frame JS. The previous
+ * framer-motion version restarted on every consumer re-render and was the
+ * main source of the choppy emoji motion the user kept seeing. */
+@keyframes zi-emoji-bob {
+  0%, 100% {
+    transform: translateY(0) scale(0.92);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-30%) scale(1);
+    opacity: 1;
+  }
+}
+.zi-emoji-bob {
+  display: inline-block;
+  animation: zi-emoji-bob 1.2s ease-in-out infinite;
+  /* Hint to the browser that the transform is animated so it gets its
+   * own compositing layer — keeps the wave smooth at 60fps. */
+  will-change: transform, opacity;
 }

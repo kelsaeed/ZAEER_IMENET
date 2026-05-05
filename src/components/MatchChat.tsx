@@ -34,7 +34,7 @@ function asPanelMessage(m: MatchMessage): ChatPanelMessage {
  *  expanding into the full ChatPanel. */
 export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
   const { user } = useUser();
-  const { theme } = useSettings();
+  const { theme, isRTL } = useSettings();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<MatchMessage[]>([]);
   const [unread, setUnread] = useState(0);
@@ -97,24 +97,30 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
 
   return (
     <>
-      {/* Floating launcher (bottom-right). Hidden while the panel is open
-          on small screens to avoid stacking above the input field. */}
+      {/* Floating launcher — flips to bottom-left in RTL so it mirrors the
+          reading direction (and so it doesn't end up trapped under the
+          Resign button on the same side). Hidden visually while the panel
+          is open to keep the input from stacking under it. */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="fixed bottom-4 right-4 z-30 rounded-full w-14 h-14 flex items-center justify-center text-2xl shadow-lg transition-transform hover:scale-110"
+        className="fixed bottom-4 z-30 rounded-full w-14 h-14 flex items-center justify-center text-2xl shadow-lg transition-transform hover:scale-110"
         style={{
+          [isRTL ? 'left' : 'right']: 16,
           background: theme.panelBg,
           border: `2px solid ${theme.p1AccentBorder}`,
           color: theme.p1Color,
           opacity: open ? 0.4 : 1,
-        }}
+        } as React.CSSProperties}
         aria-label="Toggle chat"
       >
         💬
         {unread > 0 && !open && (
           <span
-            className="absolute -top-1 -right-1 rounded-full text-xs font-bold text-white px-1.5 py-0.5 min-w-[20px] text-center"
-            style={{ background: '#ef4444' }}
+            className="absolute -top-1 rounded-full text-xs font-bold text-white px-1.5 py-0.5 min-w-[20px] text-center"
+            style={{
+              [isRTL ? 'left' : 'right']: -4,
+              background: '#ef4444',
+            } as React.CSSProperties}
           >
             {unread > 9 ? '9+' : unread}
           </span>
