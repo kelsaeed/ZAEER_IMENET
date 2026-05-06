@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
@@ -9,6 +9,7 @@ import {
   fetchMatchMessage,
   MatchMessage,
 } from '@/lib/supabase/chat';
+import { listMutedIds } from '@/lib/supabase/social';
 import ChatPanel, { ChatPanelMessage } from './ChatPanel';
 
 interface Props {
@@ -38,6 +39,10 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<MatchMessage[]>([]);
   const [unread, setUnread] = useState(0);
+  // Set of user ids the local user has muted. The chat itself isn't filtered
+  // server-side (the senders shouldn't be told they're muted) — we just hide
+  // their messages from the local panel and don't bump the unread badge.
+  const [mutedIds, setMutedIds] = useState<Set<string>>(() => new Set());
 
   // Initial load.
   useEffect(() => {
@@ -48,6 +53,17 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
       .catch(() => { /* silent — chat is non-critical */ });
     return () => { mounted = false; };
   }, [gameId]);
+
+  // Pull the local user's mute list once on mount and refresh whenever the
+  // panel opens — covers the "mute opponent → reopen chat" round trip.
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+    listMutedIds(user.id)
+      .then(ids => { if (mounted) setMutedIds(ids); })
+      .catch(() => { /* social tables may not be migrated yet */ });
+    return () => { mounted = false; };
+  }, [user, open]);
 
   // Realtime: append new INSERTs (fetching to resolve sender profile).
   useEffect(() => {
@@ -74,7 +90,7 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
             if (prev.some(m => m.id === fresh.id)) return prev;
             return [...prev, fresh];
           });
-          if (!open && senderId !== user?.id) {
+          if (!open && senderId !== user?.id && !mutedIds.has(senderId)) {
             setUnread(u => u + 1);
           }
         },
@@ -92,6 +108,12 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
     if (!user) throw new Error('Sign in to chat.');
     await sendMatchMessage({ gameId, senderId: user.id, body });
   }, [gameId, user]);
+
+  // Filter out muted senders from the panel view.
+  const visibleMessages = useMemo(
+    () => messages.filter(m => !mutedIds.has(m.sender_id)),
+    [messages, mutedIds],
+  );
 
   if (!user) return null;
 
@@ -132,7 +154,7 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
         onClose={() => setOpen(false)}
         title="💬 Match chat"
         emptyText="Be the first to say hi 👋"
-        messages={messages.map(asPanelMessage)}
+        messages={visibleMessages.map(asPanelMessage)}
         meId={user.id}
         onSend={handleSend}
         topInset={topInset}

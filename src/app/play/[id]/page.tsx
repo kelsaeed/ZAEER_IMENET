@@ -18,6 +18,7 @@ import type { Player } from '@/game/types';
 import type { Theme } from '@/game/themes';
 
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
+const OpponentMenu = dynamic(() => import('@/components/OpponentMenu'), { ssr: false });
 
 export default function OnlineGamePage() {
   const router = useRouter();
@@ -30,6 +31,12 @@ export default function OnlineGamePage() {
   const [winDismissed, setWinDismissed] = useState(false);
   // Visual feedback for the waiting-room invite-code copy button.
   const [inviteCopied, setInviteCopied] = useState(false);
+  // Opponent menu (compact popover by default, expandable to a full-screen
+  // profile modal). Closed when no anchor is set; tap on the opponent's chip
+  // in the player ribbon to open it.
+  const [opponentMenu, setOpponentMenu] = useState<
+    null | { x: number; y: number; mode: 'compact' | 'full' }
+  >(null);
 
   const {
     loading,
@@ -295,6 +302,14 @@ export default function OnlineGamePage() {
           isYou={myPlayerNumber === 1}
           isTurn={state.currentPlayer === 1 && isPlaying}
           accent="p1"
+          // Player 1's chip is clickable when it's the OPPONENT (i.e. I'm
+          // sitting as player 2 in this match). Spectators don't have an
+          // opponent context, so we don't surface the menu for them.
+          onOpenMenu={
+            myPlayerNumber === 2 && opponent?.id
+              ? (e) => setOpponentMenu({ x: e.clientX, y: e.clientY, mode: 'compact' })
+              : undefined
+          }
         />
         <span className="opacity-40 text-[10px] sm:text-xs px-0.5">vs</span>
         <PlayerChip
@@ -304,6 +319,11 @@ export default function OnlineGamePage() {
           isYou={myPlayerNumber === 2}
           isTurn={state.currentPlayer === 2 && isPlaying}
           accent="p2"
+          onOpenMenu={
+            myPlayerNumber === 1 && opponent?.id
+              ? (e) => setOpponentMenu({ x: e.clientX, y: e.clientY, mode: 'compact' })
+              : undefined
+          }
         />
         {statusInfo && (
           <span
@@ -454,6 +474,19 @@ export default function OnlineGamePage() {
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
 
+      {/* Opponent menu — small popover on opponent-chip tap, expandable to
+          a full-screen profile modal with head-to-head record. */}
+      <OpponentMenu
+        open={!!opponentMenu && !!opponent?.id}
+        initialMode={opponentMenu?.mode ?? 'compact'}
+        anchor={opponentMenu ? { x: opponentMenu.x, y: opponentMenu.y } : undefined}
+        onClose={() => setOpponentMenu(null)}
+        opponentId={opponent?.id ?? null}
+        opponentUsername={opponent?.username ?? null}
+        opponentName={opponent?.display_name ?? 'Opponent'}
+        opponentAvatarUrl={opponent?.avatar_url ?? null}
+      />
+
       {/* In-match chat (floating button + slide-in drawer) */}
       {gameId && <MatchChat gameId={gameId} spectator={isSpectator} />}
     </main>
@@ -467,6 +500,7 @@ function PlayerChip({
   isYou,
   isTurn,
   accent,
+  onOpenMenu,
 }: {
   name: string;
   avatarUrl: string | null;
@@ -474,29 +508,39 @@ function PlayerChip({
   isYou: boolean;
   isTurn: boolean;
   accent: 'p1' | 'p2';
+  /** Provided only for the opponent's chip — clicking opens the in-match
+   *  add-friend / block / mute / view-profile menu anchored at the click. */
+  onOpenMenu?: (e: React.MouseEvent) => void;
 }) {
   // Show only the first word of the name in the chip — full name shown
   // on hover. Keeps the ribbon narrow enough to fit two chips + "vs"
   // without overflowing on phone-sized screens.
   const shortName = (name?.split(/\s+/)[0] ?? name ?? '?').slice(0, 12);
+  const clickable = !!onOpenMenu;
+  const Outer = clickable ? motion.button : motion.span;
   return (
-    <motion.span
+    <Outer
       animate={isTurn ? { scale: [1, 1.04, 1] } : { scale: 1 }}
       transition={isTurn ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : {}}
-      className="inline-flex items-center gap-1.5 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full font-semibold text-xs min-w-0"
+      onClick={onOpenMenu}
+      className={
+        'inline-flex items-center gap-1.5 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full font-semibold text-xs min-w-0'
+        + (clickable ? ' cursor-pointer hover:brightness-110 focus:outline-none focus:ring-1' : '')
+      }
       style={{
         background: isTurn ? `color-mix(in srgb, ${color} 25%, transparent)` : 'transparent',
         border: `1px solid ${isTurn ? color : 'transparent'}`,
         color,
       }}
       title={isYou ? `${name} (you)` : name}
+      type={clickable ? 'button' : undefined}
     >
       <Avatar url={avatarUrl} name={name} size={20} accent={accent} ring={isTurn} />
       <span className="max-w-[60px] sm:max-w-[120px] truncate">
         {shortName}
         {isYou && <span className="opacity-70 ms-1 hidden sm:inline">(you)</span>}
       </span>
-    </motion.span>
+    </Outer>
   );
 }
 
