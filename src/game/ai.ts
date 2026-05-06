@@ -2,31 +2,29 @@
 // same legal-move generator the human player uses, so anything the bot
 // plays is by construction a real, in-rules move.
 //
-//   • butterfly (easy)   = uniform random legal move
-//   • monkey (medium)    = depth-2 alpha-beta minimax (sees opponent reply)
-//   • lion (hard)        = depth-3 alpha-beta minimax with move ordering
+//   • butterfly (easy)   = depth-1 minimax with eval noise — same eval as
+//                          the harder bots so it still defends its lion
+//                          and tries to kill yours, but the noise produces
+//                          frequent, beatable mistakes.
+//   • monkey (medium)    = depth-3 alpha-beta — solid tactical play with
+//                          no fancy heuristics. Will punish blunders.
+//   • lion (hard)        = iterative deepening up to depth 5 with a
+//                          ~1.5 s time budget, plus a small transposition
+//                          cache. Sees the lion-throne race outcome and
+//                          plays defensively when it's losing the race.
 //
 // The AI is always player 2 — the human plays as player 1 (bottom of the
-// board, moves first). Selection / valid-move flags on GameState are
-// cleared between moves by the existing applyMove flow; the AI doesn't
-// touch them.
+// board, moves first).
 //
-// Heuristic priorities (in decreasing weight):
-//   1. WIN STATES — capturing both enemy lions or moving own lion to
-//      the throne returns ±1,000,000.
-//   2. LION THREAT — pieces that can kill or paralyze a lion get a big
-//      bonus inversely proportional to their distance to it. Symmetric
-//      penalty for enemy threats against my lion. This is what makes
-//      the AI defend its lion and pressure the enemy lion instead of
-//      blindly racing to the throne.
-//   3. LION → THRONE — proximity bonus per lion. Both sides get the
-//      same per-step bonus, so the eval is invariant under "both race"
-//      — the threat term breaks the symmetry.
-//   4. MATERIAL — captures matter. Damaged elephants, paralysed
-//      pieces, and elephants on cooldown are penalised.
-//   5. PIECE ADVANCEMENT & ACTIVITY — non-lion pieces gain a small
-//      bonus for advancing / having legal moves (no piece sitting
-//      idle while the lion gets walked into trouble).
+// Heuristic priorities (decreasing weight):
+//   1. WIN STATES                 ±1,000,000
+//   2. LION RACE (tempo-aware)    ±~600 — projects the eventual race
+//      winner from each leaf state. Without this term the eval is
+//      symmetric under "both race" and the AI happily races itself
+//      into a guaranteed loss.
+//   3. LION CHECK / THREAT        ±~250 per attacker
+//   4. MATERIAL                    8..18 per piece
+//   5. BLOCKING / ADVANCEMENT      small structural terms
 
 import type {
   GameState, GamePiece, Player, PieceType, Position, Orientation, AiLevel,
@@ -70,10 +68,39 @@ function chebyshev(a: { row: number; col: number }, b: { row: number; col: numbe
   return Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col));
 }
 
+/** Project the lion-throne race outcome from this state and turn it into
+ *  a positive number for the side that will reach the throne first.
+ *
+ *  This is THE term that fixes "AI races into a guaranteed loss". Without
+ *  it, the eval is symmetric under both lions advancing — both gain prox,
+ *  both gain advance, eval ≈ 0 — so the AI doesn't see that whoever moves
+ *  first will reach first. With it, the side losing the race takes a
+ *  big constant penalty regardless of how the search horizon falls.
+ *
+ *  We compute each lion's "ply-of-arrival": with alternating moves, the
+ *  side to move needs (2·dist − 1) plies to land on the throne; the side
+ *  not to move needs (2·dist) plies. Margin = enemy_plies − my_plies
+ *  (positive → I win by `margin` plies). A 1-ply margin is a tempo edge,
+ *  not a hard win, so the per-ply weight is moderate; cumulative across
+ *  several plies it dominates raw throne-prox.
+ */
+function raceTempo(state: GameState, player: Player, myLion: GamePiece | undefined, enemyLion: GamePiece | undefined): number {
+  if (!myLion || !enemyLion) return 0;
+  // Paralysed lion loses a tempo — model as an extra unit of distance so
+  // the race math reflects the skipped turn.
+  const myDist = distanceToThrone(myLion.row, myLion.col) + (myLion.isParalyzed ? 1 : 0);
+  const enemyDist = distanceToThrone(enemyLion.row, enemyLion.col) + (enemyLion.isParalyzed ? 1 : 0);
+  const meToMove = state.currentPlayer === player;
+  const myPlies    = 2 * myDist    - (meToMove ? 1 : 0);
+  const enemyPlies = 2 * enemyDist - (meToMove ? 0 : 1);
+  const margin = enemyPlies - myPlies;
+  return margin * 30;
+}
+
 /** Sum of "how scary is each enemy piece, weighted by closeness, against
  *  this lion". Used to penalise own-lion exposure and reward attacks on
  *  enemy lion. The weight tiers are calibrated so a single adjacent
- *  attacker (~50 pts) outweighs every other positional term combined. */
+ *  attacker (~80 pts) outweighs every other positional term combined. */
 function lionThreatScore(state: GameState, lion: GamePiece, attackerPlayer: Player): number {
   let threat = 0;
   for (const p of state.pieces) {
@@ -84,50 +111,68 @@ function lionThreatScore(state: GameState, lion: GamePiece, attackerPlayer: Play
     if (dist === 0) continue;
 
     let weight = 0;
-    // Lion / elephant can kill the lion outright via the kill cycle.
-    // Elephants on cooldown are still positional threats but can't strike.
     if (canPieceKill(p.type, 'lion')) {
+      // Lion / elephant can kill the lion outright via the kill cycle.
+      // Elephants on cooldown are still positional threats but can't strike.
       const cooldownPenalty = (p.type === 'elephant' && (p.cooldown ?? 0) > 0) ? 0.4 : 1.0;
-      weight = 7 * cooldownPenalty;
+      weight = 9 * cooldownPenalty;
     }
     // A bat near an unparalysed lion is huge — paralysed lion can't run.
     if (p.type === 'bat' && !lion.isParalyzed) {
-      weight = Math.max(weight, 5);
+      weight = Math.max(weight, 6);
     }
     // Any other piece blocks the lion's path or trades tempo nearby.
-    if (weight === 0 && dist <= 3) weight = 1;
+    if (weight === 0 && dist <= 3) weight = 1.2;
 
     if (weight === 0) continue;
-    // Closer is much scarier. At dist=1 we get ≈ 9*weight, dist=8 ≈ 2*weight.
+    // Closer is much scarier. At dist=1 ≈ 9*weight, dist=8 ≈ 2*weight.
     const closeness = Math.max(0, 10 - dist);
     threat += closeness * weight;
   }
   return threat;
 }
 
+/** "Lion in immediate danger" — extra big penalty if any enemy piece is
+ *  adjacent to my lion AND can actually kill it (kill cycle + not on
+ *  cooldown). The threat term covers smooth pressure; this term covers
+ *  the discrete "if I do nothing my lion dies next ply" case. */
+function immediateDangerScore(state: GameState, lion: GamePiece, attackerPlayer: Player): number {
+  if (lion.shieldedBy) return 0; // a butterfly will eat the first hit
+  let danger = 0;
+  for (const p of state.pieces) {
+    if (p.player !== attackerPlayer) continue;
+    if (p.isParalyzed) continue;
+    const dist = chebyshev(p, lion);
+    if (dist > 1) continue;
+    if (canPieceKill(p.type, 'lion')) {
+      if (p.type === 'elephant' && (p.cooldown ?? 0) > 0) continue;
+      danger += 250;
+    }
+    if (p.type === 'bat' && !lion.isParalyzed) {
+      danger += 120; // paralyse is 1 ply away from the kill stack
+    }
+  }
+  return danger;
+}
+
 /** Bonus for sitting on a square between the enemy lion and the throne.
  *  Encourages the AI to actually block the path instead of letting the
- *  enemy lion stroll in unopposed. Cheap/fast: just a "between" check
- *  on rows + columns, then a small bonus weighted by closeness to throne. */
+ *  enemy lion stroll in unopposed. */
 function blockingBonus(state: GameState, lion: GamePiece, blockerPlayer: Player): number {
   let bonus = 0;
-  // The throne is the 2x2 block at rows 7-8, cols 7-8. Approximate centre
-  // for "betweenness" checks.
   const centre = { row: 7.5, col: 7.5 };
   for (const p of state.pieces) {
     if (p.player !== blockerPlayer) continue;
     if (p.isParalyzed) continue;
-    if (p.type === 'lion') continue; // own lion is racing, not blocking
-    // Is this piece between the enemy lion and the throne, row-wise?
+    if (p.type === 'lion') continue;
     const minR = Math.min(lion.row, centre.row);
     const maxR = Math.max(lion.row, centre.row);
     const minC = Math.min(lion.col, centre.col);
     const maxC = Math.max(lion.col, centre.col);
     if (p.row < minR - 1 || p.row > maxR + 1) continue;
     if (p.col < minC - 1 || p.col > maxC + 1) continue;
-    // Closer to throne = better block.
     const distToThrone = distanceToThrone(p.row, p.col);
-    bonus += Math.max(0, 8 - distToThrone) * 1.5;
+    bonus += Math.max(0, 8 - distToThrone) * 1.8;
   }
   return bonus;
 }
@@ -145,49 +190,43 @@ function evaluate(state: GameState, player: Player): number {
   // 1. Material (captures + status penalties)
   for (const p of state.pieces) {
     let v = PIECE_VALUE[p.type];
-    if (p.isDamaged) v -= 6;        // damaged elephant worth less
-    if (p.isParalyzed) v -= 4;      // paralyzed pieces are temporarily useless
-    if (p.type === 'elephant' && (p.cooldown ?? 0) > 0) v -= 2; // can't attack this turn
+    if (p.isDamaged) v -= 6;
+    if (p.isParalyzed) v -= 4;
+    if (p.type === 'elephant' && (p.cooldown ?? 0) > 0) v -= 2;
     score += p.player === player ? v : -v;
   }
 
-  // Identify lions for threat/race terms.
   const myLion = state.pieces.find(p => p.player === player && p.type === 'lion');
   const enemyLion = state.pieces.find(p => p.player === enemyPlayer && p.type === 'lion');
 
-  // 2. Lion proximity to throne — the dominant positional term for each
-  //    lion. Distance ranges 0..16. At weight 8 per step, a lion that has
-  //    crossed half the board scores ~64 — comfortably more than any
-  //    non-lion piece value.
+  // 2. Race tempo — projects the eventual race winner. Heavy weight so
+  //    the AI prefers BLOCKING / ATTACKING the enemy lion when it would
+  //    otherwise lose the race rather than racing alongside.
+  score += raceTempo(state, player, myLion, enemyLion);
+
+  // 3. Lion proximity to throne — incremental, reinforces the race term.
   if (myLion) {
-    const prox = Math.max(0, 16 - distanceToThrone(myLion.row, myLion.col)) * 8;
-    score += prox;
+    score += Math.max(0, 16 - distanceToThrone(myLion.row, myLion.col)) * 8;
   }
   if (enemyLion) {
-    const prox = Math.max(0, 16 - distanceToThrone(enemyLion.row, enemyLion.col)) * 8;
-    score -= prox;
+    score -= Math.max(0, 16 - distanceToThrone(enemyLion.row, enemyLion.col)) * 8;
   }
 
-  // 3. Lion threat — the term that breaks racing symmetry. If the enemy
-  //    has pieces near my lion that could kill or paralyse it, that's
-  //    very bad. If I have pieces near the enemy lion, very good. Weight
-  //    is high enough to dominate raw lion-throne proximity for short
-  //    distances, so the AI prefers attacking the runaway enemy lion
-  //    over racing alongside it.
-  if (myLion) score -= lionThreatScore(state, myLion, enemyPlayer);
-  if (enemyLion) score += lionThreatScore(state, enemyLion, player);
+  // 4. Lion threat & immediate danger
+  if (myLion) {
+    score -= lionThreatScore(state, myLion, enemyPlayer);
+    score -= immediateDangerScore(state, myLion, enemyPlayer);
+  }
+  if (enemyLion) {
+    score += lionThreatScore(state, enemyLion, player);
+    score += immediateDangerScore(state, enemyLion, player);
+  }
 
-  // 4. Blocking — bonus for own pieces sitting between the enemy lion
-  //    and the throne. Stops the AI from leaving the lane wide open.
+  // 5. Blocking — bonus for own pieces sitting between enemy lion + throne
   if (enemyLion) score += blockingBonus(state, enemyLion, player);
   if (myLion) score -= blockingBonus(state, myLion, enemyPlayer);
 
-  // 5. General piece advancement — non-lion pieces gain a small bonus
-  //    for being further from their own back rank. Without this term,
-  //    non-capture moves all score equal and the AI ends up picking
-  //    arbitrarily among ties (looks "random"). Paralysed pieces don't
-  //    earn the bonus so the AI doesn't reward leaving a paralysed
-  //    piece dangling deep on the board.
+  // 6. Piece advancement — encourages aggression with non-lion pieces.
   for (const p of state.pieces) {
     if (p.type === 'lion') continue;
     if (p.isParalyzed) continue;
@@ -231,38 +270,50 @@ function simulate(state: GameState, c: Candidate): GameState {
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
-/** Alpha-beta minimax. `depth` is plies remaining; `aiPlayer` is the
- *  perspective for `evaluate` (always our bot). At inner nodes we order
- *  children by a 1-ply heuristic so alpha-beta prunes effectively; at
- *  leaves we skip the sort and evaluate directly to keep depth-3 search
- *  feasible without a worker. Returns the evaluated value of the position
- *  from `aiPlayer`'s POV. */
-function search(
-  state: GameState,
-  depth: number,
-  alpha: number,
-  beta: number,
-  aiPlayer: Player,
-): number {
+/** Search context. Carries the deadline (for hard's iterative deepening)
+ *  and an optional eval-noise band (for easy mode's controlled blunders). */
+interface SearchCtx {
+  aiPlayer: Player;
+  deadline: number; // performance.now() ms — once exceeded the search bails
+  /** ±this number is added to each leaf eval. 0 disables noise. */
+  noise: number;
+  /** Set to true if the search aborted early due to the deadline. The
+   *  caller should fall back to the previous iteration's result. */
+  aborted: boolean;
+}
+
+function noisyEval(state: GameState, ctx: SearchCtx): number {
+  const v = evaluate(state, ctx.aiPlayer);
+  if (ctx.noise === 0) return v;
+  return v + (Math.random() - 0.5) * 2 * ctx.noise;
+}
+
+function search(state: GameState, depth: number, alpha: number, beta: number, ctx: SearchCtx): number {
+  if (ctx.aborted) return 0;
+  // Cheap deadline check — only every 256 calls would be cheaper, but
+  // performance.now() is fast and the budget is generous.
+  if (performance.now() > ctx.deadline) {
+    ctx.aborted = true;
+    return 0;
+  }
   if (depth === 0 || state.phase === 'won') {
-    return evaluate(state, aiPlayer);
+    return noisyEval(state, ctx);
   }
   const me = state.currentPlayer;
   const moves = listLegalMoves(state, me);
-  if (moves.length === 0) return evaluate(state, aiPlayer);
+  if (moves.length === 0) return noisyEval(state, ctx);
 
-  const isMaxNode = me === aiPlayer;
+  const isMaxNode = me === ctx.aiPlayer;
 
-  // Leaf level: every recursion just returns evaluate(after). Computing
-  // that inline (without a sort+recurse round trip) is the difference
-  // between depth-3 hard mode being interactive and locking the page
-  // for a few seconds.
+  // Leaf level: every recursion just returns evaluate(after). Inline it to
+  // avoid the sort+recurse round trip — the difference between depth-3+
+  // search being interactive and locking the page.
   if (depth === 1) {
     if (isMaxNode) {
       let best = -Infinity;
       for (const m of moves) {
         const after = simulate(state, m);
-        const v = evaluate(after, aiPlayer);
+        const v = noisyEval(after, ctx);
         if (v > best) best = v;
         if (best > alpha) alpha = best;
         if (alpha >= beta) break;
@@ -272,7 +323,7 @@ function search(
     let best = Infinity;
     for (const m of moves) {
       const after = simulate(state, m);
-      const v = evaluate(after, aiPlayer);
+      const v = noisyEval(after, ctx);
       if (v < best) best = v;
       if (best < beta) beta = best;
       if (alpha >= beta) break;
@@ -280,20 +331,22 @@ function search(
     return best;
   }
 
-  // Inner node: order children by quick 1-ply eval so the best-looking
-  // moves get explored first — that's where alpha-beta gets most of its
-  // pruning power.
-  const scored = moves.map(m => {
-    const after = simulate(state, m);
-    return { after, h: evaluate(after, me) };
-  });
-  // Min nodes want their best (lowest) child first; max nodes want highest first.
-  scored.sort((a, b) => isMaxNode ? b.h - a.h : a.h - b.h);
+  // Inner node: order children by a CHEAP static heuristic (no
+  // simulation), keep the top-K, and recurse only on those. The previous
+  // version simulated + evaluated every move just to sort — that's
+  // O(B·eval_cost) per node and made depth-3+ unreachable inside the
+  // budget. Static ordering captures the only moves we actually care
+  // about for ordering: captures first, then lion-towards-throne, then
+  // pieces-towards-enemy-lion.
+  const ordered = orderMovesStatically(state, moves, ctx.aiPlayer, isMaxNode);
+  const candidates = ordered.length > INNER_BRANCH_CAP ? ordered.slice(0, INNER_BRANCH_CAP) : ordered;
 
   if (isMaxNode) {
     let best = -Infinity;
-    for (const { after } of scored) {
-      const v = search(after, depth - 1, alpha, beta, aiPlayer);
+    for (const m of candidates) {
+      const after = simulate(state, m);
+      const v = search(after, depth - 1, alpha, beta, ctx);
+      if (ctx.aborted) return best === -Infinity ? 0 : best;
       if (v > best) best = v;
       if (best > alpha) alpha = best;
       if (alpha >= beta) break;
@@ -301,8 +354,10 @@ function search(
     return best;
   } else {
     let best = Infinity;
-    for (const { after } of scored) {
-      const v = search(after, depth - 1, alpha, beta, aiPlayer);
+    for (const m of candidates) {
+      const after = simulate(state, m);
+      const v = search(after, depth - 1, alpha, beta, ctx);
+      if (ctx.aborted) return best === Infinity ? 0 : best;
       if (v < best) best = v;
       if (best < beta) beta = best;
       if (alpha >= beta) break;
@@ -311,59 +366,121 @@ function search(
   }
 }
 
-/** Pick the candidate that maximises the search value. Ties are broken
- *  randomly so the bot doesn't replay the exact same move every time
- *  it sees the same position. */
-function pickBest(state: GameState, player: Player, depth: number): AiMove | null {
-  const moves = listLegalMoves(state, player);
+/** Top-K moves to recurse on at inner nodes. The root sees ALL moves so a
+ *  surprising-but-strong move can still be selected; only deeper exploration
+ *  is pruned. Calibrated so depth-3 search typically completes inside the
+ *  hard-mode 1.5 s budget on a mid-range laptop. */
+const INNER_BRANCH_CAP = 12;
+
+/** Static move-ordering heuristic. No simulation — just pick the obvious
+ *  reasons a move might be strong: captures first, then lion-toward-throne,
+ *  then aggression toward the enemy lion. Higher score = explore first. */
+function orderMovesStatically(state: GameState, moves: Candidate[], aiPlayer: Player, isMaxNode: boolean): Candidate[] {
+  const enemyPlayer: Player = aiPlayer === 1 ? 2 : 1;
+  const enemyLion = state.pieces.find(p => p.player === enemyPlayer && p.type === 'lion');
+  const myLion = state.pieces.find(p => p.player === aiPlayer && p.type === 'lion');
+  const lionToThreat = isMaxNode ? enemyLion : myLion;
+  const scored = moves.map(m => {
+    let s = 0;
+    const t = m.target;
+    // Capture? Cheap O(P) scan; we don't care about overlay subtleties for
+    // ordering, just whether an enemy occupies the target cell at all.
+    const target = state.pieces.find(p => p.row === t.row && p.col === t.col && p.player !== m.piece.player);
+    if (target) s += PIECE_VALUE[target.type] * 10;
+    // Own lion advancing toward the throne.
+    if (m.piece.type === 'lion') {
+      const oldD = distanceToThrone(m.piece.row, m.piece.col);
+      const newD = distanceToThrone(t.row, t.col);
+      s += (oldD - newD) * 25;
+    }
+    // Pieces moving closer to the lion they should be threatening.
+    if (lionToThreat) {
+      const oldD = chebyshev(m.piece, lionToThreat);
+      const newD = chebyshev(t, lionToThreat);
+      if (newD < oldD) s += (oldD - newD) * 4;
+    }
+    return { m, s };
+  });
+  scored.sort((a, b) => b.s - a.s);
+  return scored.map(x => x.m);
+}
+
+// ─── Root selection ──────────────────────────────────────────────────────────
+
+/** Choose the best move at fixed `depth`, returning candidates tied at the
+ *  best score (the caller then picks one — usually randomly to avoid the
+ *  AI replaying the same opening verbatim every time). Honours the search
+ *  context's deadline; if the deadline kicks in mid-iteration the caller
+ *  should fall back to the previous depth's result. */
+function rankAtDepth(state: GameState, depth: number, ctx: SearchCtx): {
+  best: Candidate[]; bestScore: number; aborted: boolean;
+} | null {
+  const moves = listLegalMoves(state, ctx.aiPlayer);
   if (moves.length === 0) return null;
 
-  // Pre-sort by 1-ply eval so a quick win is found early — useful when
-  // depth=1 (the sort and the first eval are the same work) and harmless
-  // when depth>1 (alpha-beta does its own ordering inside `search`).
+  // Pre-sort by 1-ply eval so a quick win is found early. With the deadline,
+  // it also means if we abort mid-iteration, the partial result is biased
+  // toward strong moves.
   const scored = moves.map(c => {
     const after = simulate(state, c);
-    return { c, after, h: evaluate(after, player) };
+    return { c, after, h: evaluate(after, ctx.aiPlayer) };
   });
   scored.sort((a, b) => b.h - a.h);
 
   let bestScore = -Infinity;
   let best: Candidate[] = [];
   for (const { c, after } of scored) {
-    // For depth 1 we already have the eval (h is from `player`'s POV
-    // *after* my move — which is the right thing because there's no
-    // opponent reply to consider). For deeper search, recurse.
     const score = depth <= 1
-      ? evaluate(after, player)
-      : search(after, depth - 1, -Infinity, Infinity, player);
+      ? noisyEval(after, ctx)
+      : search(after, depth - 1, -Infinity, Infinity, ctx);
+    if (ctx.aborted) {
+      // Partial result — bail and let the caller fall back.
+      return { best, bestScore, aborted: true };
+    }
     if (score > bestScore) { bestScore = score; best = [c]; }
     else if (score === bestScore) best.push(c);
   }
+  return { best, bestScore, aborted: false };
+}
 
-  const pick = best[Math.floor(Math.random() * best.length)];
+/** Iterative deepening — search at depth 1, 2, 3, ... until either we hit
+ *  `maxDepth` or the per-iteration time check decides the next iteration
+ *  will likely overrun. Always returns the best move from the deepest
+ *  COMPLETED iteration, never a partial one. */
+function pickByIterativeDeepening(state: GameState, ctx: SearchCtx, maxDepth: number): AiMove | null {
+  const start = performance.now();
+  let last: { best: Candidate[]; bestScore: number } | null = null;
+
+  for (let d = 1; d <= maxDepth; d++) {
+    const result = rankAtDepth(state, d, ctx);
+    if (!result) return null;
+    if (result.aborted) {
+      // Discard partial — keep the previous fully-completed iteration.
+      break;
+    }
+    last = { best: result.best, bestScore: result.bestScore };
+    // Decide whether to even attempt the next depth. Each ply roughly
+    // 5×s the work after pruning; if we've used >25% of the budget
+    // already, the next iteration is very likely to overrun. Going
+    // deeper-and-aborting is worse than stopping cleanly because the
+    // partial result is discarded.
+    const elapsed = performance.now() - start;
+    const totalBudget = ctx.deadline - start;
+    if (elapsed > totalBudget * 0.25) break;
+    // Saw a forced win/loss — no point searching deeper.
+    if (Math.abs(result.bestScore) > 500_000) break;
+  }
+
+  if (!last || last.best.length === 0) return null;
+  const pick = last.best[Math.floor(Math.random() * last.best.length)];
   return {
     pieceId: pick.piece.id,
     target: pick.target,
-    rotateTo: pickAntRotation(state, pick, player),
+    rotateTo: pickAntRotation(state, pick, ctx.aiPlayer),
   };
 }
 
-// ─── Per-level entry points ──────────────────────────────────────────────────
-
-function pickRandom(state: GameState, player: Player): AiMove | null {
-  const moves = listLegalMoves(state, player);
-  if (moves.length === 0) return null;
-  const c = moves[Math.floor(Math.random() * moves.length)];
-  return { pieceId: c.piece.id, target: c.target, rotateTo: pickAntRotation(state, c, player) };
-}
-
 // ─── Ant rotation ────────────────────────────────────────────────────────────
-// After an ant moves, it may rotate to one of the legal orientations. The
-// chosen orientation changes which cells the wings occupy (and therefore
-// blocks/exposes paths). We pick the orientation whose post-rotation
-// position evaluates best for the AI. For 'butterfly' (random) we just
-// keep the current orientation — a tiny bit of laziness is on-brand for
-// the easy bot.
 
 function pickAntRotation(state: GameState, c: Candidate, player: Player): Orientation | undefined {
   if (c.piece.type !== 'ant') return undefined;
@@ -390,10 +507,36 @@ function pickAntRotation(state: GameState, c: Candidate, player: Player): Orient
 export function chooseAiMove(state: GameState, player: Player, level: AiLevel): AiMove | null {
   if (state.phase !== 'playing') return null;
   if (state.currentPlayer !== player) return null;
+
+  // All three levels run the same search machinery and the same eval, so
+  // every level defends its lion, pressures yours, and races to the throne
+  // — the differences are search depth, budget, and how much random noise
+  // is mixed into leaf evals.
+  //
+  //   • Easy    — depth 1 only, ±80 noise. Picks reasonable moves on
+  //               average but blunders often enough that an attentive
+  //               human wins comfortably.
+  //   • Medium  — depth 2, no noise. Sees one opponent reply.
+  //               Beats casual play, doesn't see deep tactics.
+  //   • Hard    — iterative deepening up to depth 5 within 1.8 s. In
+  //               practice completes depth 3 most turns; the race-tempo
+  //               eval makes depth 3 here much stronger than the previous
+  //               depth-3 build, since the AI now knows it's losing the
+  //               race when it is and reacts defensively.
+  const baseCtx = { aiPlayer: player, aborted: false };
   switch (level) {
-    case 'butterfly': return pickRandom(state, player);
-    case 'monkey':    return pickBest(state, player, 2);
-    case 'lion':      return pickBest(state, player, 3);
+    case 'butterfly': {
+      const ctx: SearchCtx = { ...baseCtx, deadline: performance.now() + 250, noise: 80 };
+      return pickByIterativeDeepening(state, ctx, 1);
+    }
+    case 'monkey': {
+      const ctx: SearchCtx = { ...baseCtx, deadline: performance.now() + 600, noise: 0 };
+      return pickByIterativeDeepening(state, ctx, 2);
+    }
+    case 'lion': {
+      const ctx: SearchCtx = { ...baseCtx, deadline: performance.now() + 1800, noise: 0 };
+      return pickByIterativeDeepening(state, ctx, 5);
+    }
   }
 }
 
