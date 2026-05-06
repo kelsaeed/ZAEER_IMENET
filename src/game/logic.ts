@@ -125,6 +125,26 @@ function canAttackEnemyCell(attacker: GamePiece, pieces: GamePiece[], row: numbe
   return false;
 }
 
+/** True if the attacker can lunge through its OWN bat at (row, col): the bat is
+ *  paralyzing an enemy piece this attacker can kill via the kill cycle. The
+ *  attacker stops on the bat's cell logically (target square), but in resolution
+ *  the bat keeps the cell and the attacker bounces to the adjacent square. */
+function canLungeThroughOwnBat(attacker: GamePiece, pieces: GamePiece[], row: number, col: number): boolean {
+  if (attacker.type === 'bat') return false;
+  const ownBat = pieces.find(p =>
+    p.id !== attacker.id
+    && p.type === 'bat'
+    && p.player === attacker.player
+    && p.paralyzing
+    && p.row === row
+    && p.col === col
+  );
+  if (!ownBat) return false;
+  const paralyzed = pieces.find(p => p.id === ownBat.paralyzing);
+  if (!paralyzed || paralyzed.player === attacker.player) return false;
+  return canPieceKill(attacker.type, paralyzed.type);
+}
+
 // ─── Move validation ──────────────────────────────────────────────────────────
 
 export function getValidMoves(
@@ -165,6 +185,8 @@ function getLionMoves(piece: GamePiece, pieces: GamePiece[]): Position[] {
       moves.push({ row: nr, col: nc });
     } else if (interactive.player !== piece.player) {
       if (canAttackEnemyCell(piece, pieces, nr, nc)) moves.push({ row: nr, col: nc });
+    } else if (canLungeThroughOwnBat(piece, pieces, nr, nc)) {
+      moves.push({ row: nr, col: nc });
     }
   }
   return moves;
@@ -195,6 +217,8 @@ function getElephantMoves(piece: GamePiece, pieces: GamePiece[]): Position[] {
           // While on cooldown, the elephant cannot attack at all.
           if (!onCooldown && canAttackEnemyCell(piece, pieces, nr, nc))
             moves.push({ row: nr, col: nc });
+        } else if (!onCooldown && canLungeThroughOwnBat(piece, pieces, nr, nc)) {
+          moves.push({ row: nr, col: nc });
         }
         break;
       }
@@ -224,6 +248,8 @@ function getButterflyMoves(piece: GamePiece, pieces: GamePiece[]): Position[] {
       } else if (interactive.player === piece.player) {
         // Shield own piece (not butterfly/bat, not already shielded)
         if (!interactive.shieldedBy && interactive.type !== 'butterfly' && interactive.type !== 'bat') {
+          moves.push({ row: nr, col: nc });
+        } else if (canLungeThroughOwnBat(piece, pieces, nr, nc)) {
           moves.push({ row: nr, col: nc });
         }
         break;
@@ -295,7 +321,11 @@ function getMonkeyMoves(piece: GamePiece, pieces: GamePiece[]): Position[] {
       if (!interactive) {
         moves.push({ row: nr, col: nc });
       } else if (interactive.player === piece.player) {
-        // Own piece: jump over
+        // Lunge through own bat if it's paralyzing a kill-cycle target
+        if (canLungeThroughOwnBat(piece, pieces, nr, nc)) {
+          moves.push({ row: nr, col: nc });
+        }
+        // Own piece: jump over (continue scanning further cells in this direction)
         continue;
       } else {
         // Enemy: bat (incl. paralyzing stack), shielded cell, or paralyzed-under-bat per cycle
@@ -375,7 +405,12 @@ function getAntMoves(piece: GamePiece, pieces: GamePiece[]): { moves: Position[]
               }
             }
           } else if (interactive && interactive.player === piece.player) {
-            blocked = true; // Own piece at center blocks the move
+            // Own bat paralyzing kill-cycle enemy → ant can lunge through
+            if (canLungeThroughOwnBat(piece, others, centerCell.row, centerCell.col)) {
+              hasAttackTarget = true;
+            } else {
+              blocked = true; // Own piece at center blocks the move
+            }
           }
         }
       }
@@ -479,14 +514,30 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
   // Find what's at the target cell
   const interactive = getInteractiveAtCell(pieces, targetRow, targetCol, pieceId);
   const ownAtTarget = interactive?.player === piece.player ? interactive : null;
-  const enemyAtTarget = interactive?.player !== piece.player ? interactive : null;
+  let enemyAtTarget = interactive && interactive.player !== piece.player ? interactive : null;
+
+  // Lunge-through-own-bat: if my own bat is on the target cell paralyzing an
+  // enemy I can kill via the kill cycle, treat the paralyzed enemy as the
+  // combat target. The existing combat branch (`enemyAtTarget` truthy →
+  // paralyzedPiece sub-branch) then resolves it: paralyzed enemy
+  // dies/damaged, bat keeps the cell, attacker stops adjacent.
+  let lungeThroughOwnBat = false;
+  if (!enemyAtTarget && ownAtTarget && ownAtTarget.type === 'bat' && ownAtTarget.paralyzing && mp.type !== 'bat') {
+    const par = pieces.find(p => p.id === ownAtTarget.paralyzing);
+    if (par && par.player !== mp.player && canPieceKill(mp.type, par.type)) {
+      enemyAtTarget = par;
+      lungeThroughOwnBat = true;
+    }
+  }
 
   let targetSurvived = false; // if true → attacker bounces
   let paralyzedPieceKilled = false; // flag to skip normal position setting when paralyzed piece is killed
   let monkeyKilledBat = false; // monkey stands adjacent + bounce animation; must not overwrite position below
 
   // ── Butterfly: shield own piece ───────────────────────────────────────────
-  if (mp.type === 'butterfly' && ownAtTarget) {
+  // Skip shield branch when this is actually a lunge through our own bat —
+  // the bat-paralyzing-enemy underneath is the real target, handled below.
+  if (mp.type === 'butterfly' && ownAtTarget && !lungeThroughOwnBat) {
     const ally = pieces.find(p => p.id === ownAtTarget.id)!;
     if (!ally.shieldedBy && ally.type !== 'butterfly' && ally.type !== 'bat') {
       mp.shielding = ally.id;
@@ -517,7 +568,10 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
       //  - Bat alone (not paralyzing): monkey moves INTO the bat's square.
       //  - Bat paralyzing another piece: monkey lunges, kills the bat,
       //    and stands in front — bounce animation, paralyzed piece freed.
-      if (mp.type === 'monkey' && top.type === 'bat' && canPieceKill('monkey', 'bat')) {
+      // Skip when the bat belongs to the monkey's own player — that case is
+      // a lunge-through-own-bat to kill the paralyzed enemy underneath, not
+      // a bat kill.
+      if (mp.type === 'monkey' && top.type === 'bat' && top.player !== mp.player && canPieceKill('monkey', 'bat')) {
         const paralyzingId = top.paralyzing;
         const result = killPiece(pieces, top.id, mp);
         pieces = result.pieces;
