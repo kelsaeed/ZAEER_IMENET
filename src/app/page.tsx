@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useGame } from '@/hooks/useGame';
 import { useSettings } from '@/hooks/useSettings';
+import { AI_LEVEL_META } from '@/game/ai';
 import StartScreen from '@/components/StartScreen';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
@@ -21,6 +22,7 @@ const WinScreen = dynamic(() => import('@/components/WinScreen'), { ssr: false }
 export default function Home() {
   const {
     state,
+    aiThinking,
     startGame,
     resetGame,
     restartMatch,
@@ -36,7 +38,7 @@ export default function Home() {
     dismissWinScreen,
     showWinScreen,
   } = useGame();
-  const { theme, isRTL } = useSettings();
+  const { theme, isRTL, t } = useSettings();
   const [cellSize, setCellSize] = useState(42);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -184,6 +186,24 @@ export default function Home() {
             }}
           >
             ⏪ Reviewing turn {state.viewingHistoryIndex! + 1} / {state.history.length}
+          </div>
+        )}
+        {/* AI "thinking" pill — appears only on the bot's turn so the user
+            knows their taps will be ignored for the next ~half-second.
+            Floats above the board, identical placement to the review pill,
+            so it can never collide with the corner buttons. */}
+        {aiThinking && !reviewing && state.aiLevel && (
+          <div
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none flex items-center gap-1.5"
+            style={{
+              background: theme.panelBg,
+              border: `1px solid ${theme.p2AccentBorder}`,
+              color: theme.p2Color,
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            <span className="zi-emoji-bob" aria-hidden>{AI_LEVEL_META[state.aiLevel].emoji}</span>
+            <span>{t('ai.thinking')}</span>
           </div>
         )}
       </div>

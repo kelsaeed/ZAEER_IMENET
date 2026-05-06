@@ -1,9 +1,10 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import { GameState, Orientation } from '@/game/types';
+import { GameState, Orientation, AiLevel } from '@/game/types';
 import { createInitialState } from '@/game/initialState';
 import { getValidMoves, applyMove, applyEndTurn, getAntCells, getInteractiveAtCell } from '@/game/logic';
 import { isInBounds, isBarrier } from '@/game/constants';
+import { chooseAiMove } from '@/game/ai';
 
 // Bumped to v3 with the history / review feature: GameState now contains a
 // history array, viewingHistoryIndex, and winScreenDismissed. Older saved
@@ -60,8 +61,13 @@ export function useGame() {
     }
   }, [state.bounceEffect?.pieceId, state.turn]);
 
-  const startGame = useCallback(() => {
-    setState({ ...createInitialState(), phase: 'playing', lastAction: { key: 'action.player1Turn' } });
+  const startGame = useCallback((aiLevel: AiLevel | null = null) => {
+    setState({
+      ...createInitialState(),
+      phase: 'playing',
+      lastAction: { key: 'action.player1Turn' },
+      aiLevel,
+    });
   }, []);
 
   /** Go all the way back to the start screen (with the rules / piece guide). */
@@ -71,10 +77,81 @@ export function useGame() {
   }, []);
 
   /** Restart the match in place — fresh pieces, no phase change. The player
-   *  stays on the board instead of returning to the menu. */
+   *  stays on the board instead of returning to the menu. The current AI
+   *  level (if any) is preserved so a player who picked "vs Hard AI" stays
+   *  in that mode after a Restart Match. */
   const restartMatch = useCallback(() => {
-    setState({ ...createInitialState(), phase: 'playing', lastAction: { key: 'action.player1Turn' } });
+    setState(prev => ({
+      ...createInitialState(),
+      phase: 'playing',
+      lastAction: { key: 'action.player1Turn' },
+      aiLevel: prev.aiLevel ?? null,
+    }));
   }, []);
+
+  // ── AI scheduler ──────────────────────────────────────────────────────────
+  // When the local game is in vs-AI mode and it's player 2's turn, queue an
+  // AI move on a short delay so the user perceives the bot "thinking" rather
+  // than slamming a move down the same frame they finished theirs. The
+  // re-checks inside setState guard against state changes that happen
+  // between scheduling and firing (resign, restart, mode flip mid-turn).
+  useEffect(() => {
+    if (!isHydrated) return;
+    const level = state.aiLevel;
+    if (!level) return;
+    if (state.phase !== 'playing') return;
+    if (state.currentPlayer !== 2) return;
+    if (state.viewingHistoryIndex !== null) return;
+
+    const t = setTimeout(() => {
+      setState(prev => {
+        if (!prev.aiLevel) return prev;
+        if (prev.phase !== 'playing') return prev;
+        if (prev.currentPlayer !== 2) return prev;
+        if (prev.viewingHistoryIndex !== null) return prev;
+        const move = chooseAiMove(prev, 2, prev.aiLevel);
+        if (!move) return prev;
+
+        let next = applyMove(prev, move.pieceId, move.target.row, move.target.col);
+        // Ant moves don't end the turn on their own — applyMove keeps the
+        // ant selected, expecting rotate-then-EndTurn from the human HUD.
+        // For the AI, commit the optional rotation and end the turn.
+        const moved = next.pieces.find(p => p.id === move.pieceId);
+        if (
+          moved?.type === 'ant'
+          && next.phase === 'playing'
+          && next.currentPlayer === 2
+        ) {
+          if (move.rotateTo && (next.validRotations ?? []).includes(move.rotateTo)) {
+            const rotated = next.pieces.map(p =>
+              p.id === move.pieceId ? { ...p, orientation: move.rotateTo } : p
+            );
+            next = { ...next, pieces: rotated, antHasRotated: true };
+          }
+          next = applyEndTurn(next);
+        }
+        return next;
+      });
+    }, 600);
+    return () => clearTimeout(t);
+  }, [
+    isHydrated,
+    state.aiLevel,
+    state.phase,
+    state.currentPlayer,
+    state.viewingHistoryIndex,
+    state.turn,
+  ]);
+
+  /** True while the AI is "thinking" — i.e. it's player 2's turn and the
+   *  game is in vs-AI mode. Used by the HUD to show a thinking indicator
+   *  and by the click handlers to refuse user input on the AI's behalf. */
+  const aiThinking = !!(
+    state.aiLevel
+    && state.phase === 'playing'
+    && state.currentPlayer === 2
+    && state.viewingHistoryIndex === null
+  );
 
   // ─── History review ─────────────────────────────────────────────────────
   // While viewingHistoryIndex !== null the board renders a frozen snapshot
@@ -137,6 +214,9 @@ export function useGame() {
   const rotateAntTo = useCallback((targetOrientation: Orientation) => {
     setState(prev => {
       if (!prev.selectedPieceId || prev.phase !== 'playing') return prev;
+      // vs-AI: refuse rotations on the AI's turn so the user can't drive
+      // the bot's pieces around.
+      if (prev.aiLevel && prev.currentPlayer === 2) return prev;
       const piece = prev.pieces.find(p => p.id === prev.selectedPieceId);
       if (!piece || piece.type !== 'ant') return prev;
       if (!prev.validRotations.includes(targetOrientation)) return prev;
@@ -166,6 +246,8 @@ export function useGame() {
   const endTurn = useCallback(() => {
     setState(prev => {
       if (!prev.selectedPieceId || prev.phase !== 'playing') return prev;
+      // vs-AI: only the human (player 1) can press End Turn.
+      if (prev.aiLevel && prev.currentPlayer === 2) return prev;
       const piece = prev.pieces.find(p => p.id === prev.selectedPieceId);
       if (!piece || piece.type !== 'ant') return prev;
       // Can end turn if: rotated, moved, or both
@@ -178,6 +260,7 @@ export function useGame() {
   const switchToShieldedPiece = useCallback(() => {
     setState(prev => {
       if (!prev.selectedPieceId || prev.phase !== 'playing') return prev;
+      if (prev.aiLevel && prev.currentPlayer === 2) return prev;
       const piece = prev.pieces.find(p => p.id === prev.selectedPieceId);
       if (!piece || piece.type !== 'butterfly' || !piece.shielding) return prev;
       const shieldedId = piece.shielding;
@@ -200,6 +283,7 @@ export function useGame() {
   const switchToShieldingButterfly = useCallback(() => {
     setState(prev => {
       if (!prev.selectedPieceId || prev.phase !== 'playing') return prev;
+      if (prev.aiLevel && prev.currentPlayer === 2) return prev;
       const shielded = prev.pieces.find(p => p.id === prev.selectedPieceId);
       if (!shielded || !shielded.shieldedBy) return prev;
       const butterfly = prev.pieces.find(p => p.id === shielded.shieldedBy);
@@ -223,6 +307,10 @@ export function useGame() {
       if (prev.phase !== 'playing') return prev;
       // Read-only mode while reviewing history.
       if (prev.viewingHistoryIndex !== null) return prev;
+      // vs-AI: ignore board taps while the bot is thinking. Without this
+      // guard, the user could click a player-2 piece and drive the AI's
+      // own units (since selection just gates on currentPlayer).
+      if (prev.aiLevel && prev.currentPlayer === 2) return prev;
 
       // Ant attack lock: once the ant killed/damaged an enemy, the only
       // legal follow-ups are HUD-driven (rotateAntTo / endTurn). Refuse
@@ -359,6 +447,7 @@ export function useGame() {
 
   return {
     state,
+    aiThinking,
     startGame,
     resetGame,
     restartMatch,

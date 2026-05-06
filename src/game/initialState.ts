@@ -80,5 +80,6 @@ export function createInitialState(): GameState {
     ],
     viewingHistoryIndex: null,
     winScreenDismissed: false,
+    aiLevel: null,
   };
 }

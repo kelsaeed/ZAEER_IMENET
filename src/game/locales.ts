@@ -17,6 +17,20 @@ const en: Record<string, string> = {
   'app.startButton': '⚔️ Start Game ⚔️',
   'app.playOnline': 'Play Online',
 
+  // Game-mode picker on the start screen
+  'mode.heading': 'Game Mode',
+  'mode.local': '2-Player',
+  'mode.aiEasy': 'vs AI · Easy',
+  'mode.aiMedium': 'vs AI · Medium',
+  'mode.aiHard': 'vs AI · Hard',
+
+  // AI status
+  'ai.thinking': '🤖 AI is thinking…',
+  'ai.opponent': '🤖 AI ({level})',
+  'ai.levelEasy': 'Easy',
+  'ai.levelMedium': 'Medium',
+  'ai.levelHard': 'Hard',
+
   // Win conditions
   'win.title': 'Win Conditions',
   'win.lionThrone': 'Move your Lion to the central red Throne (4×4 area)',
@@ -165,6 +179,18 @@ const ar: Record<string, string> = {
   'app.boardSummary': 'لوحة 16×16 · لاعبان · بالأدوار',
   'app.startButton': '⚔️ ابدأ اللعبة ⚔️',
   'app.playOnline': 'العب أونلاين',
+
+  'mode.heading': 'نوع اللعبة',
+  'mode.local': 'لاعبان محلياً',
+  'mode.aiEasy': 'ضد الذكاء · سهل',
+  'mode.aiMedium': 'ضد الذكاء · متوسط',
+  'mode.aiHard': 'ضد الذكاء · صعب',
+
+  'ai.thinking': '🤖 الذكاء يفكّر…',
+  'ai.opponent': '🤖 الذكاء ({level})',
+  'ai.levelEasy': 'سهل',
+  'ai.levelMedium': 'متوسط',
+  'ai.levelHard': 'صعب',
 
   'win.title': 'شروط الفوز',
   'win.lionThrone': 'حرّك الأسد إلى العرش الأحمر في المنتصف (منطقة 4×4)',

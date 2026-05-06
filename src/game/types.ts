@@ -2,6 +2,13 @@ export type PieceType = 'lion' | 'elephant' | 'ant' | 'butterfly' | 'bat' | 'mon
 export type Player = 1 | 2;
 export type Orientation = 'horizontal' | 'vertical' | 'diagonal' | 'antidiagonal';
 
+/** Local single-player AI difficulty levels.
+ *  - 'butterfly' = easy (random legal move)
+ *  - 'monkey'    = medium (1-ply greedy heuristic)
+ *  - 'lion'      = hard   (2-ply minimax)
+ *  null = no AI (regular pass-and-play). */
+export type AiLevel = 'butterfly' | 'monkey' | 'lion';
+
 export interface Position {
   row: number;
   col: number;
@@ -85,4 +92,8 @@ export interface GameState {
   /** Win modal state: true = the user has dismissed it; a small floating
    *  pill remains so they can pop it back open at any time. */
   winScreenDismissed: boolean;
+  /** When set, player 2 is controlled by the local AI at this difficulty.
+   *  null/undefined = regular pass-and-play. The online game leaves this
+   *  unset — both sides are humans on different devices. */
+  aiLevel?: AiLevel | null;
 }
