@@ -106,12 +106,19 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameId}` },
-        async () => {
-          // Re-fetch the row instead of trusting the Realtime payload —
-          // some hosts strip the JSON `state` column from the broadcast,
-          // which would otherwise leave us with a partial row and trigger
-          // the "Game not found" fallback after every move.
+        async (payload) => {
+          // Trust the Realtime payload when the JSON `state` column is
+          // present — that avoids a DB round-trip on every move and is the
+          // difference between the opponent seeing the move instantly vs.
+          // ~half a second later. Fall back to a re-fetch only on the rare
+          // hosts that strip large JSON columns from the broadcast.
           if (!mounted) return;
+          const next = payload.new as Partial<GameRow> | undefined;
+          if (next && next.state) {
+            setGame(next as GameRow);
+            setViewingHistoryIndex(null);
+            return;
+          }
           const { data } = await supabase
             .from('games')
             .select('*')

@@ -80,13 +80,14 @@ export default function Home() {
       // Side-by-side at lg (≥1024). Below that, the HUD stacks under the board.
       const sideBySide = vw >= 1024;
 
-      const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 24 : 20;
-      // HUD width = clamp(15rem, 20vw, 22rem) at lg+. Mirror that here so the
-      // board's max cell size never collides with the panel.
+      const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 12 : 20;
+      // HUD width on lg+ matches the compact `.zi-hud` clamp in globals.css
+      // (clamp(11rem, 14vw, 18rem)). Keeping these in sync means the board
+      // can grow into every pixel of the freed-up width.
       const hudReserve = sideBySide
-        ? Math.max(16 * 16, Math.min(30 * 16, Math.floor(vw * 0.22)))
+        ? Math.max(11 * 16, Math.min(20 * 16, Math.floor(vw * 0.15)))
         : 0;
-      const flexGap = sideBySide ? 16 : 0;
+      const flexGap = sideBySide ? 12 : 0;
 
       // Board = 16 cells + 0.5-cell row label = 16.5; pad slightly for safety.
       const widthBudget = vw - padX * 2 - hudReserve - flexGap;
@@ -97,7 +98,7 @@ export default function Home() {
 
       const minCell = vw < 360 ? 14 : 16;
       const maxCell = sideBySide
-        ? (vw >= 1600 ? 96 : vw >= 1280 ? 84 : 68)
+        ? (vw >= 1600 ? 124 : vw >= 1280 ? 104 : 86)
         : 60;
       setCellSize(Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH)));
     }

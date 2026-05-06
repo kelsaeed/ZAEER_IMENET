@@ -1,5 +1,6 @@
 'use client';
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { GameState, Orientation } from '@/game/types';
 import { PIECE_EMOJI, squareLabel } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
@@ -56,11 +57,33 @@ export default function GameHUD({
   const p1Pieces = pieces.filter(p => p.player === 1);
   const p2Pieces = pieces.filter(p => p.player === 2);
 
+  // Track whether we're on the lg+ side-by-side layout so we can serve a
+  // tighter set of tokens there. The HUD has to fit alongside the board
+  // without scroll on a 700–800px laptop — every clamp shaved here turns
+  // into vertical room the board and the panels can actually use.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
   // Fluid scale tokens — typography, spacing, widths all scale with viewport
   // width via clamp(). Tuned so the panel reads cleanly on a phone (~360px)
-  // through a 4K monitor without ever feeling chunky. Caps were dialed back
-  // after the previous version felt oversized on desktop.
-  const fs = {
+  // through a 4K monitor without ever feeling chunky. Desktop variants are
+  // notably tighter so all panels (turn, last action, both piece counts,
+  // kill cycle, two action buttons) fit in a single screen without scroll.
+  const fs = isDesktop ? {
+    small:  'clamp(10px, 0.5rem + 0.1vw, 12px)',
+    base:   'clamp(11px, 0.55rem + 0.12vw, 13px)',
+    medium: 'clamp(12px, 0.6rem + 0.15vw, 14px)',
+    large:  'clamp(13px, 0.7rem + 0.2vw, 16px)',
+    huge:   'clamp(16px, 0.85rem + 0.25vw, 20px)',
+    icon:   'clamp(14px, 0.75rem + 0.2vw, 18px)',
+  } : {
     small:  'clamp(11px, 0.6rem + 0.2vw, 13px)',
     base:   'clamp(12px, 0.65rem + 0.25vw, 15px)',
     medium: 'clamp(13px, 0.7rem + 0.3vw, 17px)',
@@ -68,7 +91,12 @@ export default function GameHUD({
     huge:   'clamp(20px, 1rem + 0.5vw, 26px)',
     icon:   'clamp(18px, 0.9rem + 0.4vw, 24px)',
   };
-  const sp = {
+  const sp = isDesktop ? {
+    gap:    'clamp(4px, 0.2rem + 0.1vw, 7px)',
+    padBig: 'clamp(6px, 0.35rem + 0.15vw, 10px)',
+    padMed: 'clamp(4px, 0.25rem + 0.1vw, 7px)',
+    radius: 'clamp(7px, 0.4rem + 0.1vw, 11px)',
+  } : {
     gap:    'clamp(6px, 0.3rem + 0.2vw, 12px)',
     padBig: 'clamp(10px, 0.5rem + 0.25vw, 16px)',
     padMed: 'clamp(7px, 0.4rem + 0.15vw, 12px)',

@@ -64,14 +64,17 @@ input, select, textarea {
   transform-origin: 50% 10%;
 }
 
-/* HUD: full width on small screens (stacked layout), fluid clamp on lg+ so
- * it scales smoothly across laptops, monitors, and 4K displays. The cap
- * was raised from 22rem to 30rem so the panel keeps growing alongside the
- * board on wide monitors instead of looking pinned at a fixed width. */
+/* HUD: full width on small screens (stacked layout), narrower fluid clamp
+ * on lg+ so the board can claim more horizontal room and the sidebar
+ * fits in one screen without needing to scroll. The mobile layout is
+ * untouched — same full-width stack as before. */
 @media (min-width: 1024px) {
   .zi-hud {
-    width: clamp(14rem, 20vw, 28rem);
-    min-width: 12rem;
+    width: clamp(11rem, 14vw, 18rem);
+    min-width: 10.5rem;
+    /* Trim trailing padding so the bottom action buttons don't clip the
+     * viewport on shorter laptop screens (~720p). */
+    padding-bottom: 0.25rem;
   }
 }
 
