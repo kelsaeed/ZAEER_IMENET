@@ -3,16 +3,26 @@
 // plays is by construction a real, in-rules move.
 //
 //   • butterfly (easy)   = uniform random legal move
-//   • monkey (medium)    = 1-ply greedy: pick the move that maximises
-//                          a simple material+position heuristic
-//   • lion (hard)        = 2-ply minimax over the top candidates of the
-//                          1-ply search, with the opponent assumed to
-//                          play greedily in response.
+//   • monkey (medium)    = depth-1 minimax (1-ply greedy heuristic)
+//   • lion (hard)        = depth-2 alpha-beta minimax with move ordering
 //
 // The AI is always player 2 — the human plays as player 1 (bottom of the
 // board, moves first). Selection / valid-move flags on GameState are
 // cleared between moves by the existing applyMove flow; the AI doesn't
 // touch them.
+//
+// Heuristic priorities (in decreasing weight):
+//   1. WIN STATES — capturing both enemy lions or moving own lion to
+//      the throne returns ±1,000,000.
+//   2. LION → THRONE — every step closer my lion gets is +8 points
+//      (and symmetric for the opponent). The most valuable single piece
+//      and the only one that wins the game by movement, so this term
+//      dominates positional play.
+//   3. MATERIAL — captures matter. Damaged elephants and paralysed
+//      pieces are penalised.
+//   4. PIECE ADVANCEMENT — non-lion pieces gain a small bonus for being
+//      out of the back rank, encouraging aggression. Without this term,
+//      non-capture moves all score equal and the AI looks random.
 
 import type {
   GameState, GamePiece, Player, PieceType, Position, Orientation, AiLevel,
@@ -54,29 +64,47 @@ function evaluate(state: GameState, player: Player): number {
     if (state.winner === player) return 1_000_000;
     if (state.winner != null) return -1_000_000;
   }
-  const opp: Player = player === 1 ? 2 : 1;
+
   let score = 0;
+
+  // 1. Material (captures + status penalties)
   for (const p of state.pieces) {
     let v = PIECE_VALUE[p.type];
     if (p.isDamaged) v -= 6;        // damaged elephant worth less
     if (p.isParalyzed) v -= 4;      // paralyzed pieces are temporarily useless
-    if (p.player === player) score += v;
-    else score -= v;
+    score += p.player === player ? v : -v;
   }
-  // Lion proximity to throne: each step closer is +1.2 (and symmetric for
-  // the opponent's lion). 14 ≈ longest path either lion takes from start
-  // so the bonus stays in the same ballpark as one minor piece.
-  for (const lion of state.pieces) {
-    if (lion.type !== 'lion') continue;
-    const dist = distanceToThrone(lion.row, lion.col);
-    const prox = Math.max(0, 14 - dist) * 1.2;
-    if (lion.player === player) score += prox;
-    else score -= prox;
+
+  // 2. Lion proximity to throne — the dominant positional term. Distance
+  //    ranges 0..16 (max board distance). At weight 8 per step, a lion
+  //    that has crossed half the board scores ~64 — comfortably more
+  //    than any non-lion piece value. This is what makes the bot
+  //    actually walk a lion toward the throne every turn it can.
+  for (const p of state.pieces) {
+    if (p.type !== 'lion') continue;
+    const dist = distanceToThrone(p.row, p.col);
+    const prox = Math.max(0, 16 - dist) * 8;
+    score += p.player === player ? prox : -prox;
   }
+
+  // 3. General piece advancement — non-lion pieces gain a small bonus
+  //    for being further from their own back rank. Without this, a
+  //    move like "bat slides one step diagonal" produces the same eval
+  //    as "bat stays put" (no material change), and the AI ends up
+  //    picking arbitrarily among ties — i.e. "random". Even a tiny
+  //    weight (0.6 per step, capped) breaks those ties consistently
+  //    in favour of forward play.
+  for (const p of state.pieces) {
+    if (p.type === 'lion') continue;
+    const ownBackRow = p.player === 1 ? 15 : 0;
+    const advancement = Math.min(8, Math.abs(p.row - ownBackRow));
+    score += p.player === player ? advancement * 0.6 : -advancement * 0.6;
+  }
+
   return score;
 }
 
-// ─── Move enumeration ────────────────────────────────────────────────────────
+// ─── Move enumeration / simulation ───────────────────────────────────────────
 
 interface Candidate {
   piece: GamePiece;
@@ -96,90 +124,110 @@ function listLegalMoves(state: GameState, player: Player): Candidate[] {
 
 /** Apply the candidate's move and, if the move was an ant move (which
  *  doesn't end the turn on its own), follow up with applyEndTurn so the
- *  resulting state is what the opponent actually sees on their turn. This
- *  is what we want for evaluation. */
+ *  resulting state is what the opponent actually sees on their turn. */
 function simulate(state: GameState, c: Candidate): GameState {
   let next = applyMove(state, c.piece.id, c.target.row, c.target.col);
   if (next.phase !== 'playing') return next;
-  // For an ant move, applyMove leaves the same player on turn (ant can
-  // still rotate / End Turn). Force-end so the simulation reflects the
-  // committed turn boundary.
   if (next.currentPlayer === state.currentPlayer && c.piece.type === 'ant') {
     next = applyEndTurn(next);
   }
   return next;
 }
 
-// ─── Pickers per level ───────────────────────────────────────────────────────
+// ─── Search ──────────────────────────────────────────────────────────────────
+
+/** Alpha-beta minimax. `depth` is plies remaining; `aiPlayer` is the
+ *  perspective for `evaluate` (always our bot). Move ordering by 1-ply
+ *  heuristic at each node makes the pruning much more effective.
+ *  Returns the evaluated value of the position from `aiPlayer`'s POV. */
+function search(
+  state: GameState,
+  depth: number,
+  alpha: number,
+  beta: number,
+  aiPlayer: Player,
+): number {
+  if (depth === 0 || state.phase === 'won') {
+    return evaluate(state, aiPlayer);
+  }
+  const me = state.currentPlayer;
+  const moves = listLegalMoves(state, me);
+  if (moves.length === 0) return evaluate(state, aiPlayer);
+
+  // Order moves by quick 1-ply eval so the best-looking moves get
+  // explored first — that's where alpha-beta gets most of its pruning.
+  const scored = moves.map(m => {
+    const after = simulate(state, m);
+    return { after, h: evaluate(after, me) };
+  });
+  scored.sort((a, b) => b.h - a.h);
+
+  const isMaxNode = me === aiPlayer;
+  if (isMaxNode) {
+    let best = -Infinity;
+    for (const { after } of scored) {
+      const v = search(after, depth - 1, alpha, beta, aiPlayer);
+      if (v > best) best = v;
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const { after } of scored) {
+      const v = search(after, depth - 1, alpha, beta, aiPlayer);
+      if (v < best) best = v;
+      if (best < beta) beta = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+}
+
+/** Pick the candidate that maximises the search value. Ties are broken
+ *  randomly so the bot doesn't replay the exact same move every time
+ *  it sees the same position. */
+function pickBest(state: GameState, player: Player, depth: number): AiMove | null {
+  const moves = listLegalMoves(state, player);
+  if (moves.length === 0) return null;
+
+  // Pre-sort by 1-ply eval so a quick win is found early — useful when
+  // depth=1 (the sort and the first eval are the same work) and harmless
+  // when depth>1 (alpha-beta does its own ordering inside `search`).
+  const scored = moves.map(c => {
+    const after = simulate(state, c);
+    return { c, after, h: evaluate(after, player) };
+  });
+  scored.sort((a, b) => b.h - a.h);
+
+  let bestScore = -Infinity;
+  let best: Candidate[] = [];
+  for (const { c, after } of scored) {
+    // For depth 1 we already have the eval (h is from `player`'s POV
+    // *after* my move — which is the right thing because there's no
+    // opponent reply to consider). For deeper search, recurse.
+    const score = depth <= 1
+      ? evaluate(after, player)
+      : search(after, depth - 1, -Infinity, Infinity, player);
+    if (score > bestScore) { bestScore = score; best = [c]; }
+    else if (score === bestScore) best.push(c);
+  }
+
+  const pick = best[Math.floor(Math.random() * best.length)];
+  return {
+    pieceId: pick.piece.id,
+    target: pick.target,
+    rotateTo: pickAntRotation(state, pick, player),
+  };
+}
+
+// ─── Per-level entry points ──────────────────────────────────────────────────
 
 function pickRandom(state: GameState, player: Player): AiMove | null {
   const moves = listLegalMoves(state, player);
   if (moves.length === 0) return null;
   const c = moves[Math.floor(Math.random() * moves.length)];
   return { pieceId: c.piece.id, target: c.target, rotateTo: pickAntRotation(state, c, player) };
-}
-
-function pickGreedy(state: GameState, player: Player): AiMove | null {
-  const moves = listLegalMoves(state, player);
-  if (moves.length === 0) return null;
-  let bestScore = -Infinity;
-  let best: Candidate[] = [];
-  for (const c of moves) {
-    const after = simulate(state, c);
-    const score = evaluate(after, player);
-    if (score > bestScore) { bestScore = score; best = [c]; }
-    else if (score === bestScore) best.push(c);
-  }
-  const pick = best[Math.floor(Math.random() * best.length)];
-  return { pieceId: pick.piece.id, target: pick.target, rotateTo: pickAntRotation(state, pick, player) };
-}
-
-/** 2-ply minimax, branch-limited for performance.
- *  - Generate all of my legal moves, score each with 1-ply eval, keep the
- *    top N candidates.
- *  - For each candidate, simulate the opponent's best (greedy) response
- *    and take the resulting evaluation as the candidate's true value.
- *  - Pick the candidate that maximises that value. */
-function pickMinimax(state: GameState, player: Player): AiMove | null {
-  const opp: Player = player === 1 ? 2 : 1;
-  const moves = listLegalMoves(state, player);
-  if (moves.length === 0) return null;
-
-  // 1-ply pre-rank — eval each move from my POV, take the strongest
-  // candidates as the deeper-search seed set. Caps total work at
-  // CANDIDATES × opp-move-count, which on a typical mid-game board is
-  // ~8 × 100 = 800 simulations. Plenty fast for an interactive game.
-  const CANDIDATES = 8;
-  const ranked = moves.map(c => ({ c, after: simulate(state, c) }));
-  ranked.sort((a, b) => evaluate(b.after, player) - evaluate(a.after, player));
-  const seeds = ranked.slice(0, CANDIDATES);
-
-  let bestScore = -Infinity;
-  let best: Candidate[] = [];
-  for (const { c, after } of seeds) {
-    // If our move already won the game, we're done — no opponent reply.
-    if (after.phase === 'won') {
-      const score = evaluate(after, player);
-      if (score > bestScore) { bestScore = score; best = [c]; }
-      else if (score === bestScore) best.push(c);
-      continue;
-    }
-    const oppMoves = listLegalMoves(after, opp);
-    let worstForMe = Infinity;
-    if (oppMoves.length === 0) {
-      worstForMe = evaluate(after, player);
-    } else {
-      for (const om of oppMoves) {
-        const after2 = simulate(after, om);
-        const myScore = evaluate(after2, player);
-        if (myScore < worstForMe) worstForMe = myScore;
-      }
-    }
-    if (worstForMe > bestScore) { bestScore = worstForMe; best = [c]; }
-    else if (worstForMe === bestScore) best.push(c);
-  }
-  const pick = best[Math.floor(Math.random() * best.length)];
-  return { pieceId: pick.piece.id, target: pick.target, rotateTo: pickAntRotation(state, pick, player) };
 }
 
 // ─── Ant rotation ────────────────────────────────────────────────────────────
@@ -217,8 +265,8 @@ export function chooseAiMove(state: GameState, player: Player, level: AiLevel): 
   if (state.currentPlayer !== player) return null;
   switch (level) {
     case 'butterfly': return pickRandom(state, player);
-    case 'monkey':    return pickGreedy(state, player);
-    case 'lion':      return pickMinimax(state, player);
+    case 'monkey':    return pickBest(state, player, 1);
+    case 'lion':      return pickBest(state, player, 2);
   }
 }
 

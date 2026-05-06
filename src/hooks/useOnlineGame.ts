@@ -115,7 +115,35 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
           if (!mounted) return;
           const next = payload.new as Partial<GameRow> | undefined;
           if (next && next.state) {
-            setGame(next as GameRow);
+            setGame(prev => {
+              const incoming = next as GameRow;
+              if (!prev || !prev.state) return incoming;
+              // Stale echo guard: if the incoming turn is older than what we
+              // already have locally (e.g. because we've optimistically
+              // applied our own move and an unrelated UPDATE for ready-flags
+              // is fanning out) just keep our newer state. Without this, a
+              // move could briefly "snap back" while an older payload is
+              // applied before the newer one arrives.
+              if (incoming.state.turn < prev.state.turn) {
+                return { ...incoming, state: prev.state };
+              }
+              // Preserve local-only selection / valid-move overlay so an
+              // unrelated DB update during the player's turn doesn't wipe
+              // their selection. The persistent server state still wins
+              // for everything else (pieces, currentPlayer, history…).
+              const sel = prev.state.selectedPieceId;
+              const stillExists = sel && incoming.state.pieces.some(p => p.id === sel);
+              return {
+                ...incoming,
+                state: {
+                  ...incoming.state,
+                  selectedPieceId: stillExists ? sel : null,
+                  validMoves: stillExists ? prev.state.validMoves : [],
+                  canRotate: stillExists ? prev.state.canRotate : false,
+                  validRotations: stillExists ? prev.state.validRotations : [],
+                },
+              };
+            });
             setViewingHistoryIndex(null);
             return;
           }
@@ -197,11 +225,28 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
   const isPlaying = game?.status === 'playing';
   const isMyTurn = !!(state && myPlayerNumber !== null && state.currentPlayer === myPlayerNumber && isPlaying && viewingHistoryIndex === null);
 
-  /** Persist a state change. Falls back to optimistic local update if the
-   *  network call fails (we'll re-sync from the next Realtime event). */
-  const persist = useCallback(async (newState: GameState) => {
+  /** Update local React state only — no DB write. Used for selection /
+   *  deselection / piece switching / in-progress ant rotation. None of
+   *  those changes need to be visible to the opponent (they can't act on
+   *  them anyway, since `isMyTurn` already gates their input), and
+   *  *avoiding* the round trip is what makes selecting a piece feel
+   *  instant instead of laggy.
+   *
+   *  Important: skipping the DB write also fixes the "fast play reverts
+   *  my move" glitch. With the old code, every selection triggered a
+   *  Realtime echo. When you moved quickly, the previous selection's
+   *  echo would arrive between your move's optimistic update and its
+   *  own echo, briefly snapping the board back. */
+  const updateLocal = useCallback((newState: GameState) => {
+    setGame(prev => prev ? { ...prev, state: newState, current_turn: newState.turn } : prev);
+  }, []);
+
+  /** Optimistic local update + DB write. Use for state changes that
+   *  *commit* — moves, end turn, ant move-undos, anything the opponent
+   *  must see. The Realtime echo of our own write replays the same
+   *  state we already set locally, so it's effectively a no-op. */
+  const persistRemote = useCallback(async (newState: GameState) => {
     if (!game || !user) return;
-    // Optimistic local update.
     setGame(prev => prev ? { ...prev, state: newState, current_turn: newState.turn } : prev);
     try {
       await saveGameState({
@@ -230,11 +275,12 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     //    can't move the ant elsewhere, and can't switch to another piece.
     if (state.antAttackedThisTurn) return;
 
-    // 1. Selected piece + valid move target → execute move.
+    // 1. Selected piece + valid move target → execute move. This commits
+    //    the move (board changes the opponent must see) so it goes to DB.
     if (state.selectedPieceId) {
       const isValid = state.validMoves.some(m => m.row === row && m.col === col);
       if (isValid) {
-        persist(applyMove(state, state.selectedPieceId, row, col));
+        persistRemote(applyMove(state, state.selectedPieceId, row, col));
         return;
       }
     }
@@ -283,7 +329,10 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
         }
         return p;
       });
-      persist({
+      // Reverting an ant move *moves piece positions back* — the opponent
+      // had already seen the move land (we persisted it on commit), so
+      // they must also see it un-land. DB write required.
+      persistRemote({
         ...state,
         pieces: reverted,
         selectedPieceId: null,
@@ -298,7 +347,9 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       return;
     }
 
-    // 5. Deselecting / switching pieces with a pending rotation → undo it.
+    // 5. Deselecting / switching pieces with a pending uncommitted ant
+    //    rotation → undo the rotation. Rotations are stored locally only
+    //    (no DB write) so reverting them is also local.
     let pieces = state.pieces;
     if (state.selectedPieceId && state.antHasRotated && state.antOriginalOrientation) {
       pieces = state.pieces.map(p =>
@@ -309,7 +360,8 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     }
 
     if (!myPiece) {
-      persist({
+      // Pure deselect — local only.
+      updateLocal({
         ...state,
         pieces,
         selectedPieceId: null,
@@ -323,12 +375,12 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       return;
     }
 
-    // 6. Select / re-select the piece at the clicked cell.
+    // 6. Select / re-select the piece at the clicked cell — local only.
     const freshPiece = pieces.find(p => p.id === myPiece.id)!;
     const { moves, canRotate, validRotations } = getValidMoves(freshPiece, pieces);
     const isAnt = freshPiece.type === 'ant';
     const sameSelection = myPiece.id === state.selectedPieceId;
-    persist({
+    updateLocal({
       ...state,
       pieces,
       selectedPieceId: myPiece.id,
@@ -347,7 +399,7 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
         ? state.antOriginalPosition
         : (isAnt ? { row: freshPiece.row, col: freshPiece.col } : undefined),
     });
-  }, [state, isMyTurn, persist]);
+  }, [state, isMyTurn, persistRemote, updateLocal]);
 
   const rotateAntTo = useCallback((orientation: Orientation) => {
     if (!state || !isMyTurn || !state.selectedPieceId) return;
@@ -369,16 +421,19 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       antHasRotated: true,
       antOriginalOrientation: state.antOriginalOrientation ?? piece.orientation,
     };
-    persist(newState);
-  }, [state, isMyTurn, persist]);
+    // Rotation is part of the in-progress ant turn — local only. The
+    // final orientation is committed to DB when End Turn fires (or when
+    // the ant moves, which goes through persistRemote).
+    updateLocal(newState);
+  }, [state, isMyTurn, updateLocal]);
 
   const endTurn = useCallback(() => {
     if (!state || !isMyTurn || !state.selectedPieceId) return;
     const piece = state.pieces.find(p => p.id === state.selectedPieceId);
     if (!piece || piece.type !== 'ant') return;
     if (!state.antMovedThisTurn && !state.antHasRotated) return;
-    persist(applyEndTurn(state));
-  }, [state, isMyTurn, persist]);
+    persistRemote(applyEndTurn(state));
+  }, [state, isMyTurn, persistRemote]);
 
   const switchToShieldedPiece = useCallback(() => {
     if (!state || !isMyTurn || !state.selectedPieceId) return;
@@ -387,14 +442,15 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     const shielded = state.pieces.find(p => p.id === piece.shielding);
     if (!shielded) return;
     const { moves, canRotate, validRotations } = getValidMoves(shielded, state.pieces);
-    persist({
+    // Switching which piece you're driving is selection — local only.
+    updateLocal({
       ...state,
       selectedPieceId: shielded.id,
       validMoves: moves,
       canRotate,
       validRotations,
     });
-  }, [state, isMyTurn, persist]);
+  }, [state, isMyTurn, updateLocal]);
 
   const switchToShieldingButterfly = useCallback(() => {
     if (!state || !isMyTurn || !state.selectedPieceId) return;
@@ -403,14 +459,14 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     const butterfly = state.pieces.find(p => p.id === shielded.shieldedBy);
     if (!butterfly) return;
     const { moves, canRotate, validRotations } = getValidMoves(butterfly, state.pieces);
-    persist({
+    updateLocal({
       ...state,
       selectedPieceId: butterfly.id,
       validMoves: moves,
       canRotate,
       validRotations,
     });
-  }, [state, isMyTurn, persist]);
+  }, [state, isMyTurn, updateLocal]);
 
   const resign = useCallback(async () => {
     if (!game || !user || myPlayerNumber === null || !state) return;

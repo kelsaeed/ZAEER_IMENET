@@ -11,6 +11,19 @@
   box-sizing: border-box;
 }
 
+/* Reserve the vertical scrollbar gutter so the page width stays
+ * constant whether or not a scrollbar is currently visible. Without
+ * this, selecting a piece on PC would push the HUD just past the
+ * viewport, summon a scrollbar, and the centred game board would
+ * jump ~15px left. Releasing the selection (e.g. after a move)
+ * would shrink the content again and the board would jump right.
+ *
+ * `scrollbar-gutter: stable` is the standard fix; supported in all
+ * evergreen browsers (Chrome 94+, Firefox 97+, Safari 18.2+). */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
