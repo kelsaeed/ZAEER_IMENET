@@ -368,101 +368,107 @@ function getAntMoves(piece: GamePiece, pieces: GamePiece[]): { moves: Position[]
   const orientation = piece.orientation!;
   const dirs: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
   const others = pieces.filter(p => p.id !== piece.id);
-  
-  // Exclude the butterfly that's shielding this ant from blocker checks
   const shieldingButterflyId = piece.shieldedBy;
+
+  // True if a wing cell at (r, c) is free for THIS ant to land on. The wing
+  // cell must be on the board, not a barrier or throne, not occupied by any
+  // other piece's body or wing. `dyingId` is the id of an enemy piece this
+  // ant is about to capture — that piece is excluded from blocker checks
+  // (including its ant-wings, if it's an ant) since it will be removed by
+  // the time we land.
+  function wingCellFree(r: number, c: number, dyingId?: string): boolean {
+    if (!isInBounds(r, c)) return false;
+    if (isBarrier(r, c)) return false;
+    if (isThrone(r, c)) return false;
+    // Ant-wing of any OTHER ant occupying (r, c). Excludes the dying piece.
+    const blockedByWing = others.some(p => {
+      if (p.type !== 'ant') return false;
+      if (shieldingButterflyId && p.id === shieldingButterflyId) return false;
+      if (dyingId && p.id === dyingId) return false;
+      return getAntCells(p.row, p.col, p.orientation!).some(c2 => c2.row === r && c2.col === c);
+    });
+    if (blockedByWing) return false;
+    const blocker = others.find(p => {
+      if (shieldingButterflyId && p.id === shieldingButterflyId) return false;
+      if (dyingId && p.id === dyingId) return false;
+      if (p.type === 'ant') return false; // wings handled above
+      return p.row === r && p.col === c;
+    });
+    return !blocker;
+  }
 
   for (const [dr, dc] of dirs) {
     for (let s = 1; s <= 4; s++) {
       const nr = piece.row + dr * s;
       const nc = piece.col + dc * s;
-      const newCells = getAntCells(nr, nc, orientation);
 
-      let blocked = false;
-      let hasAttackTarget = false;
+      // Center must be a legal cell. Off-board / barrier / throne ends this
+      // direction's slide.
+      if (!isInBounds(nr, nc) || isBarrier(nr, nc) || isThrone(nr, nc)) break;
 
-      // FIRST: Check the center cell for attack targets (including paralyzed pieces)
-      // This must be checked before blockers to ensure paralyzed pieces can be attacked
-      const centerCell = newCells.find(c => c.row === nr && c.col === nc);
-      if (centerCell) {
-        if (isInBounds(centerCell.row, centerCell.col) && !isBarrier(centerCell.row, centerCell.col) && !isThrone(centerCell.row, centerCell.col)) {
-          const interactive = getInteractiveAtCell(others, centerCell.row, centerCell.col);
-          if (interactive && interactive.player !== piece.player) {
-            const top = getTopForCombat(others, centerCell.row, centerCell.col);
-            // Check if bat is paralyzing a piece - any paralyzed piece can be killed by any attacker
-            const batParalyzing = top?.type === 'bat' && top.paralyzing;
-            // Find paralyzed piece - use 'others' which excludes the moving ant, but includes all other pieces
-            const paralyzedPiece = batParalyzing ? others.find(p => p.id === top.paralyzing && p.player !== piece.player) : null;
-            // Allow attack if: can kill top piece normally, OR can attack shielded cell, OR can kill paralyzed piece according to cycle
-            if (top) {
-              if (paralyzedPiece) {
-                // Paralyzed piece exists - check if attacker can kill it according to the kill cycle
-                if (canPieceKill('ant', paralyzedPiece.type) || canAttackShieldedCell('ant', top, others)) {
-                  hasAttackTarget = true;
-                }
-              } else if (canPieceKill('ant', top.type) || canAttackShieldedCell('ant', top, others)) {
-                hasAttackTarget = true;
-              }
+      const wingCells = getAntCells(nr, nc, orientation).filter(c => !(c.row === nr && c.col === nc));
+
+      // Inspect what's at the centre.
+      const interactive = getInteractiveAtCell(others, nr, nc);
+      let canAttack = false;
+      let centreEmpty = false;
+      // Set when we'd capture an enemy at the centre — its body+wings are
+      // about to vanish, so they don't count against our wing-fit check.
+      let dyingId: string | undefined;
+
+      if (!interactive) {
+        centreEmpty = true;
+      } else if (interactive.player !== piece.player) {
+        // Enemy at centre — kill-cycle / shielded / paralysed-under-bat
+        const top = getTopForCombat(others, nr, nc);
+        if (top) {
+          const batParalyzing = top.type === 'bat' && top.paralyzing;
+          const paralyzedPiece = batParalyzing
+            ? others.find(p => p.id === top.paralyzing && p.player !== piece.player)
+            : null;
+          if (paralyzedPiece) {
+            if (canPieceKill('ant', paralyzedPiece.type) || canAttackShieldedCell('ant', top, others)) {
+              canAttack = true;
+              dyingId = paralyzedPiece.id;
             }
-          } else if (interactive && interactive.player === piece.player) {
-            // Own bat paralyzing kill-cycle enemy → ant can lunge through
-            if (canLungeThroughOwnBat(piece, others, centerCell.row, centerCell.col)) {
-              hasAttackTarget = true;
-            } else {
-              blocked = true; // Own piece at center blocks the move
-            }
+          } else if (canPieceKill('ant', top.type) || canAttackShieldedCell('ant', top, others)) {
+            canAttack = true;
+            dyingId = top.id;
           }
+        }
+      } else {
+        // Own piece at centre — only legal target is our own bat paralysing
+        // a kill-cycle enemy (lunge). Anything else stops the slide.
+        if (canLungeThroughOwnBat(piece, others, nr, nc)) {
+          canAttack = true;
+          // The bat doesn't die — only the paralysed enemy does. Identify
+          // the paralysed piece so its wings (if it's an ant) don't block us.
+          const ownBat = others.find(p =>
+            p.type === 'bat' && p.player === piece.player && p.paralyzing && p.row === nr && p.col === nc
+          );
+          if (ownBat?.paralyzing) dyingId = ownBat.paralyzing;
+        } else {
+          break;
         }
       }
 
-      // THEN: Check all cells (including wings) for blockers, but allow move if hasAttackTarget
-      for (const cell of newCells) {
-        if (!isInBounds(cell.row, cell.col)) { 
-          if (!hasAttackTarget) { blocked = true; break; }
-          continue;
-        }
-        if (isBarrier(cell.row, cell.col)) { 
-          if (!hasAttackTarget) { blocked = true; break; }
-          continue;
-        }
-        if (isThrone(cell.row, cell.col)) { 
-          if (!hasAttackTarget) { blocked = true; break; }
-          continue;
-        }
+      // Wing cells must ALL fit. If any wing is blocked, the ant can't
+      // physically stand here — neither for a plain move nor for a kill.
+      // Previously the code allowed wing overlap when there was an attack
+      // target, which let the ant fold into invalid shapes after a capture
+      // (e.g. attacking an elephant that sat in front of a bat — the wing
+      // ended up on the bat).
+      const wingsFit = wingCells.every(c => wingCellFree(c.row, c.col, dyingId));
 
-        if (isAntWingAt(others, cell.row, cell.col)) { 
-          if (!hasAttackTarget) { blocked = true; break; }
-          continue;
-        }
-
-        // Skip center cell - already checked above
-        if (cell.row === nr && cell.col === nc) {
-          continue;
-        }
-
-        // Check for blockers on wing cells
-        const blocker = pieces.find(p => {
-          if (p.id === piece.id) return false;
-          // Exclude the butterfly that's shielding this ant
-          if (shieldingButterflyId && p.id === shieldingButterflyId) return false;
-          // Exclude pieces at the target cell (bat and paralyzed piece) - they're the attack target
-          if (p.row === nr && p.col === nc) return false;
-          if (p.type === 'ant') {
-            return getAntCells(p.row, p.col, p.orientation!).some(c => c.row === cell.row && c.col === cell.col);
-          }
-          return p.row === cell.row && p.col === cell.col;
-        });
-        if (blocker && !hasAttackTarget) { 
-          blocked = true; 
-          break; 
-        }
+      if (canAttack) {
+        if (wingsFit) moves.push({ row: nr, col: nc });
+        break; // can't slide past the attacked cell either way
       }
-
-      // If we have an attack target (including paralyzed pieces), allow the move even if some cells are blocked
-      // This ensures ants can attack paralyzed pieces regardless of kill cycle
-      if (blocked && !hasAttackTarget) break;
-      moves.push({ row: nr, col: nc });
-      if (hasAttackTarget) break;
+      if (centreEmpty) {
+        if (wingsFit) moves.push({ row: nr, col: nc });
+        continue;
+      }
+      break;
     }
   }
 
