@@ -56,11 +56,31 @@ export function ThemeDecorLayer({ decorKind, placement }: LayerProps) {
     { top: '86%', delay: '12s', duration: '13s' },
   ], []);
 
+  // Short shooting trails. All angles negative + leftward `left` +
+  // rightward translateX in the keyframe → each trail walks
+  // bottom-left → top-right. Doubled in count from the original
+  // four for a denser feel.
   const trails = useMemo(() => [
-    { top: '18%', left: '-25vw', angle: '-15deg', delay: '2s',  duration: '7s'  },
-    { top: '46%', left: '-25vw', angle: '-22deg', delay: '5s',  duration: '8s'  },
-    { top: '64%', left: '-25vw', angle: '-12deg', delay: '8s',  duration: '6s'  },
-    { top: '82%', left: '-25vw', angle: '-20deg', delay: '11s', duration: '7.5s' },
+    { top: '12%', left: '-25vw', angle: '-15deg', delay: '0.5s', duration: '6s'   },
+    { top: '24%', left: '-25vw', angle: '-22deg', delay: '2s',   duration: '7s'   },
+    { top: '38%', left: '-25vw', angle: '-18deg', delay: '4s',   duration: '7.5s' },
+    { top: '52%', left: '-25vw', angle: '-26deg', delay: '6s',   duration: '6.5s' },
+    { top: '64%', left: '-25vw', angle: '-12deg', delay: '8s',   duration: '6s'   },
+    { top: '74%', left: '-25vw', angle: '-20deg', delay: '10s',  duration: '8s'   },
+    { top: '84%', left: '-25vw', angle: '-28deg', delay: '12s',  duration: '7s'   },
+    { top: '92%', left: '-25vw', angle: '-16deg', delay: '14s',  duration: '6.5s' },
+  ], []);
+
+  // Long bottom-left → top-right ribbons. Different from the short
+  // trails: these stretch most of the screen width and read as
+  // continuous "lines" rather than streaks. Five at varied angles
+  // and delays so the diagonal cadence feels organic, not parallel.
+  const diagonals = useMemo(() => [
+    { angle: '-26deg', delay: '0s',  duration: '14s' },
+    { angle: '-32deg', delay: '4s',  duration: '17s' },
+    { angle: '-22deg', delay: '8s',  duration: '15s' },
+    { angle: '-36deg', delay: '12s', duration: '18s' },
+    { angle: '-28deg', delay: '16s', duration: '16s' },
   ], []);
 
   if (decorKind !== 'celestial') return null;
@@ -113,6 +133,17 @@ export function ThemeDecorLayer({ decorKind, placement }: LayerProps) {
             ['--zi-trail-angle' as string]: t.angle,
             animationDelay: t.delay,
             animationDuration: t.duration,
+          } as React.CSSProperties}
+        />
+      ))}
+      {diagonals.map((d, i) => (
+        <div
+          key={`d${i}`}
+          className="zi-celestial-diagonal"
+          style={{
+            ['--zi-diag-angle' as string]: d.angle,
+            animationDelay: d.delay,
+            animationDuration: d.duration,
           } as React.CSSProperties}
         />
       ))}

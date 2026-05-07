@@ -204,13 +204,19 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           >
             {t('tutorial.button')}
           </Link>
+          {/* Theme Store pill — uses the buttonRotate accent (the same
+              theme-driven gold/amber/white-on-black palette as the
+              "active tab" pill in SettingsPanel) so it pops against
+              every theme's background instead of blending into the
+              panelBg overlay. */}
           <Link
             href="/store"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
             style={{
-              background: theme.panelBg,
-              border: `1px solid ${theme.p2AccentBorder}`,
-              color: theme.p2Color,
+              background: theme.buttonRotateBg,
+              border: `1px solid ${theme.buttonRotateBorder}`,
+              color: theme.buttonRotateText,
+              boxShadow: `0 4px 14px ${theme.buttonRotateBorder}`,
             }}
           >
             {t('app.themeStore')}
