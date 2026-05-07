@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
@@ -10,6 +11,19 @@ import LoadingEmojis from './LoadingEmojis';
 import Avatar from './Avatar';
 import FriendDm from './FriendDm';
 
+/** Compact relative-time label — "now", "2m", "3h", "1d". The bell prefers
+ *  short labels so the row stays single-line on narrow screens. */
+function relTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 45 * 1000) return 'now';
+  const m = Math.floor(ms / 60_000);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
+}
+
 /** Top-bar notification bell. Shows a red badge with the total unread
  *  count, opens a dropdown with grouped notifications (friend requests
  *  + unread DMs), and lets the user act inline (Accept / Decline /
@@ -17,7 +31,8 @@ import FriendDm from './FriendDm';
 export default function NotificationBell() {
   const { user } = useUser();
   const { theme } = useSettings();
-  const { loading, friendRequests, unreadDms, totalUnread, refresh } = useNotifications();
+  const { loading, friendRequests, unreadDms, yourTurnGames, totalUnread, refresh } = useNotifications();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [dmTarget, setDmTarget] = useState<UnreadDmThread['friend'] | null>(null);
@@ -139,6 +154,52 @@ export default function NotificationBell() {
                   </div>
                 ) : (
                   <>
+                    {yourTurnGames.length > 0 && (
+                      <div>
+                        <div
+                          className="px-4 py-2 text-xs font-bold uppercase tracking-wider opacity-70"
+                          style={{ borderBottom: `1px solid ${theme.panelBorder}` }}
+                        >
+                          🎯 Your move · {yourTurnGames.length}
+                        </div>
+                        {yourTurnGames.map(yt => (
+                          <button
+                            key={yt.id}
+                            onClick={() => {
+                              setOpen(false);
+                              router.push(`/play/${yt.gameId}`);
+                            }}
+                            className="px-4 py-3 flex items-center gap-3 w-full text-left transition-colors hover:bg-white/5"
+                            style={{ borderBottom: `1px solid ${theme.panelBorder}` }}
+                          >
+                            <Avatar
+                              url={yt.actor?.avatar_url ?? null}
+                              name={yt.actor?.display_name ?? null}
+                              size={36}
+                              accent="p1"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm truncate">
+                                  vs {yt.actor?.display_name ?? 'Opponent'}
+                                </span>
+                                <span
+                                  className="text-[10px] font-extrabold rounded-full px-1.5 py-0.5 shrink-0"
+                                  style={{ background: theme.p1Color, color: theme.buttonRotateText }}
+                                >
+                                  YOUR TURN
+                                </span>
+                              </div>
+                              <div className="text-xs opacity-70 truncate">
+                                @{yt.actor?.username ?? '?'} moved {relTime(yt.createdAt)} ago
+                              </div>
+                            </div>
+                            <span aria-hidden style={{ color: theme.p1Color }}>↗</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {friendRequests.length > 0 && (
                       <div>
                         <div

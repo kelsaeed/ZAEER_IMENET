@@ -12,7 +12,10 @@ import {
   findGameByInviteCode,
   quickMatch,
   listMyActiveGames,
+  listAsyncOpenRooms,
   ActiveGame,
+  AsyncOpenRoom,
+  GameMode,
 } from '@/lib/supabase/games';
 import {
   listFriendships,
@@ -43,6 +46,19 @@ export default function LobbyPage() {
   const [tab, setTab] = useState<LobbyTab>('play');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Live vs async mode for the create / quick-match buttons. Persists so
+  // a player who likes correspondence games doesn't have to re-pick on
+  // every visit. Defaults to live (the existing behaviour).
+  const [mode, setMode] = useState<GameMode>('live');
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = window.localStorage.getItem('zaeer.lobbyMode');
+    if (saved === 'live' || saved === 'async') setMode(saved);
+  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('zaeer.lobbyMode', mode);
+  }, [mode]);
 
   // Bounce unauthenticated visitors.
   useEffect(() => {
@@ -55,26 +71,26 @@ export default function LobbyPage() {
     setError(null);
     setBusy('quick');
     try {
-      const { gameId } = await quickMatch({ userId: user.id });
+      const { gameId } = await quickMatch({ userId: user.id, mode });
       router.push(`/play/${gameId}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not start a quick match.');
       setBusy(null);
     }
-  }, [user, busy, router]);
+  }, [user, busy, router, mode]);
 
   const handleCreate = useCallback(async (isPublic: boolean) => {
     if (!user || busy) return;
     setError(null);
     setBusy(isPublic ? 'public' : 'private');
     try {
-      const game = await createOnlineGame({ userId: user.id, isPublic });
+      const game = await createOnlineGame({ userId: user.id, isPublic, mode });
       router.push(`/play/${game.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not create game.');
       setBusy(null);
     }
-  }, [user, busy, router]);
+  }, [user, busy, router, mode]);
 
   return (
     <main
@@ -125,6 +141,8 @@ export default function LobbyPage() {
           <PlayTab
             theme={theme}
             busy={busy}
+            mode={mode}
+            setMode={setMode}
             onQuickMatch={handleQuickMatch}
             onCreate={handleCreate}
             setBusy={setBusy}
@@ -171,10 +189,12 @@ function TabBtn({ label, active, onClick, theme }: { label: string; active: bool
 // ─── Play tab ─────────────────────────────────────────────────────────────
 
 function PlayTab({
-  theme, busy, onQuickMatch, onCreate, setBusy, setError, user, router,
+  theme, busy, mode, setMode, onQuickMatch, onCreate, setBusy, setError, user, router,
 }: {
   theme: ReturnType<typeof useSettings>['theme'];
   busy: string | null;
+  mode: GameMode;
+  setMode: (m: GameMode) => void;
   onQuickMatch: () => void;
   onCreate: (isPublic: boolean) => void;
   setBusy: (b: string | null) => void;
@@ -185,6 +205,10 @@ function PlayTab({
   const [joinCode, setJoinCode] = useState('');
   const [games, setGames] = useState<PublicGame[]>([]);
   const [gamesLoading, setGamesLoading] = useState(true);
+  // Open async (correspondence) rooms — separate panel so live players
+  // looking for an instant match don't trip into a turn-a-day game.
+  const [asyncRooms, setAsyncRooms] = useState<AsyncOpenRoom[]>([]);
+  const [asyncLoading, setAsyncLoading] = useState(true);
   // Caller's in-progress games — surfaced at the top so a player who hit
   // Main Menu mid-match can hop right back in.
   const [active, setActive] = useState<ActiveGame[] | null>(null);
@@ -198,23 +222,31 @@ function PlayTab({
     return () => { mounted = false; };
   }, [user]);
 
-  // Live list of public open games (small section, collapsed).
+  // Live list of public open games (small section, collapsed). One channel
+  // covers both the live and async lists — every games-table change just
+  // re-runs both fetches.
   useEffect(() => {
     if (!user) return;
     const supabase = getSupabaseBrowser();
     let mounted = true;
     async function refresh() {
-      const { data } = await supabase
-        .from('games')
-        .select('id, player1_id, player1:profiles!games_player1_id_fkey(username, display_name, avatar_url)')
-        .eq('status', 'waiting')
-        .eq('is_public', true)
-        .neq('player1_id', user!.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
+      const [{ data: liveData }, asyncList] = await Promise.all([
+        supabase
+          .from('games')
+          .select('id, player1_id, player1:profiles!games_player1_id_fkey(username, display_name, avatar_url)')
+          .eq('status', 'waiting')
+          .eq('is_public', true)
+          .eq('mode', 'live')
+          .neq('player1_id', user!.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        listAsyncOpenRooms({ userId: user!.id }),
+      ]);
       if (!mounted) return;
-      setGames((data as unknown as PublicGame[]) ?? []);
+      setGames((liveData as unknown as PublicGame[]) ?? []);
       setGamesLoading(false);
+      setAsyncRooms(asyncList);
+      setAsyncLoading(false);
     }
     refresh();
     const ch = supabase
@@ -260,6 +292,7 @@ function PlayTab({
     }
   }
 
+  const isAsync = mode === 'async';
   return (
     <>
       {/* Resume strip — shown only when the caller has at least one match
@@ -269,12 +302,20 @@ function PlayTab({
         <ResumeGames games={active} theme={theme} router={router} />
       )}
 
+      {/* Live ↔ Async mode toggle. Drives Quick Match + Play with Friend
+          + the public-rooms list. Async games stay around even when the
+          host walks away — opponent gets a "your turn" bell ping when
+          they next come back. */}
+      <ModeToggle mode={mode} setMode={setMode} theme={theme} />
+
       {/* The 3 hero actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <ActionCard
-          icon="🎯"
-          title="Quick Match"
-          desc="Find or create the fastest available match. Starts immediately."
+          icon={isAsync ? '📨' : '🎯'}
+          title={isAsync ? 'Quick Async Match' : 'Quick Match'}
+          desc={isAsync
+            ? 'Hop into the oldest open async room, or create one. Make a move and walk away.'
+            : 'Find or create the fastest available match. Starts immediately.'}
           accent
           loading={busy === 'quick'}
           theme={theme}
@@ -283,7 +324,9 @@ function PlayTab({
         <ActionCard
           icon="👥"
           title="Play with Friend"
-          desc="Create a private room and share the 6-char code."
+          desc={isAsync
+            ? 'Private async room — share the code and play whenever.'
+            : 'Create a private room and share the 6-char code.'}
           loading={busy === 'private'}
           theme={theme}
           onClick={() => onCreate(false)}
@@ -323,6 +366,86 @@ function PlayTab({
           </div>
         </div>
       </div>
+
+      {/* Open async (correspondence) rooms — these are the "play whenever"
+          rooms the lobby surfaces so players don't have to wait around for
+          a live opponent. Open by default; the live list below stays
+          collapsed because it churns fast and is mostly noise. */}
+      <details className="mb-4" open>
+        <summary className="cursor-pointer text-sm font-semibold opacity-80 hover:opacity-100">
+          📨 Correspondence games ({asyncLoading ? '…' : asyncRooms.length})
+        </summary>
+        <div className="mt-3">
+          {asyncLoading ? (
+            <div className="flex items-center justify-center py-6"><LoadingEmojis size={22} /></div>
+          ) : asyncRooms.length === 0 ? (
+            <div className="text-sm opacity-60 py-3 text-center">
+              No async rooms yet — be the first to start one.
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {asyncRooms.map(g => (
+                <motion.div
+                  key={g.id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl p-2.5 flex items-center gap-3"
+                  style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+                >
+                  <Avatar
+                    url={g.player1?.avatar_url ?? null}
+                    name={g.player1?.display_name ?? null}
+                    size={36}
+                    accent="p2"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold truncate text-sm flex items-center gap-2">
+                      {g.player1?.display_name ?? 'Anonymous'}
+                      <span
+                        className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0"
+                        style={{
+                          background: theme.p1AccentBg,
+                          border: `1px solid ${theme.p1AccentBorder}`,
+                          color: theme.p1Color,
+                        }}
+                      >
+                        ASYNC
+                      </span>
+                    </div>
+                    <div className="text-xs opacity-70 truncate">
+                      @{g.player1?.username ?? '?'}
+                      {g.player1?.rating != null ? ` · ★ ${g.player1.rating}` : ''}
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!user) return;
+                      setError(null);
+                      setBusy(g.id);
+                      try {
+                        await joinOnlineGame({ userId: user.id, gameId: g.id });
+                        router.push(`/play/${g.id}`);
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : 'Could not join.');
+                        setBusy(null);
+                      }
+                    }}
+                    disabled={busy === g.id}
+                    className="rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-50 inline-flex items-center justify-center min-w-[60px]"
+                    style={{
+                      background: theme.buttonRotateBg,
+                      border: `1px solid ${theme.buttonRotateBorder}`,
+                      color: theme.buttonRotateText,
+                    }}
+                  >
+                    {busy === g.id ? <LoadingEmojis size={12} gap={2} /> : 'Join'}
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </details>
 
       {/* Open public games — secondary list */}
       <details className="mb-4">
@@ -374,6 +497,61 @@ function PlayTab({
       </details>
     </>
   );
+}
+
+function ModeToggle({ mode, setMode, theme }: { mode: GameMode; setMode: (m: GameMode) => void; theme: ReturnType<typeof useSettings>['theme'] }) {
+  return (
+    <div
+      className="rounded-xl p-3 mb-4 flex items-center gap-3 flex-wrap"
+      style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+    >
+      <div className="text-xs font-bold uppercase tracking-wider opacity-70 shrink-0">Mode</div>
+      <div className="flex gap-1 rounded-lg p-1 flex-1 min-w-[220px]" style={{ background: theme.inputBg, border: `1px solid ${theme.buttonBorder}` }}>
+        <button
+          onClick={() => setMode('live')}
+          className="flex-1 rounded-md py-1.5 px-3 text-xs font-bold transition-colors"
+          style={{
+            background: mode === 'live' ? theme.buttonRotateBg : 'transparent',
+            color: mode === 'live' ? theme.buttonRotateText : theme.textPrimary,
+            opacity: mode === 'live' ? 1 : 0.7,
+          }}
+        >
+          ⚡ Live
+        </button>
+        <button
+          onClick={() => setMode('async')}
+          className="flex-1 rounded-md py-1.5 px-3 text-xs font-bold transition-colors"
+          style={{
+            background: mode === 'async' ? theme.buttonRotateBg : 'transparent',
+            color: mode === 'async' ? theme.buttonRotateText : theme.textPrimary,
+            opacity: mode === 'async' ? 1 : 0.7,
+          }}
+        >
+          📨 Async
+        </button>
+      </div>
+      <div className="text-xs opacity-65 basis-full sm:basis-auto sm:flex-1 sm:min-w-[180px]">
+        {mode === 'live'
+          ? 'Both players sit down at the same time.'
+          : 'Make a move and walk away — opponent gets a bell when it\'s their turn.'}
+      </div>
+    </div>
+  );
+}
+
+/** Tiny relative-time helper used by the resume strip. Same idea as the
+ *  one inside NotificationBell — kept local to avoid a shared util file
+ *  for two places. */
+function lobbyRel(iso: string | null): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 45 * 1000) return 'just now';
+  const m = Math.floor(ms / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 function ActionCard({
@@ -466,12 +644,28 @@ function ResumeGames({
                 accent={accent}
               />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold truncate">vs {oppName}</div>
+                <div className="text-sm font-bold truncate flex items-center gap-2">
+                  <span className="truncate">vs {oppName}</span>
+                  {g.mode === 'async' && (
+                    <span
+                      className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0"
+                      style={{
+                        background: theme.p1AccentBg,
+                        border: `1px solid ${theme.p1AccentBorder}`,
+                        color: theme.p1Color,
+                      }}
+                    >
+                      ASYNC
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs opacity-75 truncate flex items-center gap-2">
                   {g.status === 'waiting' ? (
                     <>⏳ Waiting for opponent</>
                   ) : g.myTurn ? (
                     <span style={{ color: accentColor, fontWeight: 700 }}>● Your turn</span>
+                  ) : g.mode === 'async' && g.last_move_at ? (
+                    <>Opponent moved {lobbyRel(g.last_move_at)}</>
                   ) : (
                     <>Turn {g.current_turn}</>
                   )}

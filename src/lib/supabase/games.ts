@@ -4,17 +4,25 @@ import { createInitialState } from '@/game/initialState';
 import { getSupabaseBrowser } from './client';
 
 export type GameStatus = 'waiting' | 'playing' | 'finished' | 'abandoned';
+export type GameMode   = 'live' | 'async';
 
 export interface GameRow {
   id: string;
   player1_id: string | null;
   player2_id: string | null;
   status: GameStatus;
+  /** 'live' — sit-down realtime match. 'async' — correspondence; opponent
+   *  gets a notification when it's their turn and can come back later. */
+  mode: GameMode;
   winner_id: string | null;
   state: GameState;
   current_turn: number;
   is_public: boolean;
   invite_code: string | null;
+  /** Set by the DB trigger whenever the turn counter advances. */
+  last_move_at: string | null;
+  /** Player whose turn it is (mirror of state.currentPlayer, set by trigger). */
+  awaiting_player_id: string | null;
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -35,10 +43,13 @@ export function generateInviteCode(): string {
   return s;
 }
 
-/** Create a new online game. Caller becomes player 1. */
+/** Create a new online game. Caller becomes player 1. Defaults to a live
+ *  match; pass `mode: 'async'` for a correspondence game (opponent gets
+ *  a "your turn" bell notification after each move). */
 export async function createOnlineGame(opts: {
   userId: string;
   isPublic: boolean;
+  mode?: GameMode;
 }): Promise<GameRow> {
   const supabase = getSupabaseBrowser();
   // Build a clean playing state — phase 'playing', currentPlayer 1, fresh pieces.
@@ -55,6 +66,7 @@ export async function createOnlineGame(opts: {
       state: initial,
       current_turn: 0,
       is_public: opts.isPublic,
+      mode: opts.mode ?? 'live',
       invite_code: generateInviteCode(),
     })
     .select()
@@ -116,18 +128,20 @@ export async function saveGameState(opts: {
   if (error) throw new Error(error.message);
 }
 
-/** Quick Match: try to join the oldest open public game, or create one.
- *  This is the "matchmaking" entry point — the user just gets routed to
- *  a playable room as fast as possible. */
-export async function quickMatch(opts: { userId: string }): Promise<{ gameId: string; created: boolean }> {
+/** Quick Match: try to join the oldest open public game in the requested
+ *  mode, or create one. Live and async never mix in the same room — a
+ *  player picking "Quick Match — Live" doesn't want to land in a
+ *  correspondence game and vice-versa. */
+export async function quickMatch(opts: { userId: string; mode?: GameMode }): Promise<{ gameId: string; created: boolean }> {
   const supabase = getSupabaseBrowser();
+  const mode: GameMode = opts.mode ?? 'live';
 
-  // 1. Find an open public game we didn't create.
   const { data: open, error: searchError } = await supabase
     .from('games')
     .select('id')
     .eq('status', 'waiting')
     .eq('is_public', true)
+    .eq('mode', mode)
     .neq('player1_id', opts.userId)
     .is('player2_id', null)
     .order('created_at', { ascending: true })
@@ -144,18 +158,53 @@ export async function quickMatch(opts: { userId: string }): Promise<{ gameId: st
     }
   }
 
-  // 2. None available (or join lost a race) — create a public game.
-  const newGame = await createOnlineGame({ userId: opts.userId, isPublic: true });
+  const newGame = await createOnlineGame({ userId: opts.userId, isPublic: true, mode });
   return { gameId: newGame.id, created: true };
+}
+
+/** List open async rooms anyone can join. Powers the "Correspondence
+ *  games" lobby panel — you grab one, play your move, and walk away.
+ *  Returns oldest first so rooms don't sit forever waiting for a joiner. */
+export interface AsyncOpenRoom {
+  id: string;
+  created_at: string;
+  player1: {
+    id: string;
+    username: string;
+    display_name: string;
+    avatar_url: string | null;
+    rating: number;
+  } | null;
+}
+export async function listAsyncOpenRooms(opts: { userId: string; limit?: number }): Promise<AsyncOpenRoom[]> {
+  const supabase = getSupabaseBrowser();
+  const { data, error } = await supabase
+    .from('games')
+    .select(`
+      id, created_at,
+      player1:profiles!games_player1_id_fkey(id, username, display_name, avatar_url, rating)
+    `)
+    .eq('status', 'waiting')
+    .eq('is_public', true)
+    .eq('mode', 'async')
+    .neq('player1_id', opts.userId)
+    .is('player2_id', null)
+    .order('created_at', { ascending: true })
+    .limit(opts.limit ?? 20);
+  if (error || !data) return [];
+  return data as unknown as AsyncOpenRoom[];
 }
 
 export interface ActiveGame {
   id: string;
   status: GameStatus;
+  mode: GameMode;
   current_turn: number;
   is_public: boolean;
   invite_code: string | null;
   updated_at: string;
+  /** When the last move was played; null if nobody has moved yet. */
+  last_move_at: string | null;
   /** True if it's the caller's turn to play. */
   myTurn: boolean;
   /** Side the caller is on (so the lobby can colour the chip). */
@@ -182,7 +231,7 @@ export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
   const { data, error } = await supabase
     .from('games')
     .select(`
-      id, status, current_turn, is_public, invite_code, updated_at,
+      id, status, mode, current_turn, is_public, invite_code, updated_at, last_move_at,
       player1_id, player2_id, state,
       p1:profiles!games_player1_id_fkey(id, username, display_name, avatar_url),
       p2:profiles!games_player2_id_fkey(id, username, display_name, avatar_url)
@@ -195,10 +244,12 @@ export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
   type Row = {
     id: string;
     status: GameStatus;
+    mode: GameMode;
     current_turn: number;
     is_public: boolean;
     invite_code: string | null;
     updated_at: string;
+    last_move_at: string | null;
     player1_id: string | null;
     player2_id: string | null;
     state: GameState | null;
@@ -213,10 +264,12 @@ export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
     return {
       id: r.id,
       status: r.status,
+      mode: r.mode ?? 'live',
       current_turn: r.current_turn,
       is_public: r.is_public,
       invite_code: r.invite_code,
       updated_at: r.updated_at,
+      last_move_at: r.last_move_at,
       myTurn,
       myPlayer,
       opponent: opp,

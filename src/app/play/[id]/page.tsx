@@ -14,6 +14,7 @@ import NotificationBell from '@/components/NotificationBell';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
 import MatchChat from '@/components/MatchChat';
+import { markGameNotificationsRead } from '@/lib/supabase/notifications';
 import type { Player } from '@/game/types';
 import type { Theme } from '@/game/themes';
 
@@ -67,6 +68,17 @@ export default function OnlineGamePage() {
   useEffect(() => {
     if (!userLoading && !user) router.replace(`/login?next=/play/${gameId}`);
   }, [userLoading, user, router, gameId]);
+
+  // Silence the bell — sitting in the match clears any "your turn" pings
+  // for this game so the badge drops the moment the player walks in. The
+  // server trigger fires a fresh ping on every async move, so we re-mark
+  // read on every game-row change too: if the opponent moves while you're
+  // already in the match, the just-emitted ping is silenced before you
+  // can even see it.
+  useEffect(() => {
+    if (!user || !gameId) return;
+    markGameNotificationsRead({ userId: user.id, gameId }).catch(() => {});
+  }, [user, gameId, game?.updated_at]);
 
   // When the match number changes (rematch started), bring back the win
   // modal pill so the next match's result will surface again.

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useUser } from './useUser';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { listFriendships, FriendProfile } from '@/lib/supabase/friends';
+import { listYourTurnNotifications, YourTurnNotification } from '@/lib/supabase/notifications';
 
 export interface UnreadDmThread {
   /** The other user. */
@@ -24,6 +25,10 @@ interface NotificationsState {
   friendRequests: FriendProfile[];
   /** DMs grouped by sender that are unread (recipient = me, read_at = null). */
   unreadDms: UnreadDmThread[];
+  /** Async games where it's your turn and you haven't opened the match
+   *  since the opponent's last move. One ping per game; emptied when the
+   *  match page marks them read. */
+  yourTurnGames: YourTurnNotification[];
   /** Sum of all individual notifications — used for the badge. */
   totalUnread: number;
   /** Manual refresh — exposed so child UIs can re-pull after acting on a notif. */
@@ -51,12 +56,14 @@ export function useNotifications(): NotificationsState {
   const { user } = useUser();
   const [friendRequests, setFriendRequests] = useState<FriendProfile[]>([]);
   const [unreadDms, setUnreadDms] = useState<UnreadDmThread[]>([]);
+  const [yourTurnGames, setYourTurnGames] = useState<YourTurnNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!user) {
       setFriendRequests([]);
       setUnreadDms([]);
+      setYourTurnGames([]);
       setLoading(false);
       return;
     }
@@ -68,6 +75,13 @@ export function useNotifications(): NotificationsState {
       setFriendRequests(all.filter(f => f.status === 'pending' && !f.outgoing));
     } catch {
       setFriendRequests([]);
+    }
+
+    // 1b. Async "your turn" pings.
+    try {
+      setYourTurnGames(await listYourTurnNotifications(user.id));
+    } catch {
+      setYourTurnGames([]);
     }
 
     // 2. Unread DMs grouped by sender.
@@ -152,6 +166,27 @@ export function useNotifications(): NotificationsState {
         },
         () => refresh(),
       )
+      // Async "your turn" pings — INSERT (new turn), UPDATE (mark-read).
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => refresh(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => refresh(),
+      )
       .subscribe();
 
     return () => {
@@ -160,7 +195,9 @@ export function useNotifications(): NotificationsState {
   }, [user, refresh]);
 
   const totalUnread =
-    friendRequests.length + unreadDms.reduce((s, d) => s + d.unreadCount, 0);
+    friendRequests.length
+    + unreadDms.reduce((s, d) => s + d.unreadCount, 0)
+    + yourTurnGames.length;
 
-  return { loading, friendRequests, unreadDms, totalUnread, refresh };
+  return { loading, friendRequests, unreadDms, yourTurnGames, totalUnread, refresh };
 }
