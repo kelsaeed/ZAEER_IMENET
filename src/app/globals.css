@@ -135,3 +135,20 @@ input, select, textarea {
     animation: none !important;
   }
 }
+
+/* Decorative icons / emojis carry `aria-hidden="true"` by convention.
+ * Without this rule, hovering a standalone emoji glyph shows the text
+ * I-beam cursor (because emojis are characters), which feels broken on
+ * non-interactive icons like the title crown 👑.
+ *
+ * `pointer-events: none` makes the emoji span transparent to the mouse,
+ * so the cursor reflects whatever's underneath:
+ *   - inside a button     → the button's `pointer` cursor
+ *   - inside plain prose  → the parent's default cursor
+ *   - free-floating decor → the page's default cursor (no I-beam)
+ *
+ * `user-select: none` prevents accidental drag-selection of the icon. */
+[aria-hidden="true"] {
+  pointer-events: none;
+  user-select: none;
+}

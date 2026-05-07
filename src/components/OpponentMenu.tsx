@@ -45,6 +45,10 @@ interface Props {
   /** Pixel anchor for the compact popover. Coordinates are page-relative
    *  (i.e. clientX/Y from the click event). Ignored in 'full' mode. */
   anchor?: { x: number; y: number };
+  /** Game ID the menu is anchored on, used to wire the "Open full page"
+   *  link with ?from=match&gameId=X so the profile page's back button
+   *  knows to come back to this match. */
+  gameId?: string | null;
 }
 
 interface PublicProfile {
@@ -62,7 +66,7 @@ interface PublicProfile {
 
 export default function OpponentMenu({
   open, initialMode = 'compact', onClose,
-  opponentId, opponentUsername, opponentName, opponentAvatarUrl, anchor,
+  opponentId, opponentUsername, opponentName, opponentAvatarUrl, anchor, gameId,
 }: Props) {
   const { user } = useUser();
   const { theme, isRTL, t } = useSettings();
@@ -470,7 +474,13 @@ export default function OpponentMenu({
                         <ActionButton onClick={handleBlock} busyKey="block" label={blockLabel} icon={blocked ? '✅' : '🚫'} danger={!blocked} />
                         {opponentUsername && (
                           <Link
-                            href={`/u/${opponentUsername}`}
+                            href={
+                              gameId
+                                ? `/u/${opponentUsername}?from=match&gameId=${gameId}`
+                                : `/u/${opponentUsername}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="rounded-lg px-3 py-2.5 text-sm font-semibold inline-flex items-center gap-3 transition-transform hover:scale-[1.01]"
                             style={{
                               background: theme.panelBg,

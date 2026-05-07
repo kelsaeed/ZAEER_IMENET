@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
@@ -28,8 +28,24 @@ export default function PublicProfilePage() {
   const params = useParams<{ username: string }>();
   const username = params?.username ?? '';
   const router = useRouter();
+  const search = useSearchParams();
   const { user } = useUser();
   const { theme, isRTL, t } = useSettings();
+
+  // Context-aware "back" button. The caller passes ?from=match&gameId=X
+  // (from the in-match opponent menu, opens in a new tab) or ?from=friends
+  // (from the Friends tab in the lobby). Anything else falls back to home.
+  const back = useMemo(() => {
+    const from = search?.get('from');
+    const gameId = search?.get('gameId');
+    if (from === 'match' && gameId) {
+      return { label: '← Back to game', href: `/play/${gameId}` };
+    }
+    if (from === 'friends') {
+      return { label: '← Back to friends', href: '/play?tab=friends' };
+    }
+    return { label: '← Home', href: '/' };
+  }, [search]);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,11 +119,11 @@ export default function PublicProfilePage() {
           <div className="text-4xl mb-3">😕</div>
           <div className="font-bold mb-3">{error}</div>
           <Link
-            href="/"
+            href={back.href}
             className="rounded-lg px-4 py-2 inline-block font-semibold"
             style={{ background: theme.buttonRotateBg, border: `1px solid ${theme.buttonRotateBorder}`, color: theme.buttonRotateText }}
           >
-            ← Home
+            {back.label}
           </Link>
         </div>
       </main>
@@ -129,7 +145,7 @@ export default function PublicProfilePage() {
       </div>
 
       <div className="max-w-xl mx-auto">
-        <Link href="/" className="text-sm opacity-70 hover:opacity-100">← Home</Link>
+        <Link href={back.href} className="text-sm opacity-70 hover:opacity-100">{back.label}</Link>
 
         <motion.div
           initial={{ opacity: 0, y: 10 }}

@@ -497,6 +497,7 @@ export default function OnlineGamePage() {
         opponentUsername={opponent?.username ?? null}
         opponentName={opponent?.display_name ?? 'Opponent'}
         opponentAvatarUrl={opponent?.avatar_url ?? null}
+        gameId={gameId}
       />
 
       {/* In-match chat (floating button + slide-in drawer) */}

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
@@ -45,9 +45,12 @@ type LobbyTab = 'play' | 'friends';
 
 export default function LobbyPage() {
   const router = useRouter();
+  const search = useSearchParams();
   const { user, profile, loading: userLoading } = useUser();
   const { theme, isRTL, t } = useSettings();
-  const [tab, setTab] = useState<LobbyTab>('play');
+  // Initial tab respects ?tab=friends so the profile page's "Back to
+  // friends" button lands the user where they came from.
+  const [tab, setTab] = useState<LobbyTab>(() => (search?.get('tab') === 'friends' ? 'friends' : 'play'));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   // The single "Create / Match" modal handles mode + timer + which button
@@ -827,7 +830,7 @@ function FriendsTab({
                   <div className="text-xs opacity-70 truncate">@{r.username} · ★ {r.rating}</div>
                 </div>
                 <Link
-                  href={`/u/${r.username}`}
+                  href={`/u/${r.username}?from=friends`}
                   className="text-xs opacity-70 hover:opacity-100 px-2"
                 >
                   View
@@ -944,11 +947,11 @@ function FriendRow({
       className="rounded-xl p-3 flex items-center gap-2"
       style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
     >
-      <Link href={`/u/${friend.username}`} className="shrink-0">
+      <Link href={`/u/${friend.username}?from=friends`} className="shrink-0">
         <Avatar url={friend.avatar_url} name={friend.display_name} size={42} />
       </Link>
       <div className="flex-1 min-w-0">
-        <Link href={`/u/${friend.username}`} className="font-bold truncate block hover:underline">
+        <Link href={`/u/${friend.username}?from=friends`} className="font-bold truncate block hover:underline">
           {friend.display_name}
         </Link>
         <div className="text-xs opacity-70 truncate">@{friend.username} · ★ {friend.rating}</div>
