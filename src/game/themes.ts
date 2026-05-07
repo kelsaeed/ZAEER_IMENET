@@ -365,6 +365,66 @@ export const THEMES: Theme[] = [
     selectedRing: '#fbbf24',
   },
   {
+    // ─── Premium light theme — paired with <ThemeDecor/> for animated
+    //     sparkles, sliding ribbons, top bloom and an aurora curtain.
+    //     This is the only LIGHT theme in the catalog (every other
+    //     theme runs a dark gradient) so it should immediately feel
+    //     different the moment it loads. The decor overlay is gated
+    //     to `themeId === 'celestial'` and renders nothing for the
+    //     other six. Glows are dialled noticeably stronger than the
+    //     rest of the catalog so pieces still pop on a light board.
+    id: 'celestial',
+    name: 'Celestial Glow',
+    bgGradient: 'radial-gradient(ellipse at top, #fff5e1 0%, #ffd9e8 32%, #e9d5ff 64%, #c7e9ff 100%)',
+    textPrimary: '#2a0f3f',
+    textMuted: 'rgba(42,15,63,0.65)',
+    boardBorder: 'rgba(217,119,6,0.85)',                    // rose-gold rim
+    boardBg: 'rgba(255,250,250,0.45)',
+    cellLight: '#fff8f3',                                    // cream pearl
+    cellDark: '#e8c5d4',                                     // rose dust
+    throneBg: '#d97706',                                     // amber sun
+    throneBorder: 'rgba(217,119,6,0.95)',
+    throneGlow: 'radial-gradient(ellipse at center, rgba(253,224,71,0.75) 0%, rgba(244,114,182,0.35) 35%, rgba(167,139,250,0.2) 60%, transparent 80%)',
+    barrierBg: '#cba8e0',                                    // dusky lavender
+    barrierBorder: 'rgba(139,92,246,0.7)',
+    validMoveFill: 'rgba(52,211,153,0.5)',                   // mint
+    validMoveBorder: 'rgba(5,150,105,0.95)',
+    attackFill: 'rgba(236,72,153,0.45)',                     // rose
+    attackBorder: 'rgba(190,18,60,0.9)',
+    p1Color: '#b45309',                                      // rich amber-gold
+    p1Bg: 'rgba(251,191,36,0.28)',
+    p1BgSelected: 'rgba(251,191,36,0.6)',
+    p1Border: 'rgba(180,83,9,0.95)',
+    // Double-stack glow — outer halo + inner core — so pieces look
+    // like they're emitting light rather than being lit by it.
+    p1Glow: '0 0 22px 8px rgba(251,191,36,0.85), 0 0 8px 2px rgba(180,83,9,0.65)',
+    p1AccentBg: 'linear-gradient(135deg, rgba(251,191,36,0.5), rgba(217,119,6,0.15))',
+    p1AccentBorder: 'rgba(180,83,9,0.7)',
+    p2Color: '#6d28d9',                                      // royal violet
+    p2Bg: 'rgba(167,139,250,0.28)',
+    p2BgSelected: 'rgba(167,139,250,0.6)',
+    p2Border: 'rgba(109,40,217,0.95)',
+    p2Glow: '0 0 22px 8px rgba(167,139,250,0.85), 0 0 8px 2px rgba(109,40,217,0.65)',
+    p2AccentBg: 'linear-gradient(135deg, rgba(167,139,250,0.5), rgba(91,33,182,0.15))',
+    p2AccentBorder: 'rgba(109,40,217,0.7)',
+    panelBg: 'linear-gradient(135deg, rgba(255,255,255,0.6), rgba(255,235,240,0.55))',
+    panelBorder: 'rgba(180,83,9,0.35)',
+    inputBg: '#fff8f3',
+    inputText: '#2a0f3f',
+    buttonBg: 'rgba(255,255,255,0.55)',
+    buttonBorder: 'rgba(139,92,246,0.35)',
+    buttonRotateBg: 'rgba(251,191,36,0.4)',
+    buttonRotateBorder: 'rgba(180,83,9,0.7)',
+    buttonRotateText: '#92400e',
+    buttonEndTurnBg: 'rgba(244,114,182,0.35)',
+    buttonEndTurnBorder: 'rgba(190,18,60,0.6)',
+    buttonEndTurnText: '#9f1239',
+    buttonSwitchBg: 'rgba(167,139,250,0.4)',
+    buttonSwitchBorder: 'rgba(109,40,217,0.7)',
+    buttonSwitchText: '#5b21b6',
+    selectedRing: '#d97706',
+  },
+  {
     id: 'royal',
     name: 'Royal Purple',
     bgGradient: 'linear-gradient(135deg, #14091f 0%, #2c1845 50%, #14091f 100%)',

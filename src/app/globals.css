@@ -277,6 +277,152 @@ input, select, textarea {
   will-change: transform, opacity;
 }
 
+/* ─── Celestial Glow theme decor ──────────────────────────────────────
+ * Animated overlay rendered by <ThemeDecor/> only when themeId
+ * === 'celestial'. Five layers, all pointer-events: none so they
+ * never intercept a click:
+ *   1. .zi-celestial-bloom   — a slow horizontal-drifting top bloom
+ *   2. .zi-celestial-curtain — bottom aurora curtain (3 strands)
+ *   3. .zi-celestial-sparkle — twinkling dots field
+ *   4. .zi-celestial-ribbon  — horizontal "lines" sweeping across
+ *   5. .zi-celestial-trail   — diagonal short streaks (shooting trails)
+ *
+ * Layers blend with `mix-blend-mode: screen` against the light base
+ * so they brighten rather than tint. Heavy use of will-change so the
+ * GPU does the work and the board stays smooth at 60fps. */
+
+.zi-celestial-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+  /* Screen blend keeps the overlay luminous on the light base. */
+  mix-blend-mode: screen;
+}
+
+.zi-celestial-bloom {
+  position: absolute;
+  inset: -10% -10% auto -10%;
+  height: 55vh;
+  background:
+    radial-gradient(ellipse 55% 70% at 30% 0%, rgba(253,224,71,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 70% 0%, rgba(244,114,182,0.45) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 50% 0%, rgba(167,139,250,0.4) 0%, transparent 65%);
+  filter: blur(6px);
+  animation: zi-celestial-bloom 14s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+@keyframes zi-celestial-bloom {
+  0%   { transform: translateX(-3%) scale(1);    opacity: 0.7; }
+  100% { transform: translateX(3%)  scale(1.06); opacity: 1;   }
+}
+
+.zi-celestial-curtain {
+  position: absolute;
+  inset: auto 0 -5% 0;
+  height: 38vh;
+  background:
+    /* Three vertical strands at varying widths/positions. They share
+       the same animation but with different delays, so the curtain
+       breathes like an aurora rather than pulsing in unison. */
+    radial-gradient(ellipse 30% 100% at 18% 100%, rgba(110,231,183,0.45) 0%, transparent 65%),
+    radial-gradient(ellipse 40% 100% at 50% 100%, rgba(167,139,250,0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 28% 100% at 82% 100%, rgba(244,114,182,0.45) 0%, transparent 65%);
+  filter: blur(8px);
+  animation: zi-celestial-curtain 10s ease-in-out infinite alternate;
+  will-change: opacity, transform;
+}
+@keyframes zi-celestial-curtain {
+  0%   { transform: translateY(2%);  opacity: 0.6; }
+  50%  { transform: translateY(-1%); opacity: 0.95; }
+  100% { transform: translateY(2%);  opacity: 0.7; }
+}
+
+.zi-celestial-sparkle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  filter: blur(0.4px);
+  box-shadow: 0 0 8px currentColor, 0 0 14px currentColor;
+  animation-name: zi-celestial-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: opacity, transform;
+}
+@keyframes zi-celestial-twinkle {
+  0%, 100% { opacity: 0;    transform: scale(0.5); }
+  50%      { opacity: 0.95; transform: scale(1.1); }
+}
+
+/* The "lines": a thin gradient bar with a glowing core that flows
+ * across the screen left → right. Five of these stacked at different
+ * heights and offsets give the impression of streaks of light tracing
+ * the air above the board. */
+.zi-celestial-ribbon {
+  position: absolute;
+  height: 2px;
+  width: 55vw;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(253,224,71,0.0)  10%,
+    rgba(253,224,71,0.85) 30%,
+    rgba(244,114,182,0.95) 50%,
+    rgba(167,139,250,0.85) 70%,
+    rgba(110,231,183,0.0) 90%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 14px rgba(253,224,71,0.55),
+    0 0 24px rgba(244,114,182,0.35);
+  filter: blur(0.6px);
+  opacity: 0;
+  animation-name: zi-celestial-ribbon;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes zi-celestial-ribbon {
+  0%   { transform: translateX(-65vw) translateY(0);    opacity: 0;   }
+  8%   { opacity: 0.85; }
+  92%  { opacity: 0.85; }
+  100% { transform: translateX(115vw)  translateY(-12px); opacity: 0; }
+}
+
+/* Diagonal "shooting" streaks that fire occasionally — short bright
+ * lines that fade out as they travel. Each instance has its own
+ * delay so they appear scattered through the loop. */
+.zi-celestial-trail {
+  position: absolute;
+  height: 1.5px;
+  width: 22vw;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.95), transparent);
+  box-shadow: 0 0 10px rgba(253,224,71,0.65), 0 0 20px rgba(244,114,182,0.4);
+  transform-origin: left center;
+  opacity: 0;
+  animation-name: zi-celestial-trail;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes zi-celestial-trail {
+  0%   { transform: rotate(var(--zi-trail-angle, -18deg)) translateX(-25vw); opacity: 0; }
+  10%  { opacity: 1; }
+  60%  { opacity: 0.9; }
+  100% { transform: rotate(var(--zi-trail-angle, -18deg)) translateX(120vw); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zi-celestial-bloom,
+  .zi-celestial-curtain,
+  .zi-celestial-sparkle,
+  .zi-celestial-ribbon,
+  .zi-celestial-trail { animation: none !important; }
+}
+
 /* Decorative icons / emojis carry `aria-hidden="true"` by convention.
  * Without this rule, hovering a standalone emoji glyph shows the text
  * I-beam cursor (because emojis are characters), which feels broken on

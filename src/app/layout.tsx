@@ -3,6 +3,7 @@ import './globals.css';
 import { SettingsProvider } from '@/hooks/useSettings';
 import { UserProvider } from '@/hooks/useUser';
 import ThemeProfileSync from '@/components/ThemeProfileSync';
+import ThemeDecor from '@/components/ThemeDecor';
 
 export const metadata: Metadata = {
   title: 'Zaeer Imenet — Ancient Strategy Game',
@@ -25,6 +26,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <UserProvider>
             <ThemeProfileSync />
             {children}
+            {/* Premium-theme overlay. Mounted last so its position:
+                fixed layer paints above the page's bgGradient (which
+                lives on the page wrapper). Gated to themeId === 'celestial'
+                inside the component, so it costs one context read on
+                every other theme. */}
+            <ThemeDecor />
           </UserProvider>
         </SettingsProvider>
       </body>
