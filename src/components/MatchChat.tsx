@@ -10,7 +10,9 @@ import {
   MatchMessage,
 } from '@/lib/supabase/chat';
 import { listMutedIds } from '@/lib/supabase/social';
+import { useMatchReactions } from '@/hooks/useMatchReactions';
 import ChatPanel, { ChatPanelMessage } from './ChatPanel';
+import FlyingEmojiOverlay from './FlyingEmojiOverlay';
 
 interface Props {
   gameId: string;
@@ -109,6 +111,16 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
     await sendMatchMessage({ gameId, senderId: user.id, body });
   }, [gameId, user]);
 
+  // Ephemeral emoji reactions — broadcast over Realtime, never persisted.
+  // The overlay renders fullscreen regardless of chat-open state so a
+  // received reaction always lands even if the recipient never opens
+  // the panel.
+  const reactions = useMatchReactions({
+    gameId,
+    meId: user?.id ?? null,
+    readOnly: !!spectator,
+  });
+
   // Filter out muted senders from the panel view.
   const visibleMessages = useMemo(
     () => messages.filter(m => !mutedIds.has(m.sender_id)),
@@ -160,6 +172,17 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
         topInset={topInset}
         readOnly={spectator}
         readOnlyHint="Spectators can read but not send."
+        onReact={spectator ? undefined : reactions.sendReaction}
+        reactionsMuted={reactions.muted}
+        setReactionsMuted={reactions.setMuted}
+      />
+
+      {/* Always-on overlay — both players see incoming reactions even
+          when chat is closed. Pointer-events: none so it never steals
+          taps from the board. */}
+      <FlyingEmojiOverlay
+        flying={reactions.flying}
+        onComplete={reactions.removeFlying}
       />
     </>
   );

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings } from '@/hooks/useSettings';
 import Avatar from './Avatar';
+import EmojiReactionBar from './EmojiReactionBar';
 
 export interface ChatPanelMessage {
   id: number;
@@ -35,13 +36,24 @@ interface Props {
   readOnly?: boolean;
   /** Hint shown below the input when read-only. */
   readOnlyHint?: string;
+  /** When set, render the emoji reaction bar above the input. The
+   *  callback fires once per tap; throttling is the parent's job
+   *  (see useMatchReactions). */
+  onReact?: (emoji: string) => void;
+  /** When provided, render a 🔔 / 🔕 toggle in the panel header that
+   *  flips this value via setMuted. Mute affects RECEIVING peer
+   *  reactions on the parent — the toggle itself is purely a UI hook
+   *  into the parent's state. */
+  reactionsMuted?: boolean;
+  setReactionsMuted?: (next: boolean) => void;
 }
 
 export default function ChatPanel({
   open, title, emptyText, messages, meId, onSend, onClose,
   width = 320, topInset = 12, readOnly = false, readOnlyHint,
+  onReact, reactionsMuted, setReactionsMuted,
 }: Props) {
-  const { theme } = useSettings();
+  const { theme, t } = useSettings();
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -91,10 +103,24 @@ export default function ChatPanel({
           }}
         >
           <div
-            className="flex items-center justify-between px-3 py-2 border-b"
+            className="flex items-center justify-between px-3 py-2 border-b gap-2"
             style={{ borderColor: theme.panelBorder }}
           >
-            <span className="font-bold text-sm truncate">{title}</span>
+            <span className="font-bold text-sm truncate flex-1">{title}</span>
+            {setReactionsMuted && (
+              <button
+                onClick={() => setReactionsMuted(!reactionsMuted)}
+                className="opacity-70 hover:opacity-100 text-base px-1"
+                aria-label={reactionsMuted
+                  ? t('reactions.unmuteHint')
+                  : t('reactions.muteHint')}
+                title={reactionsMuted
+                  ? t('reactions.unmuteHint')
+                  : t('reactions.muteHint')}
+              >
+                {reactionsMuted ? '🔕' : '🔔'}
+              </button>
+            )}
             <button
               onClick={onClose}
               className="opacity-70 hover:opacity-100 text-base px-2 -mx-1"
@@ -156,6 +182,13 @@ export default function ChatPanel({
             >
               {err}
             </div>
+          )}
+
+          {/* Reaction bar — only for participants (read-only spectators
+              don't get to send anything, including emoji). Sits above
+              the text input so a quick reaction never blocks typing. */}
+          {!readOnly && onReact && (
+            <EmojiReactionBar onReact={onReact} />
           )}
 
           {readOnly ? (
