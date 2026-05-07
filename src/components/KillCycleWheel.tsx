@@ -56,7 +56,12 @@ const COLOR_IN   = '#fbbf24';   // sunny yellow
 export default function KillCycleWheel({ onPick, selected }: Props) {
   const { theme } = useSettings();
   const [hovered, setHovered] = useState<WedgeKey | 'lion' | null>(null);
-  const active = hovered ?? selected ?? null;
+  // Selection STICKS — clicking a piece locks the wheel to that piece's
+  // arrows even as the cursor moves. Hover only previews when nothing
+  // has been picked yet. Earlier behaviour (`hovered ?? selected`) let
+  // a stray hover hijack the focus right after a click, which was
+  // really confusing when reading the body card.
+  const active = selected ?? hovered ?? null;
 
   const idx: Record<WedgeKey, number> = {
     elephant: 0, ant: 1, butterfly: 2, bat: 3, monkey: 4,
@@ -163,14 +168,18 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
           {/* Lion → ring arrows (centre-out). Drawn in two cases:
                 – ALL FIVE in red when Lion is active (Lion kills any
                   enemy, so the wheel shows the universal-killer bouquet).
-                – JUST lion→monkey in yellow when Monkey is active —
-                  Monkey's cycle-killer is the Lion specifically. Every
-                  other ring piece has its incoming killer on the ring,
-                  drawn by the ring-to-ring loop above. */}
+                – ONE in yellow (lion→activePiece) when ANY ring piece
+                  is active. The Lion is a universal killer, so it's
+                  always an incoming threat to whoever's selected — in
+                  addition to whatever cycle-specific killer that piece
+                  has on the ring. So Elephant active shows two yellow
+                  arrows (ant→elephant cycle + lion→elephant universal),
+                  Butterfly active shows two yellow (bat→butterfly +
+                  lion→butterfly), and so on. */}
           {RING.map(p => {
-            const lionIsActive    = active === 'lion';
-            const monkeyIsActive  = p.key === 'monkey' && active === 'monkey';
-            if (!lionIsActive && !monkeyIsActive) return null;
+            const lionIsActive  = active === 'lion';
+            const pieceIsActive = active === p.key;
+            if (!lionIsActive && !pieceIsActive) return null;
 
             const to = ringPoint(idx[p.key]);
             const dx = to.x - CENTER, dy = to.y - CENTER;
