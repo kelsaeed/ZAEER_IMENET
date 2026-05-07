@@ -36,6 +36,17 @@ const SIZE = 320;
 const CENTER = SIZE / 2;
 const RADIUS = 120;
 const PIECE_RADIUS = 28;
+// The Lion bubble is bigger than a ring bubble (PIECE_RADIUS * 2 + 10
+// vs PIECE_RADIUS * 2). Any line that meets the Lion needs to start /
+// end at LION_GAP from centre, otherwise the arrow tail or head sits
+// INSIDE the Lion bubble and the player can't see it.
+const LION_RADIUS = PIECE_RADIUS + 5;   // 33
+const LION_GAP    = LION_RADIUS + 6;    // 39 — clear daylight outside the bubble
+const RING_GAP    = PIECE_RADIUS + 6;   // 34 — same idea for ring pieces
+// Perpendicular shift between the two parallel arrows when both
+// directions of a matchup need to be drawn (Elephant↔Lion). Bumped to
+// 14 to keep them visually distinct after lengthening the lines.
+const PARALLEL    = 14;
 
 function ringPoint(i: number) {
   const angle = (i / RING.length) * Math.PI * 2 - Math.PI / 2;
@@ -150,10 +161,10 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
           const st   = arrowState(p.key, p.kills);
           const dx = to.x - from.x, dy = to.y - from.y;
           const len = Math.hypot(dx, dy);
-          const sx = from.x + (dx / len) * (PIECE_RADIUS + 4);
-          const sy = from.y + (dy / len) * (PIECE_RADIUS + 4);
-          const tx = from.x + (dx / len) * (len - PIECE_RADIUS - 6);
-          const ty = from.y + (dy / len) * (len - PIECE_RADIUS - 6);
+          const sx = from.x + (dx / len) * RING_GAP;
+          const sy = from.y + (dy / len) * RING_GAP;
+          const tx = from.x + (dx / len) * (len - RING_GAP);
+          const ty = from.y + (dy / len) * (len - RING_GAP);
           const stroke =
             st === 'out' ? COLOR_OUT  :
             st === 'in'  ? COLOR_IN   :
@@ -193,20 +204,22 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
           const to = ringPoint(idx[p.key]);
           const dx = to.x - CENTER, dy = to.y - CENTER;
           const len = Math.hypot(dx, dy);
-          const sx = CENTER + (dx / len) * (PIECE_RADIUS + 4);
-          const sy = CENTER + (dy / len) * (PIECE_RADIUS + 4);
-          const tx = CENTER + (dx / len) * (len - PIECE_RADIUS - 6);
-          const ty = CENTER + (dy / len) * (len - PIECE_RADIUS - 6);
+          // Lion-side starts at LION_GAP (clear of the bigger bubble);
+          // ring-side ends at RING_GAP (clear of the ring bubble).
+          const sx = CENTER + (dx / len) * LION_GAP;
+          const sy = CENTER + (dy / len) * LION_GAP;
+          const tx = CENTER + (dx / len) * (len - RING_GAP);
+          const ty = CENTER + (dy / len) * (len - RING_GAP);
           const stroke   = lionIsActive ? COLOR_OUT : COLOR_IN;
           const markerId = lionIsActive ? 'zi-arrow-out' : 'zi-arrow-in';
           // Only offset the elephant pair — for other ring pieces
-          // there's no centre-in arrow to collide with. We use +10 here
-          // and ALSO +10 on the centre-in arrow below: because the
-          // perpendicular vector flips sign with line direction (one
-          // line goes up, the other goes down), the same offset value
-          // pushes the two lines onto OPPOSITE sides. Using +10 / -10
-          // would push them onto the same side and re-overlap them.
-          const perp = p.key === 'elephant' ? +10 : 0;
+          // there's no centre-in arrow to collide with. We use +PARALLEL
+          // here and ALSO +PARALLEL on the centre-in arrow below: the
+          // perpendicular vector flips sign with line direction, so
+          // the same offset value pushes the two lines onto OPPOSITE
+          // sides. Using +/- would push them onto the same side and
+          // re-overlap them — the bug that hid the arrows for weeks.
+          const perp = p.key === 'elephant' ? +PARALLEL : 0;
           const [ox1, oy1, ox2, oy2] = offsetLine(sx, sy, tx, ty, perp);
           return (
             <line
@@ -232,10 +245,12 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
           const from = ringPoint(idx.elephant);
           const dx = CENTER - from.x, dy = CENTER - from.y;
           const len = Math.hypot(dx, dy);
-          const sx = from.x + (dx / len) * (PIECE_RADIUS + 4);
-          const sy = from.y + (dy / len) * (PIECE_RADIUS + 4);
-          const tx = from.x + (dx / len) * (len - PIECE_RADIUS - 8);
-          const ty = from.y + (dy / len) * (len - PIECE_RADIUS - 8);
+          // Elephant side uses RING_GAP; lion side uses LION_GAP so
+          // the arrowhead lands clearly outside the lion bubble.
+          const sx = from.x + (dx / len) * RING_GAP;
+          const sy = from.y + (dy / len) * RING_GAP;
+          const tx = from.x + (dx / len) * (len - LION_GAP);
+          const ty = from.y + (dy / len) * (len - LION_GAP);
           const st = arrowState('elephant', 'lion');
           const stroke =
             st === 'out' ? COLOR_OUT  :
@@ -245,10 +260,10 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
             st === 'out' ? 'zi-arrow-out' :
             st === 'in'  ? 'zi-arrow-in'  :
             'zi-arrow-dim';
-          // SAME +10 sign as the centre-out arrow above — perpendicular
-          // direction flips with line direction, so equal-sign offsets
-          // land on opposite sides of the original line.
-          const [ox1, oy1, ox2, oy2] = offsetLine(sx, sy, tx, ty, +10);
+          // SAME +PARALLEL sign as the centre-out arrow above —
+          // perpendicular direction flips with line direction, so
+          // equal-sign offsets land on opposite sides of the original.
+          const [ox1, oy1, ox2, oy2] = offsetLine(sx, sy, tx, ty, +PARALLEL);
           return (
             <line
               x1={ox1} y1={oy1} x2={ox2} y2={oy2}

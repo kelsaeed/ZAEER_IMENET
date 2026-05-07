@@ -31,6 +31,11 @@ function piece(opts: {
   col: number;
   id?: string;
   hp?: number;
+  /** Damaged elephants render the 💔 broken-heart marker — required for
+   *  the "elephant has 2 lives" lesson. The earlier helper hardcoded
+   *  this to false, which silently hid the icon even when the preset
+   *  set hp=1, making the body card's "see the 💔" copy a lie. */
+  isDamaged?: boolean;
   orientation?: Orientation;
   isParalyzed?: boolean;
   paralyzedBy?: string;
@@ -45,7 +50,7 @@ function piece(opts: {
     row: opts.row,
     col: opts.col,
     hp: opts.hp ?? (opts.type === 'elephant' ? 2 : 1),
-    isDamaged: false,
+    isDamaged: opts.isDamaged ?? false,
     isParalyzed: opts.isParalyzed ?? false,
     paralyzedBy: opts.paralyzedBy,
     paralyzing: opts.paralyzing,
@@ -222,6 +227,7 @@ const STEP_ELEPHANT: TutorialStep = {
     piece({
       type: 'elephant', player: 2, row: 12, col: 7, id: 'elephant_p2_tut',
       hp: 1,
+      isDamaged: true,
     }),
   ],
   selectFrom: { row: 13, col: 7 },
