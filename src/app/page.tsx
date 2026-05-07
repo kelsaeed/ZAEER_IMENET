@@ -9,6 +9,8 @@ import { AI_LEVEL_META } from '@/game/ai';
 import StartScreen from '@/components/StartScreen';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
+import SplitBackground from '@/components/SplitBackground';
+import { PlayerThemesProvider } from '@/hooks/usePlayerThemes';
 
 // Heavy panel — only load it when the user actually opens it.
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
@@ -168,15 +170,20 @@ export default function Home() {
   }
 
   return (
+    <PlayerThemesProvider>
     <main
       dir={isRTL ? 'rtl' : 'ltr'}
       className="min-h-screen w-full max-w-full flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-center gap-3 lg:gap-4 px-2 sm:px-3 lg:px-4 py-3 sm:py-3 lg:py-3 pt-14 lg:pt-3 overflow-x-hidden overflow-y-auto box-border"
       style={{
         minHeight: '100dvh',
-        background: theme.bgGradient,
         color: theme.textPrimary,
       }}
     >
+      {/* Page background — split into halves on online matches where
+          each player has chosen their own theme. In offline play both
+          slots default to the viewer's theme so this is a single
+          gradient and indistinguishable from the old behaviour. */}
+      <SplitBackground />
       {/* Top bar: settings (corner) + auth badge (opposite corner). */}
       <button
         onClick={() => setSettingsOpen(true)}
@@ -282,5 +289,6 @@ export default function Home() {
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </main>
+    </PlayerThemesProvider>
   );
 }

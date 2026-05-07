@@ -418,6 +418,16 @@ export const THEMES: Theme[] = [
 
 export const DEFAULT_THEME_ID = 'navy';
 
+/** Resolve a built-in theme by id. Returns null for ids the registry
+ *  doesn't know about (incl. 'custom', which is handled separately
+ *  via buildCustomTheme). The split-board theming uses this to look
+ *  up each player's preferred theme by the string id stored on
+ *  profiles.theme_id. */
+export function getThemeById(id: string | null | undefined): Theme | null {
+  if (!id) return null;
+  return THEMES.find(t => t.id === id) ?? null;
+}
+
 // ─── Custom Theme Builder ────────────────────────────────────────────────────
 //
 // The user picks 6 primary colors from the Settings panel. From those we

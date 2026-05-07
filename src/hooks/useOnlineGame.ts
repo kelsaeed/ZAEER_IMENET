@@ -12,6 +12,10 @@ interface OpponentInfo {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  /** Opponent's chosen visual theme (added in migration 0013). Drives
+   *  the split-board theming — null when the column is missing on an
+   *  unmigrated DB or when the join failed. */
+  theme_id: string | null;
 }
 
 export interface OnlineGameView {
@@ -206,7 +210,7 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     const supabase = getSupabaseBrowser();
     supabase
       .from('profiles')
-      .select('id, username, display_name, avatar_url')
+      .select('id, username, display_name, avatar_url, theme_id')
       .eq('id', opponentId)
       .single()
       .then(({ data }) => {

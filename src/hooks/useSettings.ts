@@ -85,7 +85,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [hapticsEnabled, setHapticsEnabledState] = useState<boolean>(true);
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate personal prefs from localStorage on mount.
+  // Hydrate personal prefs from localStorage on mount. The profile-side
+  // theme sync is layered on top by ThemeProfileSync below — settings
+  // itself doesn't depend on the user context so we don't introduce a
+  // hard ordering between SettingsProvider and UserProvider.
   useEffect(() => {
     setThemeIdState(localStorage.getItem(THEME_KEY) || DEFAULT_THEME_ID);
     setCustomColors(readJSON<CustomThemeColors>(CUSTOM_COLORS_KEY, DEFAULT_CUSTOM_COLORS));

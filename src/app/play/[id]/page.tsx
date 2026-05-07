@@ -8,6 +8,8 @@ import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
 import { useOnlineGame } from '@/hooks/useOnlineGame';
 import { useGameAudio } from '@/hooks/useGameAudio';
+import { PlayerThemesProvider } from '@/hooks/usePlayerThemes';
+import SplitBackground from '@/components/SplitBackground';
 import GameBoard from '@/components/GameBoard';
 import GameHUD from '@/components/GameHUD';
 import AuthBadge from '@/components/AuthBadge';
@@ -27,7 +29,7 @@ export default function OnlineGamePage() {
   const params = useParams<{ id: string }>();
   const gameId = params?.id ?? null;
   const { user, profile, loading: userLoading } = useUser();
-  const { theme, isRTL, t } = useSettings();
+  const { theme, themeId, isRTL, t } = useSettings();
   const [cellSize, setCellSize] = useState(42);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [winDismissed, setWinDismissed] = useState(false);
@@ -139,6 +141,15 @@ export default function OnlineGamePage() {
       window.removeEventListener('orientationchange', schedule);
     };
   }, []);
+
+  // Resolve which theme each player slot should render in. The local
+  // user owns whichever slot they sit in (myPlayerNumber); the
+  // opponent's id comes from their profile join (added in migration
+  // 0013). Spectators (myPlayerNumber === null) and missing-opponent
+  // states fall back to the viewer's theme via PlayerThemesProvider's
+  // built-in fallback — usable, just not the full split look.
+  const p1ThemeId = myPlayerNumber === 1 ? themeId : (opponent?.theme_id ?? null);
+  const p2ThemeId = myPlayerNumber === 2 ? themeId : (opponent?.theme_id ?? null);
 
   const reviewing = viewingHistoryIndex !== null;
   const displayState = useMemo(() => {
@@ -361,15 +372,19 @@ export default function OnlineGamePage() {
   })();
 
   return (
+    <PlayerThemesProvider p1ThemeId={p1ThemeId} p2ThemeId={p2ThemeId}>
     <main
       dir={isRTL ? 'rtl' : 'ltr'}
       className="min-h-screen w-full max-w-full flex flex-col lg:flex-row items-center lg:items-start justify-center lg:justify-center gap-2 lg:gap-3 px-2 sm:px-3 lg:px-2 py-2 sm:py-3 lg:py-1 pt-16 lg:pt-12 overflow-x-hidden overflow-y-auto box-border"
       style={{
         minHeight: '100dvh',
-        background: theme.bgGradient,
         color: theme.textPrimary,
       }}
     >
+      {/* Page background — splits into the two chosen player themes
+          when both players have picked one, falls back to the viewer's
+          single gradient when only one is known. */}
+      <SplitBackground />
       {/* Top corner buttons (settings on one side, bell + auth on the
           other). On lg+ the player ribbon sits centred between them on
           the same fixed top row — so the board can sit higher and there's
@@ -509,6 +524,7 @@ export default function OnlineGamePage() {
       {/* In-match chat (floating button + slide-in drawer) */}
       {gameId && <MatchChat gameId={gameId} spectator={isSpectator} />}
     </main>
+    </PlayerThemesProvider>
   );
 }
 

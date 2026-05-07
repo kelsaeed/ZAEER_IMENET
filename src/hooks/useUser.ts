@@ -29,6 +29,10 @@ export interface Profile {
   puzzle_current_streak?: number;
   puzzle_best_streak?: number;
   puzzle_last_solved_date?: string | null;
+  // Visual theme the player picked (added in migration 0013). Drives
+  // the per-player split board theming. Optional so unmigrated DBs
+  // still load — consumers fall back to the default theme id.
+  theme_id?: string;
 }
 
 interface UserState {

@@ -5,6 +5,7 @@ import { GamePiece, Position, BounceEffect } from '@/game/types';
 import { isThrone, isBarrier } from '@/game/constants';
 import { getAntCells, getPiecesAtCell } from '@/game/logic';
 import { useSettings } from '@/hooks/useSettings';
+import { usePlayerThemes, themeForRow } from '@/hooks/usePlayerThemes';
 import PieceDisplay from './PieceDisplay';
 
 // Stable references for the valid-move pulse so framer-motion doesn't restart
@@ -31,7 +32,19 @@ function BoardCellImpl({
   row, col, allPieces, selectedPieceId, validMoves, bounceEffect, onClick, cellSize
 }: Props) {
   const handleClick = () => onClick(row, col);
-  const { theme } = useSettings();
+  const { theme: viewerTheme } = useSettings();
+  const playerThemes = usePlayerThemes();
+  // Cell BACKGROUND comes from the territory-owning player's theme so
+  // each half of the board carries that player's chosen palette. Throne
+  // / barrier accents (gold throne dome, etc.) also flow from the same
+  // territory-owning theme — keeps the look coherent within each half.
+  const territoryTheme = themeForRow(playerThemes, row);
+  // Piece accent (border, glow, selected ring, ant-wing tint) follows
+  // the PIECE OWNER's theme regardless of where the piece is currently
+  // standing — your gold lion stays gold even when it sneaks into the
+  // opponent's half.
+  const pieceAccent = (player: 1 | 2) =>
+    player === 1 ? playerThemes.p1 : playerThemes.p2;
   const throne = isThrone(row, col);
   const barrier = isBarrier(row, col);
   const isValidMove = validMoves.some(m => m.row === row && m.col === col);
@@ -53,13 +66,17 @@ function BoardCellImpl({
       c => c.row === row && c.col === col && !(c.row === mainPiece.row && c.col === mainPiece.col)
     );
 
-  let baseBg = isEven ? theme.cellLight : theme.cellDark;
-  if (throne) baseBg = theme.throneBg;
-  if (barrier) baseBg = theme.barrierBg;
-  // Ant wing cells get a subtle tint matching the player's accent
-  if (isAntWing && !barrier) baseBg = mainPiece?.player === 1
-    ? `color-mix(in srgb, ${theme.p1Color} 10%, ${isEven ? theme.cellLight : theme.cellDark})`
-    : `color-mix(in srgb, ${theme.p2Color} 10%, ${isEven ? theme.cellLight : theme.cellDark})`;
+  let baseBg = isEven ? territoryTheme.cellLight : territoryTheme.cellDark;
+  if (throne) baseBg = territoryTheme.throneBg;
+  if (barrier) baseBg = territoryTheme.barrierBg;
+  // Ant wing cells get a subtle tint matching the OWNING piece's accent
+  // (so a gold ant snaking into the opponent's half still leaves a
+  // subtle gold trail, not the opponent's tint).
+  if (isAntWing && !barrier && mainPiece) {
+    const wingAccent = pieceAccent(mainPiece.player);
+    const accentColor = mainPiece.player === 1 ? wingAccent.p1Color : wingAccent.p2Color;
+    baseBg = `color-mix(in srgb, ${accentColor} 10%, ${isEven ? territoryTheme.cellLight : territoryTheme.cellDark})`;
+  }
 
   // Throne: rich radial dome — bright at the centre, deeper at the edges.
   // Regular cells: subtle vertical gradient for depth.
@@ -76,7 +93,9 @@ function BoardCellImpl({
     cellBg = `linear-gradient(180deg, color-mix(in srgb, white 6%, ${baseBg}) 0%, ${baseBg} 50%, color-mix(in srgb, black 8%, ${baseBg}) 100%)`;
   }
 
-  const borderColor = throne ? theme.throneBorder : barrier ? theme.barrierBorder : 'rgba(255,255,255,0.06)';
+  const borderColor = throne
+    ? territoryTheme.throneBorder
+    : barrier ? territoryTheme.barrierBorder : 'rgba(255,255,255,0.06)';
 
   return (
     <div
@@ -91,7 +110,7 @@ function BoardCellImpl({
         boxSizing: 'border-box',
         WebkitTapHighlightColor: 'transparent',
         boxShadow: throne
-          ? `inset 0 0 ${cellSize * 0.4}px ${theme.throneBorder}, 0 0 12px color-mix(in srgb, ${theme.throneBg} 50%, transparent)`
+          ? `inset 0 0 ${cellSize * 0.4}px ${territoryTheme.throneBorder}, 0 0 12px color-mix(in srgb, ${territoryTheme.throneBg} 50%, transparent)`
           : undefined,
       }}
       onClick={handleClick}
@@ -99,7 +118,7 @@ function BoardCellImpl({
       {/* Throne glow */}
       {throne && (
         <div className="absolute inset-0 pointer-events-none"
-          style={{ background: theme.throneGlow }}
+          style={{ background: territoryTheme.throneGlow }}
         />
       )}
 
@@ -110,16 +129,23 @@ function BoardCellImpl({
         </div>
       )}
 
-      {/* Ant wing visual — subtle stripe */}
-      {isAntWing && !barrier && (
-        <div className="absolute inset-0 pointer-events-none"
-          style={{
-            background: `repeating-linear-gradient(45deg, color-mix(in srgb, ${mainPiece?.player === 1 ? theme.p1Color : theme.p2Color} 6%, transparent) 0px, color-mix(in srgb, ${mainPiece?.player === 1 ? theme.p1Color : theme.p2Color} 6%, transparent) 2px, transparent 2px, transparent 6px)`,
-          }}
-        />
-      )}
+      {/* Ant wing visual — subtle stripe in the OWNING piece's accent. */}
+      {isAntWing && !barrier && mainPiece && (() => {
+        const accentTheme = pieceAccent(mainPiece.player);
+        const wingColor = mainPiece.player === 1 ? accentTheme.p1Color : accentTheme.p2Color;
+        return (
+          <div className="absolute inset-0 pointer-events-none"
+            style={{
+              background: `repeating-linear-gradient(45deg, color-mix(in srgb, ${wingColor} 6%, transparent) 0px, color-mix(in srgb, ${wingColor} 6%, transparent) 2px, transparent 2px, transparent 6px)`,
+            }}
+          />
+        );
+      })()}
 
-      {/* Valid move indicator */}
+      {/* Valid move indicator — uses the VIEWER's theme so the
+          highlights stay legible regardless of which half is themed
+          which way (a target square in the opponent's half should
+          read the same as one on your side). */}
       <AnimatePresence>
         {isValidMove && (
           <motion.div
@@ -134,8 +160,10 @@ function BoardCellImpl({
               style={{
                 width: piecesHere.length > 0 ? cellSize - 2 : cellSize * 0.36,
                 height: piecesHere.length > 0 ? cellSize - 2 : cellSize * 0.36,
-                background: piecesHere.length > 0 ? theme.attackFill : theme.validMoveFill,
-                border: piecesHere.length > 0 ? `2px solid ${theme.attackBorder}` : `2px solid ${theme.validMoveBorder}`,
+                background: piecesHere.length > 0 ? viewerTheme.attackFill : viewerTheme.validMoveFill,
+                border: piecesHere.length > 0
+                  ? `2px solid ${viewerTheme.attackBorder}`
+                  : `2px solid ${viewerTheme.validMoveBorder}`,
                 borderRadius: piecesHere.length > 0 ? '4px' : '50%',
               }}
             />

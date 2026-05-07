@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { GamePiece, BounceEffect } from '@/game/types';
 import { PIECE_EMOJI, PIECE_NAME } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
+import { usePlayerThemes } from '@/hooks/usePlayerThemes';
 
 // Module-level constants for framer-motion targets and transitions.
 // Inline literals like `animate={{ scale: [1,1.08,1] }}` are a fresh object
@@ -29,7 +30,14 @@ interface Props {
 }
 
 export default function PieceDisplay({ piece, isCenter, isSelected, size, overlay, bounceEffect }: Props) {
-  const { theme } = useSettings();
+  // The viewer theme stays the source of the selection ring + paralysis
+  // / cooldown indicators (those are universal cues the local user
+  // reads, not skin-specific). The piece's OWNER theme drives every
+  // colour that says "this piece is mine" — primary fill, border,
+  // glow — so a custom theme acts as a piece skin.
+  const { theme: viewerTheme } = useSettings();
+  const playerThemes = usePlayerThemes();
+  const ownerTheme = piece.player === 1 ? playerThemes.p1 : playerThemes.p2;
   const isP1 = piece.player === 1;
   const hasBounce = bounceEffect?.pieceId === piece.id;
   const onCooldown = piece.type === 'elephant' && (piece.cooldown ?? 0) > 0;
@@ -39,9 +47,10 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
   const bounceY = hasBounce ? bounceEffect!.dr * size * 0.9 : 0;
 
   // Strong, opaque player color domination — the piece's primary color is what
-  // identifies the owner. We mix the theme's player color with the cell behind
-  // it at high strength so it never washes out into the board.
-  const ownerColor = isP1 ? theme.p1Color : theme.p2Color;
+  // identifies the owner. We mix the OWNER's theme's player color with the
+  // cell behind it at high strength so it never washes out into the board,
+  // and so each player's pieces wear their own skin regardless of viewer.
+  const ownerColor = isP1 ? ownerTheme.p1Color : ownerTheme.p2Color;
   const ownerBg = isSelected
     ? `radial-gradient(circle at 30% 30%, color-mix(in srgb, white 25%, ${ownerColor}) 0%, ${ownerColor} 65%)`
     : `radial-gradient(circle at 30% 30%, color-mix(in srgb, white 18%, ${ownerColor}) 0%, color-mix(in srgb, ${ownerColor} 75%, transparent) 80%)`;
@@ -50,13 +59,13 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
   // dashed border accent. Even at the same hue strength a player can tell
   // them apart by these treatments.
   const ownerBorder = isSelected
-    ? `2px solid ${theme.selectedRing}`
+    ? `2px solid ${viewerTheme.selectedRing}`
     : isP1
-      ? `2px solid ${theme.p1Border}`
-      : `2px dashed ${theme.p2Border}`;
+      ? `2px solid ${ownerTheme.p1Border}`
+      : `2px dashed ${ownerTheme.p2Border}`;
 
   const ownerShadow = isSelected
-    ? (isP1 ? theme.p1Glow : theme.p2Glow)
+    ? (isP1 ? ownerTheme.p1Glow : ownerTheme.p2Glow)
     : piece.isParalyzed ? '0 0 8px 2px rgba(168,85,247,0.6)'
     : onCooldown ? '0 0 0 2px rgba(160,160,160,0.55) inset, 0 0 6px rgba(0,0,0,0.4)'
     : isP1
