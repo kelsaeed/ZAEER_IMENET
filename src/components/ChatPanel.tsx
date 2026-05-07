@@ -107,20 +107,6 @@ export default function ChatPanel({
             style={{ borderColor: theme.panelBorder }}
           >
             <span className="font-bold text-sm truncate flex-1">{title}</span>
-            {setReactionsMuted && (
-              <button
-                onClick={() => setReactionsMuted(!reactionsMuted)}
-                className="opacity-70 hover:opacity-100 text-base px-1"
-                aria-label={reactionsMuted
-                  ? t('reactions.unmuteHint')
-                  : t('reactions.muteHint')}
-                title={reactionsMuted
-                  ? t('reactions.unmuteHint')
-                  : t('reactions.muteHint')}
-              >
-                {reactionsMuted ? '🔕' : '🔔'}
-              </button>
-            )}
             <button
               onClick={onClose}
               className="opacity-70 hover:opacity-100 text-base px-2 -mx-1"
@@ -199,7 +185,7 @@ export default function ChatPanel({
               {readOnlyHint ?? 'Read-only.'}
             </div>
           ) : (
-            <form onSubmit={submit} className="flex gap-2 p-2 border-t" style={{ borderColor: theme.panelBorder }}>
+            <form onSubmit={submit} className="flex gap-2 p-2 border-t items-center" style={{ borderColor: theme.panelBorder }}>
               <input
                 type="text"
                 value={body}
@@ -213,6 +199,32 @@ export default function ChatPanel({
                   border: `1px solid ${theme.buttonBorder}`,
                 }}
               />
+              {/* Mute toggle for inbound peer reactions. Sits next to
+                  Send so it's always within thumb reach during play.
+                  Sender's own reactions still animate locally — mute
+                  only affects what arrives from the opponent. */}
+              {setReactionsMuted && (
+                <button
+                  type="button"
+                  onClick={() => setReactionsMuted(!reactionsMuted)}
+                  className="rounded-lg px-2 py-1.5 text-base"
+                  style={{
+                    background: theme.inputBg,
+                    border: `1px solid ${theme.buttonBorder}`,
+                    color: theme.textPrimary,
+                    opacity: reactionsMuted ? 0.6 : 1,
+                  }}
+                  aria-label={reactionsMuted
+                    ? t('reactions.unmuteHint')
+                    : t('reactions.muteHint')}
+                  title={reactionsMuted
+                    ? t('reactions.unmuteHint')
+                    : t('reactions.muteHint')}
+                  aria-pressed={reactionsMuted}
+                >
+                  {reactionsMuted ? '🔕' : '🔔'}
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={!body.trim() || sending}

@@ -31,10 +31,10 @@ export interface FlyingEmoji {
 }
 
 const STORAGE_KEY = 'zaeer.muteReactions';
-/** Hard cap so a malicious or laggy peer can't blow up the DOM. */
-const MAX_SIMULTANEOUS = 30;
-/** Anti-spam: minimum gap between own sends. */
-const SEND_THROTTLE_MS = 220;
+/** Hard cap so a malicious or laggy peer can't blow up the DOM. Players
+ *  asked to be able to spam ~50 reactions at once; 80 gives a comfortable
+ *  ceiling above that without putting the page at risk of stutter. */
+const MAX_SIMULTANEOUS = 80;
 
 /** Read the mute preference from localStorage with a safe fallback. */
 function readMuted(): boolean {
@@ -69,7 +69,6 @@ export function useMatchReactions({ gameId, meId, readOnly }: UseMatchReactionsO
   const [muted, setMutedState] = useState<boolean>(() => readMuted());
 
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const lastSendRef = useRef<number>(0);
   const idRef = useRef<number>(0);
   const mutedRef = useRef<boolean>(muted);
   const meIdRef = useRef<string | null>(meId);
@@ -138,11 +137,10 @@ export function useMatchReactions({ gameId, meId, readOnly }: UseMatchReactionsO
   const sendReaction = useCallback((emoji: string) => {
     if (readOnly) return;
     if (!gameId || !channelRef.current) return;
-    const now = Date.now();
-    if (now - lastSendRef.current < SEND_THROTTLE_MS) return;
-    lastSendRef.current = now;
-    // Local feedback first so the sender's own click never feels laggy
-    // even if the broadcast round-trip is slow.
+    // No throttle — players asked to be able to spam-click. The
+    // MAX_SIMULTANEOUS cap on the queue is the only floor on how much
+    // mayhem ends up in the DOM at once, and the broadcast platform
+    // has its own per-project rate limit as a final backstop.
     addFlying(emoji, true);
     void channelRef.current.send({
       type: 'broadcast',
