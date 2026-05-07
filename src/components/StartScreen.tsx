@@ -285,7 +285,14 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
             transition={{ duration: 0.28 }}
             className="fixed bottom-4 z-30 px-4 py-3 rounded-2xl flex items-center gap-3 shadow-2xl"
             style={{
-              [isRTL ? 'right' : 'left']: '50%',
+              // Centering is direction-agnostic — translateX moves the
+              // element along the screen X axis the same way regardless
+              // of dir, so anchoring at left:50% + translateX(-50%) puts
+              // the toast dead-centre in both LTR and RTL. The earlier
+              // `[isRTL ? 'right' : 'left']: '50%'` paired with the same
+              // translateX put the RTL toast far off the left edge of
+              // the screen.
+              left: '50%',
               transform: 'translateX(-50%)',
               background: theme.panelBg,
               border: `1px solid ${theme.p1Color}`,
