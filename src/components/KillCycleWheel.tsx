@@ -41,6 +41,23 @@ function ringPoint(i: number) {
   return { x: CENTER + Math.cos(angle) * RADIUS, y: CENTER + Math.sin(angle) * RADIUS };
 }
 
+/** Shift a line's two endpoints perpendicular to its direction so two
+ *  arrows running between the same pair of pieces don't sit on top of
+ *  each other. Used for the Elephant↔Lion bidirectional matchup —
+ *  without this, the red outgoing line and the yellow incoming line
+ *  are perfectly collinear and the player sees what looks like a
+ *  single line with mixed arrowheads. With ±10px offset they read as
+ *  two parallel arrows pointing opposite ways, which is what the
+ *  player expects to see for a "they both kill each other" pair. */
+function offsetLine(
+  sx: number, sy: number, tx: number, ty: number, perp: number
+): [number, number, number, number] {
+  const dx = tx - sx, dy = ty - sy;
+  const len = Math.hypot(dx, dy) || 1;
+  const px = -dy / len, py = dx / len; // unit perpendicular
+  return [sx + px * perp, sy + py * perp, tx + px * perp, ty + py * perp];
+}
+
 interface Props {
   onPick?: (key: WedgeKey | 'lion') => void;
   selected?: WedgeKey | 'lion' | null;
@@ -124,7 +141,7 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
               markerWidth="6" markerHeight="6"
               orient="auto-start-reverse"
             >
-              <path d="M 0 0 L 12 6 L 0 12 z" fill={theme.textMuted} fillOpacity="0.35" />
+              <path d="M 0 0 L 12 6 L 0 12 z" fill={theme.textMuted} fillOpacity="0.55" />
             </marker>
           </defs>
 
@@ -156,7 +173,7 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
                 key={`ring-${p.key}`}
                 x1={sx} y1={sy} x2={tx} y2={ty}
                 stroke={stroke}
-                strokeOpacity={st === 'dim' ? 0.35 : 1}
+                strokeOpacity={st === 'dim' ? 0.55 : 1}
                 strokeWidth={st === 'dim' ? 2 : 4}
                 strokeLinecap="round"
                 filter={st === 'dim' ? undefined : 'url(#zi-arrow-glow)'}
@@ -190,10 +207,14 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
             const sy = CENTER + (dy / len) * (PIECE_RADIUS + 4);
             const stroke   = lionIsActive ? COLOR_OUT : COLOR_IN;
             const markerId = lionIsActive ? 'zi-arrow-out' : 'zi-arrow-in';
+            // Shift centre-out arrows by +10 perpendicular so they
+            // don't collide with the centre-in elephant→lion arrow
+            // which is offset by -10 the other way.
+            const [ox1, oy1, ox2, oy2] = offsetLine(sx, sy, tx, ty, +10);
             return (
               <line
                 key={`lion-${p.key}`}
-                x1={sx} y1={sy} x2={tx} y2={ty}
+                x1={ox1} y1={oy1} x2={ox2} y2={oy2}
                 stroke={stroke}
                 strokeOpacity={1}
                 strokeWidth={4}
@@ -206,7 +227,10 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
 
           {/* Elephant → Lion (centre-in). Always drawn. When Elephant
               is active, this is its OUTGOING (red); when Lion is
-              active, this is its INCOMING (yellow). Otherwise dim. */}
+              active, this is its INCOMING (yellow). Otherwise dim.
+              Shifted by -10 perpendicular so it sits as a parallel
+              line next to the lion→elephant centre-out arrow above
+              (which is shifted +10), not on top of it. */}
           {(() => {
             const from = ringPoint(idx.elephant);
             const dx = CENTER - from.x, dy = CENTER - from.y;
@@ -224,11 +248,12 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
               st === 'out' ? 'zi-arrow-out' :
               st === 'in'  ? 'zi-arrow-in'  :
               'zi-arrow-dim';
+            const [ox1, oy1, ox2, oy2] = offsetLine(sx, sy, tx, ty, -10);
             return (
               <line
-                x1={sx} y1={sy} x2={tx} y2={ty}
+                x1={ox1} y1={oy1} x2={ox2} y2={oy2}
                 stroke={stroke}
-                strokeOpacity={st === 'dim' ? 0.35 : 1}
+                strokeOpacity={st === 'dim' ? 0.55 : 1}
                 strokeWidth={st === 'dim' ? 2 : 4}
                 strokeLinecap="round"
                 filter={st === 'dim' ? undefined : 'url(#zi-arrow-glow)'}
