@@ -354,20 +354,19 @@ function PlayTab({
         </div>
       </div>
 
-      {/* Open async (correspondence) rooms — these are the "play whenever"
-          rooms the lobby surfaces so players don't have to wait around for
-          a live opponent. Open by default; the live list below stays
-          collapsed because it churns fast and is mostly noise. */}
+      {/* "Play Anytime" rooms — turn-based games that don't need both
+          players to be online at once. Open by default; the "Play Now"
+          list below stays collapsed because it churns fast. */}
       <details className="mb-4" open>
         <summary className="cursor-pointer text-sm font-semibold opacity-80 hover:opacity-100">
-          📨 Correspondence games ({asyncLoading ? '…' : asyncRooms.length})
+          📨 Play Anytime ({asyncLoading ? '…' : asyncRooms.length})
         </summary>
         <div className="mt-3">
           {asyncLoading ? (
             <div className="flex items-center justify-center py-6"><LoadingEmojis size={22} /></div>
           ) : asyncRooms.length === 0 ? (
             <div className="text-sm opacity-60 py-3 text-center">
-              No async rooms yet — be the first to start one.
+              Nobody's set up a game yet. Be the first!
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -396,7 +395,7 @@ function PlayTab({
                           color: theme.p1Color,
                         }}
                       >
-                        ASYNC
+                        ANYTIME
                       </span>
                     </div>
                     <div className="text-xs opacity-70 truncate">
@@ -434,16 +433,16 @@ function PlayTab({
         </div>
       </details>
 
-      {/* Open public games — secondary list */}
+      {/* "Play Now" rooms — both players need to be online at once. */}
       <details className="mb-4">
         <summary className="cursor-pointer text-sm font-semibold opacity-80 hover:opacity-100">
-          🌍 Open public rooms ({gamesLoading ? '…' : games.length})
+          ⚡ Play Now ({gamesLoading ? '…' : games.length})
         </summary>
         <div className="mt-3">
           {gamesLoading ? (
             <div className="flex items-center justify-center py-6"><LoadingEmojis size={22} /></div>
           ) : games.length === 0 ? (
-            <div className="text-sm opacity-60 py-3 text-center">No open public rooms.</div>
+            <div className="text-sm opacity-60 py-3 text-center">Nobody's looking for a game right now.</div>
           ) : (
             <div className="flex flex-col gap-2">
               {games.map(g => (
