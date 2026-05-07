@@ -45,8 +45,13 @@ const LION_GAP    = LION_RADIUS + 6;    // 39 — clear daylight outside the bub
 const RING_GAP    = PIECE_RADIUS + 6;   // 34 — same idea for ring pieces
 // Perpendicular shift between the two parallel arrows when both
 // directions of a matchup need to be drawn (Elephant↔Lion). Bumped to
-// 14 to keep them visually distinct after lengthening the lines.
-const PARALLEL    = 14;
+// 22 so the two arrows are obviously separate and neither one is
+// near enough to the lion bubble's outer glow to fade into it.
+const PARALLEL    = 22;
+// Stroke width for active arrows. Pushed to 6 because at 4 the lines
+// were getting lost against the wheel's dim background arrows + the
+// lion's halo even when geometry was correct.
+const ACTIVE_STROKE = 6;
 
 function ringPoint(i: number) {
   const angle = (i / RING.length) * Math.PI * 2 - Math.PI / 2;
@@ -179,7 +184,7 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
               x1={sx} y1={sy} x2={tx} y2={ty}
               stroke={stroke}
               strokeOpacity={st === 'dim' ? 0.6 : 1}
-              strokeWidth={st === 'dim' ? 2.5 : 4}
+              strokeWidth={st === 'dim' ? 2.5 : ACTIVE_STROKE}
               strokeLinecap="round"
               filter={st === 'dim' ? undefined : 'url(#zi-arrow-glow)'}
               markerEnd={`url(#${markerId})`}
@@ -227,7 +232,7 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
               x1={ox1} y1={oy1} x2={ox2} y2={oy2}
               stroke={stroke}
               strokeOpacity={1}
-              strokeWidth={4}
+              strokeWidth={ACTIVE_STROKE}
               strokeLinecap="round"
               filter="url(#zi-arrow-glow)"
               markerEnd={`url(#${markerId})`}
@@ -269,7 +274,7 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
               x1={ox1} y1={oy1} x2={ox2} y2={oy2}
               stroke={stroke}
               strokeOpacity={st === 'dim' ? 0.6 : 1}
-              strokeWidth={st === 'dim' ? 2.5 : 4}
+              strokeWidth={st === 'dim' ? 2.5 : ACTIVE_STROKE}
               strokeLinecap="round"
               filter={st === 'dim' ? undefined : 'url(#zi-arrow-glow)'}
               markerEnd={`url(#${markerId})`}
@@ -305,7 +310,12 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
         );
       })}
 
-      {/* Lion at centre. */}
+      {/* Lion at centre. We deliberately drop the outer yellow
+          box-shadow (used to be 16-28px halo): it bled into the
+          surrounding zone where the elephant↔lion arrows live and
+          made yellow arrows invisible against the same-colour glow,
+          and washed out the red ones. The inset glow inside the
+          bubble is plenty of "selected" affordance on its own. */}
       <button
         type="button"
         onMouseEnter={() => setHovered('lion')}
@@ -320,8 +330,8 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
           background: active === 'lion' ? theme.p1AccentBg : theme.panelBg,
           border: `3px solid ${active === 'lion' ? theme.p1Color : theme.p1AccentBorder}`,
           boxShadow: active === 'lion'
-            ? `0 0 28px ${theme.p1Color}, inset 0 0 12px ${theme.p1Color}55`
-            : `0 0 16px ${theme.p1Color}55`,
+            ? `inset 0 0 14px ${theme.p1Color}88`
+            : `inset 0 0 8px ${theme.p1Color}44`,
         }}
       >
         <span aria-hidden style={{ fontSize: 32, lineHeight: 1 }}>🦁</span>
