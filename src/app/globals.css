@@ -150,8 +150,16 @@ input, select, textarea {
   from { transform: rotate(0deg); }
   to   { transform: rotate(-360deg); }
 }
-.zi-cycle-spin       { animation: zi-cycle-spin       60s linear infinite; will-change: transform; }
-.zi-cycle-spin-back  { animation: zi-cycle-spin-back  60s linear infinite; will-change: transform; }
+.zi-cycle-spin       { animation: zi-cycle-spin       90s linear infinite; will-change: transform; }
+.zi-cycle-spin-back  { animation: zi-cycle-spin-back  90s linear infinite; will-change: transform; }
+
+/* Pause the orbital rotation whenever the wheel is being interacted
+ * with — chasing a moving target makes it easy to misclick. The
+ * `.zi-cycle-paused` class is toggled from React on hover/focus. */
+.zi-cycle-paused .zi-cycle-spin,
+.zi-cycle-paused .zi-cycle-spin-back {
+  animation-play-state: paused;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .zi-cycle-spin, .zi-cycle-spin-back { animation: none !important; }

@@ -49,14 +49,30 @@ interface Props {
 export default function KillCycleWheel({ onPick, selected }: Props) {
   const { theme } = useSettings();
   const [hovered, setHovered] = useState<WedgeKey | 'lion' | null>(null);
+  const [paused, setPaused] = useState(false);
   const active = hovered ?? selected ?? null;
 
   const idx: Record<WedgeKey, number> = {
     elephant: 0, ant: 1, butterfly: 2, bat: 3, monkey: 4,
   };
 
+  // An arrow lights up when EITHER end of it is the active piece — so
+  // tapping the Lion shows both the centre-out arrows AND the Elephant
+  // arrow coming in, and tapping the Butterfly shows the Bat arrow
+  // coming in. Without this, only outgoing arrows lit up and players
+  // couldn't see "who beats me" at a glance.
+  const isHot = (from: WedgeKey | 'lion', to: WedgeKey | 'lion') =>
+    active != null && (active === from || active === to);
+
   return (
-    <div className="relative" style={{ width: SIZE, height: SIZE, margin: '0 auto' }}>
+    <div
+      className={`relative ${paused ? 'zi-cycle-paused' : ''}`}
+      style={{ width: SIZE, height: SIZE, margin: '0 auto' }}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
       {/* Spinning ring. Holds both the arrow SVG and the piece bubbles,
           so they orbit together — pieces never drift away from the
           arrow tips. The bubbles inside counter-rotate to keep emojis
@@ -64,30 +80,23 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
       <div className="absolute inset-0 zi-cycle-spin">
         <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}>
           <defs>
-            {/* Gradient stroke for active arrows — bright at the source,
-                fades into the player accent colour at the target. */}
-            <linearGradient id="zi-arrow-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%"   stopColor={theme.p1Color}  stopOpacity="0.95" />
-              <stop offset="100%" stopColor={theme.selectedRing} stopOpacity="0.95" />
-            </linearGradient>
-            {/* Soft glow for active arrows. */}
-            <filter id="zi-arrow-glow" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="2.4" result="b" />
+            {/* Soft glow under bright arrows — punchier than the
+                previous build so a hot arrow stands out clearly. */}
+            <filter id="zi-arrow-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="b" />
               <feMerge>
                 <feMergeNode in="b" />
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
-            {/* Arrowheads — chunkier, painted with the gradient so they
-                blend with the line. */}
             <marker
               id="zi-arrow-bright"
               viewBox="0 0 12 12"
               refX="9" refY="6"
-              markerWidth="7" markerHeight="7"
+              markerWidth="8" markerHeight="8"
               orient="auto-start-reverse"
             >
-              <path d="M 0 0 L 12 6 L 0 12 z" fill={theme.selectedRing} />
+              <path d="M 0 0 L 12 6 L 0 12 z" fill={theme.p1Color} />
             </marker>
             <marker
               id="zi-arrow-dim"
@@ -101,16 +110,15 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
           </defs>
 
           {/* Ring → ring arrows (skipping the elephant→lion which goes
-              centre-in below). Active piece's arrow gets the gradient +
-              glow treatment; the rest sit dim in the background so the
-              cycle is always visible at a glance. */}
+              centre-in below). An arrow is "hot" if either of its
+              endpoints is the active piece, so tapping a piece lights
+              up everything that touches it — both who it beats and
+              who beats it. */}
           {RING.map(p => {
             if (p.kills === 'lion') return null;
             const from = ringPoint(idx[p.key]);
             const to   = ringPoint(idx[p.kills]);
-            const isActive = active === p.key;
-            // Stop short of the target piece bubble so the arrowhead
-            // lands outside the emoji circle.
+            const hot  = isHot(p.key, p.kills);
             const dx = to.x - from.x, dy = to.y - from.y;
             const len = Math.hypot(dx, dy);
             const tx = from.x + (dx / len) * (len - PIECE_RADIUS - 6);
@@ -121,34 +129,34 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
               <line
                 key={`ring-${p.key}`}
                 x1={sx} y1={sy} x2={tx} y2={ty}
-                stroke={isActive ? 'url(#zi-arrow-grad)' : theme.textMuted}
-                strokeOpacity={isActive ? 1 : 0.35}
-                strokeWidth={isActive ? 3.5 : 2}
+                stroke={hot ? theme.p1Color : theme.textMuted}
+                strokeOpacity={hot ? 1 : 0.35}
+                strokeWidth={hot ? 4 : 2}
                 strokeLinecap="round"
-                filter={isActive ? 'url(#zi-arrow-glow)' : undefined}
-                markerEnd={isActive ? 'url(#zi-arrow-bright)' : 'url(#zi-arrow-dim)'}
+                filter={hot ? 'url(#zi-arrow-glow)' : undefined}
+                markerEnd={hot ? 'url(#zi-arrow-bright)' : 'url(#zi-arrow-dim)'}
               />
             );
           })}
 
-          {/* Lion → all 5 ring pieces (centre-out). Only drawn when the
-              Lion is highlighted, to keep the wheel readable in its
-              resting state. */}
+          {/* Lion → all 5 ring pieces (centre-out). Drawn whenever the
+              Lion is the focus, so the player sees "Lion beats anyone"
+              at a glance. */}
           {active === 'lion' && RING.map(p => {
             const to = ringPoint(idx[p.key]);
             const dx = to.x - CENTER, dy = to.y - CENTER;
             const len = Math.hypot(dx, dy);
             const tx = CENTER + (dx / len) * (len - PIECE_RADIUS - 6);
             const ty = CENTER + (dy / len) * (len - PIECE_RADIUS - 6);
-            const sx = CENTER + (dx / len) * 18;
-            const sy = CENTER + (dy / len) * 18;
+            const sx = CENTER + (dx / len) * (PIECE_RADIUS + 4);
+            const sy = CENTER + (dy / len) * (PIECE_RADIUS + 4);
             return (
               <line
                 key={`lion-${p.key}`}
                 x1={sx} y1={sy} x2={tx} y2={ty}
-                stroke="url(#zi-arrow-grad)"
-                strokeOpacity={0.95}
-                strokeWidth={3}
+                stroke={theme.p1Color}
+                strokeOpacity={1}
+                strokeWidth={4}
                 strokeLinecap="round"
                 filter="url(#zi-arrow-glow)"
                 markerEnd="url(#zi-arrow-bright)"
@@ -156,9 +164,11 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
             );
           })}
 
-          {/* Elephant → Lion (centre-in). Always drawn — drives home
-              that the kill cycle isn't a flat ring; the Elephant cuts
-              across to take the king. */}
+          {/* Elephant → Lion (centre-in). Always drawn so the cycle
+              never looks broken; brightens whenever EITHER endpoint is
+              the active piece — i.e. tapping Lion shows the "back"
+              arrow from Elephant, exactly the bidirectional behaviour
+              the lesson needs. */}
           {(() => {
             const from = ringPoint(idx.elephant);
             const dx = CENTER - from.x, dy = CENTER - from.y;
@@ -167,16 +177,16 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
             const sy = from.y + (dy / len) * (PIECE_RADIUS + 4);
             const tx = from.x + (dx / len) * (len - PIECE_RADIUS - 8);
             const ty = from.y + (dy / len) * (len - PIECE_RADIUS - 8);
-            const isActive = active === 'elephant';
+            const hot = isHot('elephant', 'lion');
             return (
               <line
                 x1={sx} y1={sy} x2={tx} y2={ty}
-                stroke={isActive ? 'url(#zi-arrow-grad)' : theme.textMuted}
-                strokeOpacity={isActive ? 1 : 0.35}
-                strokeWidth={isActive ? 3.5 : 2}
+                stroke={hot ? theme.p1Color : theme.textMuted}
+                strokeOpacity={hot ? 1 : 0.35}
+                strokeWidth={hot ? 4 : 2}
                 strokeLinecap="round"
-                filter={isActive ? 'url(#zi-arrow-glow)' : undefined}
-                markerEnd={isActive ? 'url(#zi-arrow-bright)' : 'url(#zi-arrow-dim)'}
+                filter={hot ? 'url(#zi-arrow-glow)' : undefined}
+                markerEnd={hot ? 'url(#zi-arrow-bright)' : 'url(#zi-arrow-dim)'}
               />
             );
           })()}
