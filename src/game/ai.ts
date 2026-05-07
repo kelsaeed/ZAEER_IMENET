@@ -526,8 +526,16 @@ export function chooseAiMove(state: GameState, player: Player, level: AiLevel): 
   const baseCtx = { aiPlayer: player, aborted: false };
   switch (level) {
     case 'butterfly': {
-      const ctx: SearchCtx = { ...baseCtx, deadline: performance.now() + 250, noise: 80 };
-      return pickByIterativeDeepening(state, ctx, 1);
+      // Easy used to be depth 1 with ±80 noise. Real-world feedback was
+      // it looked "completely random — never tried to take my lion,
+      // never blocked the throne path." The noise was so wide it
+      // dominated every term except the race/win bonuses, so captures
+      // and threats came out as coin flips. Bumping to depth 2 (sees one
+      // human reply) with much smaller ±20 noise keeps it BEATABLE while
+      // making the bot do the obvious things — defend its lion, take
+      // hanging pieces, head for the throne when the path is open.
+      const ctx: SearchCtx = { ...baseCtx, deadline: performance.now() + 500, noise: 20 };
+      return pickByIterativeDeepening(state, ctx, 2);
     }
     case 'monkey': {
       const ctx: SearchCtx = { ...baseCtx, deadline: performance.now() + 600, noise: 0 };

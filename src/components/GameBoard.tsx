@@ -8,9 +8,15 @@ interface Props {
   state: GameState;
   cellSize: number;
   onCellClick: (row: number, col: number) => void;
+  /** Tutorial-only: paints a pulsing ring on top of this cell so a
+   *  first-timer sees exactly where to tap next. Lives inside the
+   *  GameBoard so the offsets stay in lockstep with the grid as the
+   *  cell size resizes — much simpler than positioning an external
+   *  overlay against a fragile column-label height. */
+  tutorialHighlight?: { row: number; col: number } | null;
 }
 
-export default function GameBoard({ state, cellSize, onCellClick }: Props) {
+export default function GameBoard({ state, cellSize, onCellClick, tutorialHighlight }: Props) {
   const { pieces, selectedPieceId, validMoves, bounceEffect } = state;
   const { theme } = useSettings();
   const labelColor = `color-mix(in srgb, ${theme.textPrimary} 30%, transparent)`;
@@ -47,6 +53,10 @@ export default function GameBoard({ state, cellSize, onCellClick }: Props) {
           background: theme.boardBg,
           boxShadow: `0 0 0 1px rgba(255,255,255,0.04), 0 12px 40px rgba(0,0,0,0.45), inset 0 0 24px rgba(0,0,0,0.35)`,
           overflow: 'hidden',
+          // The tutorial pulse (if any) is positioned absolutely against
+          // this container — keeping the parent `relative` is what makes
+          // the cell-aligned offsets simple.
+          position: 'relative',
           // Block the page from scrolling/zooming when the user drags a
           // finger across the board. Taps still register; the rest of the
           // page (HUD, top bar) remains scrollable normally.
@@ -87,6 +97,24 @@ export default function GameBoard({ state, cellSize, onCellClick }: Props) {
             ))}
           </div>
         ))}
+
+        {/* Tutorial pulse — soft glowing ring on the lesson cell. */}
+        {tutorialHighlight && (
+          <div
+            aria-hidden
+            className="absolute pointer-events-none rounded-md zi-tutorial-pulse"
+            style={{
+              top: tutorialHighlight.row * cellSize,
+              left: 0.5 * cellSize + tutorialHighlight.col * cellSize,
+              width: cellSize,
+              height: cellSize,
+              boxSizing: 'border-box',
+              border: `3px solid ${theme.p1Color}`,
+              boxShadow: `0 0 18px ${theme.p1Color}, inset 0 0 14px ${theme.p1Color}66`,
+              zIndex: 5,
+            }}
+          />
+        )}
       </div>
     </div>
   );

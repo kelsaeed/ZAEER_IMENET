@@ -151,32 +151,84 @@ const STEP_PARALYZE: TutorialStep = {
   },
 };
 
-/** Lesson 4: rescue your paralyzed Lion by killing the enemy Bat sitting
- *  on it. Teaches the kill cycle (Monkey > Bat) in a real situation. */
+/** Lesson 4: kill a lone enemy Bat by sliding the Monkey across two
+ *  squares. Teaches the kill cycle in its simplest form AND the rule
+ *  that the killer takes the spot where its target was standing. We
+ *  put the Monkey two squares away on purpose so the player sees a
+ *  real travel distance and the takeover lands somewhere distant from
+ *  where the Monkey started. */
+const STEP_MONKEY_BAT: TutorialStep = {
+  id: 'monkey-bat',
+  titleKey: 'tutorial.monkeyBat.title',
+  bodyKey: 'tutorial.monkeyBat.body',
+  doneKey: 'tutorial.monkeyBat.done',
+  pieces: [
+    piece({ type: 'monkey', player: 1, row: 15, col: 6, id: 'monkey_p1_tut' }),
+    piece({ type: 'bat',    player: 2, row: 15, col: 8, id: 'bat_p2_tut' }),
+  ],
+  selectFrom: { row: 15, col: 6 },
+  moveTo:     { row: 15, col: 8 },
+  isComplete: (s) => {
+    const bat = s.pieces.find(p => p.id === 'bat_p2_tut');
+    const monkey = s.pieces.find(p => p.id === 'monkey_p1_tut');
+    return !bat && !!monkey && monkey.row === 15 && monkey.col === 8;
+  },
+};
+
+/** Lesson 5: rescue your paralyzed Lion by killing the enemy Bat sitting
+ *  on it. Same kill-cycle rule as STEP_MONKEY_BAT, dropped into a
+ *  scenario where the Monkey is two squares away — the player gets to
+ *  see the sweep across the board AND the freed Lion. */
 const STEP_RESCUE: TutorialStep = {
   id: 'rescue',
   titleKey: 'tutorial.rescue.title',
   bodyKey: 'tutorial.rescue.body',
   doneKey: 'tutorial.rescue.done',
   pieces: [
-    // Lion paralyzed underneath the enemy Bat (same square).
     piece({
-      type: 'lion', player: 1, row: 15, col: 7, id: 'lion_p1_tut',
+      type: 'lion', player: 1, row: 15, col: 6, id: 'lion_p1_tut',
       isParalyzed: true, paralyzedBy: 'bat_p2_tut',
     }),
     piece({
-      type: 'bat', player: 2, row: 15, col: 7, id: 'bat_p2_tut',
+      type: 'bat', player: 2, row: 15, col: 6, id: 'bat_p2_tut',
       paralyzing: 'lion_p1_tut',
     }),
     piece({ type: 'monkey', player: 1, row: 15, col: 8, id: 'monkey_p1_tut' }),
   ],
   selectFrom: { row: 15, col: 8 },
-  moveTo:     { row: 15, col: 7 },
+  moveTo:     { row: 15, col: 6 },
   isComplete: (s) => {
-    // Bat dead AND Lion no longer paralyzed.
     const bat = s.pieces.find(p => p.id === 'bat_p2_tut');
     const lion = s.pieces.find(p => p.id === 'lion_p1_tut');
     return !bat && !!lion && !lion.isParalyzed;
+  },
+};
+
+/** Lesson 6: the Elephant has two lives. Preset state has an enemy
+ *  Elephant already at 1 HP (the 💔 broken-heart marker). The player
+ *  finishes it off with their Lion to see the kill, and the body text
+ *  before/after explains why the icon was there. We don't try to
+ *  demonstrate two consecutive hits in-tutorial — that needs Ant
+ *  rotation gymnastics that would derail a first-timer. */
+const STEP_ELEPHANT: TutorialStep = {
+  id: 'elephant',
+  titleKey: 'tutorial.elephant.title',
+  bodyKey: 'tutorial.elephant.body',
+  doneKey: 'tutorial.elephant.done',
+  pieces: [
+    piece({ type: 'lion', player: 1, row: 13, col: 7, id: 'lion_p1_tut' }),
+    // Damaged elephant: hp=1 + isDamaged=true so the broken-heart icon
+    // is visible from the start. Game logic kills it on the next hit.
+    piece({
+      type: 'elephant', player: 2, row: 12, col: 7, id: 'elephant_p2_tut',
+      hp: 1,
+    }),
+  ],
+  selectFrom: { row: 13, col: 7 },
+  moveTo:     { row: 12, col: 7 },
+  isComplete: (s) => {
+    const e = s.pieces.find(p => p.id === 'elephant_p2_tut');
+    return !e;
   },
 };
 
@@ -184,5 +236,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   STEP_MOVE,
   STEP_SHIELD,
   STEP_PARALYZE,
+  STEP_MONKEY_BAT,
   STEP_RESCUE,
+  STEP_ELEPHANT,
 ];
