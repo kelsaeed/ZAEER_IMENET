@@ -301,6 +301,33 @@ input, select, textarea {
   mix-blend-mode: screen;
 }
 
+/* Per-half placement modifiers — used by SplitBackground when the two
+ * players have different themes so each player's premium decor is
+ * scoped to their side of the board. The full-screen variant is
+ * suppressed in that case (see body.zi-split-active rule below). */
+.zi-celestial-root.zi-celestial-half-top {
+  inset: 0 0 50% 0;
+}
+.zi-celestial-root.zi-celestial-half-bottom {
+  inset: 50% 0 0 0;
+}
+/* Inner elements use viewport units for height; in a half-height
+ * layer they'd dominate. Compress them so each half feels balanced. */
+.zi-celestial-root.zi-celestial-half-top .zi-celestial-bloom,
+.zi-celestial-root.zi-celestial-half-bottom .zi-celestial-bloom {
+  height: 38vh;
+}
+.zi-celestial-root.zi-celestial-half-top .zi-celestial-curtain,
+.zi-celestial-root.zi-celestial-half-bottom .zi-celestial-curtain {
+  height: 26vh;
+}
+/* SplitBackground sets this class while showing two distinct themes.
+ * The full-screen layout-level decor stays mounted but goes invisible
+ * so the per-half decor can take over without doubling. */
+body.zi-split-active .zi-celestial-root.zi-celestial-full {
+  display: none;
+}
+
 .zi-celestial-bloom {
   position: absolute;
   inset: -10% -10% auto -10%;

@@ -4,6 +4,7 @@ import { SettingsProvider } from '@/hooks/useSettings';
 import { UserProvider } from '@/hooks/useUser';
 import ThemeProfileSync from '@/components/ThemeProfileSync';
 import ThemeDecor from '@/components/ThemeDecor';
+import PreviewBanner from '@/components/PreviewBanner';
 
 export const metadata: Metadata = {
   title: 'Zaeer Imenet — Ancient Strategy Game',
@@ -28,10 +29,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
             {/* Premium-theme overlay. Mounted last so its position:
                 fixed layer paints above the page's bgGradient (which
-                lives on the page wrapper). Gated to themeId === 'celestial'
-                inside the component, so it costs one context read on
-                every other theme. */}
+                lives on the page wrapper). Hidden by CSS while
+                SplitBackground is showing two distinct themes — see
+                body.zi-split-active. */}
             <ThemeDecor />
+            {/* Floating banner that appears whenever the user is
+                previewing a theme from the store. */}
+            <PreviewBanner />
           </UserProvider>
         </SettingsProvider>
       </body>

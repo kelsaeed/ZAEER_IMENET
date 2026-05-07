@@ -32,6 +32,22 @@ interface SettingsValue {
   themeId: string;
   setThemeId: (id: string) => void;
   themes: Theme[];
+  /** Active theme id including preview override. Components that need
+   *  the *real* (saved) theme should read `themeId`; rendering should
+   *  read `theme` (already preview-aware). */
+  activeThemeId: string;
+  /** When set, the resolved `theme` is rendered using this id instead
+   *  of `themeId`, and nothing is persisted to localStorage or pushed
+   *  to the profile. Used by the /store "Try it" flow. */
+  previewThemeId: string | null;
+  setPreviewThemeId: (id: string | null) => void;
+  /** Decor pack key for a given theme id (from themes_catalog.decor_kind).
+   *  Returns 'none' for unknown ids. */
+  getDecorKind: (id: string) => string;
+  /** Resolve a theme id to its full Theme object — checks built-ins,
+   *  admin-authored DB themes, and falls back to navy. Replaces the
+   *  static getThemeById for callers that need to see admin themes. */
+  resolveThemeById: (id: string | null | undefined) => Theme | null;
   // Custom theme (only used when themeId === 'custom')
   customColors: CustomThemeColors;
   setCustomColor: (key: keyof CustomThemeColors, value: string) => void;
@@ -72,12 +88,27 @@ function readJSON<T>(key: string, fallback: T): T {
   }
 }
 
+interface DbThemeEntry {
+  data: Partial<Theme>;
+  decorKind: string;
+}
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [themeId, setThemeIdState] = useState<string>(DEFAULT_THEME_ID);
+  // Preview is intentionally NOT persisted — it overrides the active
+  // theme rendering for as long as the user is browsing the store
+  // and disappears on full refresh. The PreviewBanner component is
+  // the visible signal that the override is in effect.
+  const [previewThemeId, setPreviewThemeIdState] = useState<string | null>(null);
   const [customColors, setCustomColors] = useState<CustomThemeColors>(DEFAULT_CUSTOM_COLORS);
   const [localeId, setLocaleIdState] = useState<string>(DEFAULT_LOCALE_ID);
   const [customLocales, setCustomLocales] = useState<Locale[]>([]);
   const [overrides, setOverrides] = useState<Overrides>({});
+  // Admin-authored / overridden themes from public.themes_catalog. Keyed
+  // by theme id; the value carries the JSON spec (which may be partial —
+  // missing fields fall back to the static built-in for that id, or to
+  // navy for brand-new admin themes) plus the decor kind.
+  const [dbThemes, setDbThemes] = useState<Map<string, DbThemeEntry>>(() => new Map());
   // Audio prefs default to true (sound) / false (music) / true (haptics).
   // See the storage-key block above for the rationale.
   const [soundEnabled, setSoundEnabledState] = useState<boolean>(true);
@@ -155,10 +186,88 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return () => { supabase.removeChannel(channel); };
   }, [refreshFromDb]);
 
+  // ── Hydrate DB themes from themes_catalog ────────────────────────────────
+  // Same pattern as locales: pull on mount, subscribe to Realtime so
+  // an admin's edit shows up everywhere live. theme_data being null
+  // means the row only carries store metadata for a built-in theme;
+  // we still record the decor_kind so ThemeDecor can find it.
+  const refreshDbThemes = useCallback(async () => {
+    const supabase = getSupabaseBrowser();
+    const { data, error } = await supabase
+      .from('themes_catalog')
+      .select('id, theme_data, decor_kind')
+      .eq('is_published', true);
+    if (error) return;
+    const next = new Map<string, DbThemeEntry>();
+    for (const row of (data ?? []) as { id: string; theme_data: Partial<Theme> | null; decor_kind: string | null }[]) {
+      next.set(row.id, {
+        data: row.theme_data ?? {},
+        decorKind: row.decor_kind ?? 'none',
+      });
+    }
+    setDbThemes(next);
+  }, []);
+
+  useEffect(() => {
+    void refreshDbThemes();
+    const supabase = getSupabaseBrowser();
+    const channel = supabase
+      .channel('themes-catalog-sync')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'themes_catalog' },
+        () => { void refreshDbThemes(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refreshDbThemes]);
+
   const allLocales = useMemo(() => [...LOCALES, ...customLocales], [customLocales]);
-  const builtTheme = useMemo(() => THEMES.find(t => t.id === themeId) ?? THEMES[0], [themeId]);
+
+  // Build the merged theme list: every built-in (with any DB overlay
+  // applied), plus any DB-only themes the admin authored. The order
+  // mirrors the static THEMES first, then admin themes by id.
+  const themesList = useMemo<Theme[]>(() => {
+    const staticIds = new Set(THEMES.map(t => t.id));
+    const merged: Theme[] = THEMES.map(t => {
+      const overlay = dbThemes.get(t.id)?.data;
+      return overlay ? ({ ...t, ...overlay, id: t.id } as Theme) : t;
+    });
+    Array.from(dbThemes.entries()).forEach(([id, entry]) => {
+      if (staticIds.has(id)) return;
+      // Admin-only theme. Start from navy as a complete baseline so
+      // missing fields don't leave the UI with `undefined` colors.
+      // Spread entry.data first then pin id last so a stray `id`
+      // inside the JSON can't override the catalog row's id.
+      merged.push({ ...THEMES[0], ...entry.data, id } as Theme);
+    });
+    return merged;
+  }, [dbThemes]);
+
+  // Active id: preview wins, then the saved themeId. Persistence side-
+  // effects (localStorage push, profile sync) all read `themeId` so
+  // preview never leaks into storage.
+  const activeThemeId = previewThemeId ?? themeId;
+
   const customTheme = useMemo(() => buildCustomTheme(customColors), [customColors]);
-  const theme = themeId === 'custom' ? customTheme : builtTheme;
+
+  const theme = useMemo(() => {
+    if (activeThemeId === 'custom') return customTheme;
+    return themesList.find(t => t.id === activeThemeId) ?? THEMES[0];
+  }, [activeThemeId, customTheme, themesList]);
+
+  const resolveThemeById = useCallback((id: string | null | undefined): Theme | null => {
+    if (!id) return null;
+    if (id === 'custom') return customTheme;
+    return themesList.find(t => t.id === id) ?? null;
+  }, [themesList, customTheme]);
+
+  const getDecorKind = useCallback((id: string): string => {
+    return dbThemes.get(id)?.decorKind ?? 'none';
+  }, [dbThemes]);
+
+  const setPreviewThemeId = useCallback((id: string | null) => {
+    setPreviewThemeIdState(id);
+  }, []);
+
   const locale = useMemo(() => allLocales.find(l => l.id === localeId) ?? allLocales[0], [allLocales, localeId]);
 
   const t = useCallback((key: string): string => {
@@ -254,7 +363,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       theme,
       themeId,
       setThemeId,
-      themes: THEMES,
+      themes: themesList,
+      activeThemeId,
+      previewThemeId,
+      setPreviewThemeId,
+      getDecorKind,
+      resolveThemeById,
       customColors,
       setCustomColor,
       resetCustomColors,
@@ -277,7 +391,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setHapticsEnabled,
     }),
     [
-      theme, themeId, customColors, locale, allLocales, t,
+      theme, themeId, themesList, activeThemeId, previewThemeId, setPreviewThemeId,
+      getDecorKind, resolveThemeById,
+      customColors, locale, allLocales, t,
       setThemeId, setCustomColor, resetCustomColors, setLocaleId,
       addCustomLocale, removeCustomLocale, setTranslation, resetTranslation, isBuiltIn,
       soundEnabled, setSoundEnabled,

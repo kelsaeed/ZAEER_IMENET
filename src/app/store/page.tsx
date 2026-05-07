@@ -1,35 +1,52 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useSettings } from '@/hooks/useSettings';
 import { useUser } from '@/hooks/useUser';
-import { getThemeById } from '@/game/themes';
 import {
   listThemeCatalog,
   acquireFreeTheme,
+  redeemThemeCode,
+  effectivePriceCents,
+  isCurrentlyFree,
   type ThemeCatalogRow,
 } from '@/lib/supabase/themeStore';
 
 /** Cosmetic theme storefront. Lists every published row from
- *  themes_catalog, lets signed-in users claim free themes, and gates
- *  paid ones behind a "Coming soon" pill until Stripe is wired up.
+ *  themes_catalog, lets signed-in users claim free themes (or themes
+ *  inside a free_until window / 100%-off discount), gates paid ones
+ *  behind a "Coming soon" pill until Stripe is wired up, and lets
+ *  anyone redeem a one-time code for free ownership. Admins see
+ *  Equip on every card regardless of ownership.
  *
- *  Lives at /store rather than under /profile so the URL is short
- *  enough to share ("zaeer.app/store") and signed-out browsers can
- *  preview the catalog before deciding to sign up. */
+ *  Preview: every card has a "Try it" button that flips the entire
+ *  site to that theme via setPreviewThemeId. The PreviewBanner
+ *  follows the user across pages until they stop or equip. */
 export default function ThemeStorePage() {
-  const { theme, themeId, setThemeId, isRTL, t, locale } = useSettings();
-  const { user, ownedThemeIds, reloadOwnership } = useUser();
+  const {
+    theme, themeId, setThemeId, isRTL, t, locale,
+    previewThemeId, setPreviewThemeId,
+  } = useSettings();
+  const { user, profile, ownedThemeIds, reloadOwnership } = useUser();
   const isArabic = locale.dir === 'rtl';
+  const isAdmin = !!profile?.is_admin;
 
   const [catalog, setCatalog] = useState<ThemeCatalogRow[] | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
+  const [redeemInput, setRedeemInput] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemMsg, setRedeemMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  // Initial load. Catalog is public — no auth required. We don't
-  // subscribe to Realtime here because admin-side price/copy edits
-  // are rare; a refresh picks them up.
+  // Re-render every minute so countdown labels (free until / discount
+  // ends in) refresh without the user having to reload the page.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     void listThemeCatalog().then(rows => {
@@ -49,24 +66,48 @@ export default function ThemeStorePage() {
       return;
     }
     await reloadOwnership();
-    // Auto-equip on first claim — the user just expressed intent.
     setThemeId(row.id);
+    setPreviewThemeId(null);
     setPendingId(null);
   }
 
   function handleEquip(row: ThemeCatalogRow) {
     setThemeId(row.id);
+    setPreviewThemeId(null);
+  }
+
+  function handlePreview(row: ThemeCatalogRow) {
+    // Toggle: clicking preview on the same card stops the preview.
+    setPreviewThemeId(previewThemeId === row.id ? null : row.id);
+  }
+
+  async function handleRedeem() {
+    if (!user) {
+      setRedeemMsg({ kind: 'err', text: t('store.redeemSignIn') });
+      return;
+    }
+    if (!redeemInput.trim()) return;
+    setRedeeming(true);
+    setRedeemMsg(null);
+    const ok = await redeemThemeCode(redeemInput);
+    setRedeeming(false);
+    if (!ok) {
+      setRedeemMsg({ kind: 'err', text: t('store.redeemError') });
+      return;
+    }
+    setRedeemInput('');
+    setRedeemMsg({ kind: 'ok', text: t('store.redeemOk') });
+    await reloadOwnership();
   }
 
   return (
     <main
       dir={isRTL ? 'rtl' : 'ltr'}
-      className="min-h-screen w-full px-4 sm:px-6 py-8 pt-16"
+      className="min-h-screen w-full px-4 sm:px-6 py-8 pt-16 pb-24"
       style={{ minHeight: '100dvh', background: theme.bgGradient, color: theme.textPrimary }}
     >
-      {/* Header */}
       <div className="max-w-5xl mx-auto mb-6">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <Link
             href="/"
             className="rounded-full px-3 py-1.5 text-sm font-semibold transition-transform hover:scale-105"
@@ -78,6 +119,19 @@ export default function ThemeStorePage() {
           >
             {isRTL ? '→' : '←'} {t('store.back')}
           </Link>
+          {isAdmin && (
+            <Link
+              href="/admin/themes"
+              className="rounded-full px-3 py-1.5 text-xs font-bold"
+              style={{
+                background: theme.p2AccentBg,
+                border: `1px solid ${theme.p2AccentBorder}`,
+                color: theme.p2Color,
+              }}
+            >
+              🛡️ {t('admin.themes.openCta')}
+            </Link>
+          )}
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold mb-1" style={{ color: theme.p1Color }}>
           🎨 {t('store.title')}
@@ -87,8 +141,7 @@ export default function ThemeStorePage() {
         </p>
       </div>
 
-      {/* Sign-in nudge — only when signed out, so signed-in users don't
-          see a banner that doesn't apply to them. */}
+      {/* Sign-in nudge */}
       {!user && (
         <div
           className="max-w-5xl mx-auto mb-4 rounded-xl px-4 py-3 text-sm flex flex-wrap items-center gap-3"
@@ -105,14 +158,60 @@ export default function ThemeStorePage() {
         </div>
       )}
 
-      {/* Loading state */}
+      {/* Redeem code section — visible to everyone, but only useful
+          when signed in (RPC requires auth.uid()). */}
+      <div
+        className="max-w-5xl mx-auto mb-6 rounded-xl p-4"
+        style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+      >
+        <div className="text-sm font-semibold mb-2" style={{ color: theme.textPrimary }}>
+          🎟️ {t('store.redeemTitle')}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={redeemInput}
+            onChange={e => setRedeemInput(e.target.value.toUpperCase())}
+            placeholder={t('store.redeemPlaceholder')}
+            className="flex-1 min-w-[10rem] rounded-md px-3 py-2 text-sm font-mono"
+            style={{
+              background: theme.inputBg,
+              border: `1px solid ${theme.buttonBorder}`,
+              color: theme.inputText,
+              letterSpacing: '0.08em',
+            }}
+            maxLength={32}
+          />
+          <button
+            onClick={handleRedeem}
+            disabled={redeeming || !redeemInput.trim()}
+            className="rounded-md px-4 py-2 text-sm font-bold transition-transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              background: theme.buttonRotateBg,
+              border: `1px solid ${theme.buttonRotateBorder}`,
+              color: theme.buttonRotateText,
+            }}
+          >
+            {redeeming ? t('store.redeemBusy') : t('store.redeemCta')}
+          </button>
+        </div>
+        {redeemMsg && (
+          <div
+            className="text-xs mt-2"
+            style={{
+              color: redeemMsg.kind === 'ok' ? theme.buttonRotateText : theme.buttonEndTurnText,
+            }}
+          >
+            {redeemMsg.text}
+          </div>
+        )}
+      </div>
+
       {catalog === null && (
         <div className="max-w-5xl mx-auto text-center py-12 opacity-70">
           {t('store.loading')}
         </div>
       )}
 
-      {/* Empty state — most likely cause is the migration hasn't run. */}
       {catalog !== null && catalog.length === 0 && (
         <div
           className="max-w-5xl mx-auto rounded-xl p-6 text-center"
@@ -122,21 +221,24 @@ export default function ThemeStorePage() {
         </div>
       )}
 
-      {/* Grid of theme cards */}
       {catalog !== null && catalog.length > 0 && (
         <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {catalog.map((row, i) => (
             <ThemeCard
               key={row.id}
               row={row}
+              now={now}
               isArabic={isArabic}
               isEquipped={themeId === row.id}
-              isOwned={ownedThemeIds.has(row.id)}
+              isPreviewing={previewThemeId === row.id}
+              isOwned={ownedThemeIds.has(row.id) || isAdmin}
+              isAdmin={isAdmin}
               isSignedIn={!!user}
               isPending={pendingId === row.id}
               hasError={errorId === row.id}
               onClaim={() => handleClaim(row)}
               onEquip={() => handleEquip(row)}
+              onPreview={() => handlePreview(row)}
               animationDelay={Math.min(i * 0.05, 0.4)}
             />
           ))}
@@ -150,55 +252,75 @@ export default function ThemeStorePage() {
 
 interface CardProps {
   row: ThemeCatalogRow;
+  now: Date;
   isArabic: boolean;
   isEquipped: boolean;
+  isPreviewing: boolean;
   isOwned: boolean;
+  isAdmin: boolean;
   isSignedIn: boolean;
   isPending: boolean;
   hasError: boolean;
   onClaim: () => void;
   onEquip: () => void;
+  onPreview: () => void;
   animationDelay: number;
 }
 
 function ThemeCard({
-  row, isArabic, isEquipped, isOwned, isSignedIn,
-  isPending, hasError, onClaim, onEquip, animationDelay,
+  row, now, isArabic, isEquipped, isPreviewing, isOwned, isAdmin, isSignedIn,
+  isPending, hasError, onClaim, onEquip, onPreview, animationDelay,
 }: CardProps) {
-  const { theme: hostTheme, t } = useSettings();
-  // Look up the actual Theme object so we can render a real preview
-  // (gradient + checkerboard + piece dots) instead of just a name. If
-  // the catalog references an id we don't ship in code yet, fall back
-  // to the host theme's colors so the card still renders.
-  const preview = useMemo(() => getThemeById(row.id) ?? hostTheme, [row.id, hostTheme]);
+  const { theme: hostTheme, t, resolveThemeById } = useSettings();
+  const preview = useMemo(() => resolveThemeById(row.id) ?? hostTheme, [row.id, hostTheme, resolveThemeById]);
 
-  const isFree = row.price_cents === 0;
+  const effective = effectivePriceCents(row, now);
+  const isFreeNow = isCurrentlyFree(row, now);
+  const isDiscounted = effective < row.price_cents && row.price_cents > 0;
+  const isFreeWindow = row.free_until && new Date(row.free_until) > now;
+
   const displayName = isArabic && row.display_name_ar ? row.display_name_ar : row.display_name;
   const description = isArabic && row.description_ar ? row.description_ar : row.description;
 
-  const priceLabel = isFree
+  const priceLabel = isFreeNow
     ? t('store.priceFree')
-    : `$${(row.price_cents / 100).toFixed(2)}`;
+    : `$${(effective / 100).toFixed(2)}`;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: animationDelay, duration: 0.3 }}
-      className="rounded-2xl overflow-hidden flex flex-col"
+      className="rounded-2xl overflow-hidden flex flex-col relative"
       style={{
         background: hostTheme.panelBg,
-        border: `1px solid ${isEquipped ? preview.selectedRing : hostTheme.panelBorder}`,
+        border: `1px solid ${
+          isEquipped ? preview.selectedRing
+          : isPreviewing ? hostTheme.p2AccentBorder
+          : hostTheme.panelBorder
+        }`,
+        boxShadow: isPreviewing ? `0 0 0 2px ${hostTheme.p2AccentBorder}` : undefined,
       }}
     >
-      {/* Preview strip — shows the theme's actual board / piece colors
-          on its own gradient so a card for "Crimson Empire" feels red
-          even on a navy host page. */}
+      {/* Premium ribbon */}
+      {row.is_premium && (
+        <div
+          className="absolute top-2 right-2 z-10 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide"
+          style={{
+            background: 'linear-gradient(135deg, #fbbf24, #f472b6, #a78bfa)',
+            color: '#1a0d2e',
+          }}
+        >
+          ✦ {t('store.premiumPill')}
+        </div>
+      )}
+
+      {/* Preview strip */}
       <div
         className="p-4"
         style={{ background: preview.bgGradient }}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 gap-2">
           <div className="font-bold text-base" style={{ color: preview.textPrimary }}>
             {displayName}
           </div>
@@ -215,8 +337,7 @@ function ThemeCard({
             </span>
           )}
         </div>
-        {/* Mini board: 4 cells (light/dark/throne/barrier) + 2 piece dots */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="w-7 h-7 rounded" style={{ background: preview.cellLight, border: `1px solid ${preview.boardBorder}` }} />
           <span className="w-7 h-7 rounded" style={{ background: preview.cellDark, border: `1px solid ${preview.boardBorder}` }} />
           <span className="w-7 h-7 rounded" style={{ background: preview.throneBg, border: `1px solid ${preview.throneBorder}` }} />
@@ -227,9 +348,30 @@ function ThemeCard({
         </div>
       </div>
 
-      {/* Description + CTA — uses the HOST page's theme so the controls
-          are consistent across cards regardless of which palette the
-          card is previewing. */}
+      {/* Discount / free-until banner */}
+      {(isDiscounted || isFreeWindow) && (
+        <div
+          className="px-4 py-1.5 text-xs font-bold flex items-center gap-2"
+          style={{
+            background: hostTheme.buttonRotateBg,
+            color: hostTheme.buttonRotateText,
+            borderTop: `1px solid ${hostTheme.buttonRotateBorder}`,
+          }}
+        >
+          {isFreeWindow ? (
+            <>🎁 {t('store.freeUntilLabel')} {formatDate(row.free_until!, isArabic)}</>
+          ) : (
+            <>
+              🔥 {row.discount_pct}% {t('store.discountLabel')}
+              {row.discount_ends_at && (
+                <> · {t('store.endsOnLabel')} {formatDate(row.discount_ends_at, isArabic)}</>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Description + CTA */}
       <div className="p-4 flex flex-col gap-3 flex-1">
         {description && (
           <p className="text-sm flex-1" style={{ color: hostTheme.textMuted }}>
@@ -237,19 +379,40 @@ function ThemeCard({
           </p>
         )}
 
-        <div className="flex items-center justify-between gap-2 mt-1">
-          <span className="text-sm font-bold" style={{ color: hostTheme.textPrimary }}>
-            {priceLabel}
-          </span>
-          <CardCta
-            isFree={isFree}
-            isOwned={isOwned}
-            isEquipped={isEquipped}
-            isSignedIn={isSignedIn}
-            isPending={isPending}
-            onClaim={onClaim}
-            onEquip={onEquip}
-          />
+        <div className="flex items-center justify-between gap-2 mt-1 flex-wrap">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-bold" style={{ color: hostTheme.textPrimary }}>
+              {priceLabel}
+            </span>
+            {isDiscounted && (
+              <span className="text-xs line-through opacity-60" style={{ color: hostTheme.textMuted }}>
+                ${(row.price_cents / 100).toFixed(2)}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onPreview}
+              className="text-xs font-semibold rounded-full px-3 py-1.5 transition-transform hover:scale-105"
+              style={{
+                background: isPreviewing ? hostTheme.p2AccentBg : hostTheme.buttonBg,
+                border: `1px solid ${isPreviewing ? hostTheme.p2AccentBorder : hostTheme.buttonBorder}`,
+                color: isPreviewing ? hostTheme.p2Color : hostTheme.textPrimary,
+              }}
+            >
+              {isPreviewing ? `✕ ${t('store.previewStop')}` : `👁 ${t('store.previewCta')}`}
+            </button>
+            <CardCta
+              isFree={isFreeNow}
+              isOwned={isOwned}
+              isEquipped={isEquipped}
+              isAdmin={isAdmin}
+              isSignedIn={isSignedIn}
+              isPending={isPending}
+              onClaim={onClaim}
+              onEquip={onEquip}
+            />
+          </div>
         </div>
 
         {hasError && (
@@ -268,16 +431,16 @@ interface CtaProps {
   isFree: boolean;
   isOwned: boolean;
   isEquipped: boolean;
+  isAdmin: boolean;
   isSignedIn: boolean;
   isPending: boolean;
   onClaim: () => void;
   onEquip: () => void;
 }
 
-function CardCta({ isFree, isOwned, isEquipped, isSignedIn, isPending, onClaim, onEquip }: CtaProps) {
+function CardCta({ isFree, isOwned, isEquipped, isAdmin, isSignedIn, isPending, onClaim, onEquip }: CtaProps) {
   const { theme, t } = useSettings();
 
-  // Owned + currently equipped → quiet "Active" badge, no action.
   if (isOwned && isEquipped) {
     return (
       <span
@@ -293,7 +456,6 @@ function CardCta({ isFree, isOwned, isEquipped, isSignedIn, isPending, onClaim, 
     );
   }
 
-  // Owned but not equipped → big "Equip" button.
   if (isOwned && !isEquipped) {
     return (
       <button
@@ -305,12 +467,11 @@ function CardCta({ isFree, isOwned, isEquipped, isSignedIn, isPending, onClaim, 
           color: theme.buttonSwitchText,
         }}
       >
-        {t('store.equip')}
+        {isAdmin ? `🛡 ${t('store.equip')}` : t('store.equip')}
       </button>
     );
   }
 
-  // Not owned + paid → no payment flow yet, show a soft "Coming soon".
   if (!isFree) {
     return (
       <span
@@ -326,7 +487,6 @@ function CardCta({ isFree, isOwned, isEquipped, isSignedIn, isPending, onClaim, 
     );
   }
 
-  // Not owned + free + signed-out → bounce to login.
   if (!isSignedIn) {
     return (
       <Link
@@ -343,7 +503,6 @@ function CardCta({ isFree, isOwned, isEquipped, isSignedIn, isPending, onClaim, 
     );
   }
 
-  // Not owned + free + signed-in → claim CTA.
   return (
     <button
       onClick={onClaim}
@@ -358,4 +517,10 @@ function CardCta({ isFree, isOwned, isEquipped, isSignedIn, isPending, onClaim, 
       {isPending ? t('store.claiming') : t('store.claimFree')}
     </button>
   );
+}
+
+function formatDate(iso: string, isArabic: boolean): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(isArabic ? 'ar' : 'en', { month: 'short', day: 'numeric' });
 }

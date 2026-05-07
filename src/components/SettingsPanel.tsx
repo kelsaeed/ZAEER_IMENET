@@ -28,10 +28,12 @@ export default function SettingsPanel({ onClose }: Props) {
   // player; non-admins only get to pick which language to use.
   // ownedThemeIds drives the lock badges in the theme grid — signed-out
   // users get an empty set and we treat that as "no gating" so the
-  // local-only theme experience still works without sign-in.
+  // local-only theme experience still works without sign-in. Admins
+  // own everything implicitly (matches the server-side trigger), so
+  // we skip the gate for them too.
   const { profile, user, ownedThemeIds } = useUser();
   const isAdmin = !!profile?.is_admin;
-  const gateThemes = !!user;
+  const gateThemes = !!user && !isAdmin;
 
   const [tab, setTab] = useState<Tab>('theme');
 

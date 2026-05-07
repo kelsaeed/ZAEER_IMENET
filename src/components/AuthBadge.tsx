@@ -117,6 +117,16 @@ export default function AuthBadge({ side }: Props) {
             >
               {t('app.themeStore')}
             </Link>
+            {profile?.is_admin && (
+              <Link
+                href="/admin/themes"
+                onClick={() => setOpen(false)}
+                className="block px-3 py-2 text-sm hover:opacity-80"
+                style={{ color: theme.p2Color }}
+              >
+                🛡️ {t('admin.themes.openCta')}
+              </Link>
+            )}
             <button
               type="button"
               onClick={() => {

@@ -2,32 +2,38 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSettings } from '@/hooks/useSettings';
 
-/** Animated decoration overlay scoped to the 'celestial' premium theme.
- *  Renders nothing for any other theme, so the cost is exactly one
- *  context read on the other six. Five layered effects:
- *
- *    1. Top bloom — slow horizontal-drifting wash of warm light
- *    2. Bottom aurora curtain — three breathing strands
- *    3. Sparkles — 50 dots, randomized, gentle twinkle
- *    4. Ribbons — 5 horizontal "lines" sweeping across the screen
- *    5. Diagonal trails — 4 short bright streaks at varied angles
- *
- *  Random positions are computed once with useMemo so they stay
- *  stable across re-renders (a fresh Math.random() each render
- *  would jitter the entire field). All layers are pointer-events:
- *  none and sit behind interactive controls (z-index: 1, controls
- *  use z-30+). */
+/** Layout-level theme decoration. Reads the local viewer's active
+ *  theme + its decor_kind from the catalog. Renders nothing for
+ *  themes whose decor_kind is 'none' (or unknown). When SplitBackground
+ *  is showing two different themes it sets `body.zi-split-active`,
+ *  which hides this full-screen layer (per-half decor takes over). */
 export default function ThemeDecor() {
-  const { themeId } = useSettings();
-  // Math.random() differs between server and client, so we defer the
-  // field generation to a mount effect to avoid a hydration mismatch
-  // warning. Same pattern AnimatedBackground uses on the start screen.
+  const { activeThemeId, getDecorKind } = useSettings();
+  const decorKind = getDecorKind(activeThemeId);
+
+  if (decorKind === 'none') return null;
+  return <ThemeDecorLayer decorKind={decorKind} placement="full" />;
+}
+
+interface LayerProps {
+  decorKind: string;
+  /** 'full' = entire viewport (used at layout level outside matches).
+   *  'half-top' / 'half-bottom' = one half of the viewport (used by
+   *  SplitBackground when each player has a different theme). */
+  placement: 'full' | 'half-top' | 'half-bottom';
+}
+
+/** The actual rendering. Public so SplitBackground can mount instances
+ *  per-player half. Each placement variant scopes the overlay to its
+ *  region via different CSS rules; the contents (sparkles, ribbons,
+ *  bloom, curtain, trails) are identical. */
+export function ThemeDecorLayer({ decorKind, placement }: LayerProps) {
+  // Math.random() differs between SSR and the first client render;
+  // defer the field generation to a mount effect to avoid a hydration
+  // mismatch warning.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  // Sparkles: 50 dots with a mix of colours. Sized 1–3.5px so the
-  // smaller ones fade like distant stars and the larger ones look
-  // like nearby fairy lights.
   const sparkles = useMemo(() => {
     if (!mounted) return [];
     const palette = ['#ffffff', '#fde68a', '#fbcfe8', '#ddd6fe', '#a7f3d0'];
@@ -42,9 +48,6 @@ export default function ThemeDecor() {
     }));
   }, [mounted]);
 
-  // Ribbons: five sweeping "lines" at varied y positions, stacked
-  // delays so they don't all enter the screen at once. Durations
-  // alternate fast/slow so the field never feels metronomic.
   const ribbons = useMemo(() => [
     { top: '14%', delay: '0s',  duration: '11s' },
     { top: '32%', delay: '3s',  duration: '14s' },
@@ -53,8 +56,6 @@ export default function ThemeDecor() {
     { top: '86%', delay: '12s', duration: '13s' },
   ], []);
 
-  // Trails: shorter, brighter, diagonal. Each picks a different
-  // angle so they don't look like a fleet of identical comets.
   const trails = useMemo(() => [
     { top: '18%', left: '-25vw', angle: '-15deg', delay: '2s',  duration: '7s'  },
     { top: '46%', left: '-25vw', angle: '-22deg', delay: '5s',  duration: '8s'  },
@@ -62,15 +63,16 @@ export default function ThemeDecor() {
     { top: '82%', left: '-25vw', angle: '-20deg', delay: '11s', duration: '7.5s' },
   ], []);
 
-  if (themeId !== 'celestial') return null;
-  // Render nothing until mounted so the SSR HTML and the first client
-  // render match (the bloom + curtain are static so they could ship
-  // SSR-side, but rendering everything in one pass keeps the code
-  // simple and the visual delay is one frame).
+  if (decorKind !== 'celestial') return null;
   if (!mounted) return null;
 
+  const placementClass =
+    placement === 'half-top'    ? 'zi-celestial-half-top'    :
+    placement === 'half-bottom' ? 'zi-celestial-half-bottom' :
+    'zi-celestial-full';
+
   return (
-    <div className="zi-celestial-root" aria-hidden>
+    <div className={`zi-celestial-root ${placementClass}`} aria-hidden>
       <div className="zi-celestial-bloom" />
       <div className="zi-celestial-curtain" />
       {sparkles.map(s => (
@@ -108,8 +110,6 @@ export default function ThemeDecor() {
           style={{
             top: t.top,
             left: t.left,
-            // CSS custom property feeds the @keyframes so each trail
-            // keeps its own angle through the entire animation.
             ['--zi-trail-angle' as string]: t.angle,
             animationDelay: t.delay,
             animationDuration: t.duration,
