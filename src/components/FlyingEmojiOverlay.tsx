@@ -1,5 +1,4 @@
 'use client';
-import { motion, AnimatePresence } from 'framer-motion';
 import type { FlyingEmoji } from '@/hooks/useMatchReactions';
 
 interface Props {
@@ -8,16 +7,20 @@ interface Props {
 }
 
 /** Full-viewport, pointer-events: none overlay that animates each
- *  reaction emoji upward and fades it out. The hook owns the queue;
- *  this component just renders + reports completion so the queue
- *  stays bounded.
+ *  reaction emoji upward and fades it out.
  *
- *  Both your own and the opponent's emojis travel the same path —
- *  spawn near the bottom of the viewport, float up across the board,
- *  fade out near the top. The `fromMe` flag still rides along on each
- *  emoji record in case we want to differentiate (e.g. tint, sound)
- *  later, but visually the trajectories are identical so the action
- *  feels symmetric on both screens. */
+ *  Implementation note: this is intentionally CSS-keyframe driven, not
+ *  framer-motion. The previous framer-motion version restarted every
+ *  on-screen emoji on each parent re-render — which is exactly what
+ *  happens when you spam-click the reaction bar (every click is a
+ *  state update). Spam users would see only one emoji at a time
+ *  because the list kept getting "reset". CSS keyframes are
+ *  per-element and immune to parent re-renders, so 50 emojis can
+ *  animate in parallel without colliding.
+ *
+ *  Each `<span>` rides on `.zi-emoji-fly` (defined in globals.css):
+ *  spawns at `bottom: 8vh`, floats ~75vh upward, fades out near the
+ *  end, then `onAnimationEnd` calls back so the queue stays bounded. */
 export default function FlyingEmojiOverlay({ flying, onComplete }: Props) {
   return (
     <div
@@ -25,47 +28,16 @@ export default function FlyingEmojiOverlay({ flying, onComplete }: Props) {
       className="fixed inset-0 z-50"
       style={{ pointerEvents: 'none', overflow: 'hidden' }}
     >
-      <AnimatePresence>
-        {flying.map(f => (
-          <motion.div
-            key={f.id}
-            initial={{
-              y: 0,
-              opacity: 0,
-              scale: 0.6,
-              x: 0,
-              rotate: -10,
-            }}
-            animate={{
-              // ~70vh upward — gets the emoji clear past the board's
-              // top edge before it disappears.
-              y: '-70vh',
-              opacity: [0, 1, 1, 0],
-              scale: [0.6, 1.25, 1, 0.85],
-              // Gentle horizontal sway so a flurry feels organic.
-              x: [0, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 40, 0],
-              rotate: [-10, 8, -6, 0],
-            }}
-            transition={{
-              duration: 2.6,
-              ease: 'easeOut',
-              opacity: { times: [0, 0.08, 0.7, 1], duration: 2.6 },
-            }}
-            onAnimationComplete={() => onComplete(f.id)}
-            style={{
-              position: 'absolute',
-              bottom: '8vh',
-              left: `${f.startXFrac * 100}%`,
-              transform: 'translateX(-50%)',
-              fontSize: 'clamp(28px, 5vw, 56px)',
-              filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.35))',
-              willChange: 'transform, opacity',
-            }}
-          >
-            {f.emoji}
-          </motion.div>
-        ))}
-      </AnimatePresence>
+      {flying.map(f => (
+        <span
+          key={f.id}
+          className="zi-emoji-fly"
+          style={{ left: `${f.startXFrac * 100}%` }}
+          onAnimationEnd={() => onComplete(f.id)}
+        >
+          {f.emoji}
+        </span>
+      ))}
     </div>
   );
 }

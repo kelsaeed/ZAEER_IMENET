@@ -136,6 +136,57 @@ input, select, textarea {
   }
 }
 
+/* Match-chat reaction "fly up" — used by FlyingEmojiOverlay. Pure CSS
+ * (intentionally not framer-motion) so dozens of emojis can animate in
+ * parallel without re-mounting on every parent re-render. The previous
+ * framer-motion version reset existing children every time the queue
+ * grew, which is why spam-clicking only ever showed one emoji on
+ * screen. CSS keyframes keep each emoji independent and on the GPU.
+ *
+ * Travel height is tuned so the emoji disappears around the top of the
+ * board (~75% of viewport height upward from the spawn line near the
+ * chat input) on a typical match layout. */
+@keyframes zi-emoji-fly {
+  0% {
+    transform: translate(-50%, 0) scale(0.6) rotate(-10deg);
+    opacity: 0;
+  }
+  10% {
+    transform: translate(-50%, -8vh) scale(1.2) rotate(6deg);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(-50%, -65vh) scale(1) rotate(-4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -75vh) scale(0.85) rotate(0deg);
+    opacity: 0;
+  }
+}
+.zi-emoji-fly {
+  position: absolute;
+  bottom: 8vh;
+  font-size: clamp(28px, 5vw, 56px);
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+  /* translate(-50%, 0) is the "from" — keeps emojis horizontally
+   * centered on their `left` coordinate. */
+  transform: translate(-50%, 0);
+  animation: zi-emoji-fly 2.6s ease-out forwards;
+  /* Compositor hint so a flurry doesn't hammer the main thread. */
+  will-change: transform, opacity;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Cut the travel and the duration so a flurry shows + clears quickly
+   * but doesn't bombard the user with motion. */
+  .zi-emoji-fly {
+    animation-duration: 0.6s;
+  }
+}
+
 /* Kill-cycle wheel: a single shared rotation drives the orbital motion
  * for both the arrows and the piece bubbles. Each piece counter-rotates
  * at the same rate via `zi-cycle-spin-back` so the emoji glyph stays
