@@ -6,7 +6,28 @@ import { usePlayerThemes } from '@/hooks/usePlayerThemes';
  *  carries through even when the board is centred and surrounded by
  *  empty space. Sits behind everything (z=-10) and never absorbs
  *  pointer events. Falls back to a single bg gradient when both
- *  players share the viewer's theme (single-player flows). */
+ *  players share the viewer's theme (single-player flows).
+ *
+ *  Why explicit 100vw / 100dvh and not `inset: 0`: the page reserves
+ *  a stable scrollbar gutter on `<html>` (so layout doesn't jump
+ *  when content grows past the fold). That gutter narrows the body's
+ *  box, and `inset: 0` is relative to body, so it left a thin dark
+ *  stripe of body-bg showing through on the right edge in PC view.
+ *  Sizing in viewport units pins the bg to the actual viewport
+ *  including the gutter; `pointerEvents: none` keeps it from ever
+ *  absorbing taps. */
+const fullViewportStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  width: '100vw',
+  height: '100dvh',
+  // Fallback for older browsers without dvh support.
+  minHeight: '100vh',
+  zIndex: -10,
+  pointerEvents: 'none',
+};
+
 export default function SplitBackground() {
   const themes = usePlayerThemes();
   const sameTheme = themes.p1.id === themes.p2.id;
@@ -15,11 +36,9 @@ export default function SplitBackground() {
     return (
       <div
         aria-hidden
-        className="fixed inset-0"
         style={{
+          ...fullViewportStyle,
           background: themes.viewer.bgGradient,
-          zIndex: -10,
-          pointerEvents: 'none',
         }}
       />
     );
@@ -28,8 +47,8 @@ export default function SplitBackground() {
   return (
     <div
       aria-hidden
-      className="fixed inset-0 flex flex-col"
-      style={{ zIndex: -10, pointerEvents: 'none' }}
+      className="flex flex-col"
+      style={fullViewportStyle}
     >
       <div
         style={{

@@ -278,26 +278,33 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           the tutorial page mounts, so a casual peek counts as seen. */}
       <AnimatePresence>
         {showTutorialToast && (
+          // Two-layer setup so framer-motion's animate.y can write to
+          // `transform` without clobbering the centering translation.
+          // Outer fixed wrapper centres horizontally with
+          // `left: 50%; translateX(-50%)`; inner motion.div only owns
+          // opacity + y. An earlier single-layer version got pulled to
+          // the right edge on mobile because framer's translateY(0)
+          // erased the translateX(-50%).
+          <div
+            className="fixed bottom-4 z-30"
+            style={{
+              left: '50%',
+              transform: 'translateX(-50%)',
+              maxWidth: 'calc(100vw - 24px)',
+              width: 'max-content',
+            }}
+          >
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.28 }}
-            className="fixed bottom-4 z-30 px-4 py-3 rounded-2xl flex items-center gap-3 shadow-2xl"
+            className="px-4 py-3 rounded-2xl flex items-center gap-3 shadow-2xl"
             style={{
-              // Centering is direction-agnostic — translateX moves the
-              // element along the screen X axis the same way regardless
-              // of dir, so anchoring at left:50% + translateX(-50%) puts
-              // the toast dead-centre in both LTR and RTL. The earlier
-              // `[isRTL ? 'right' : 'left']: '50%'` paired with the same
-              // translateX put the RTL toast far off the left edge of
-              // the screen.
-              left: '50%',
-              transform: 'translateX(-50%)',
               background: theme.panelBg,
               border: `1px solid ${theme.p1Color}`,
               color: theme.textPrimary,
-              maxWidth: 'calc(100vw - 24px)',
+              maxWidth: '100%',
               boxShadow: `0 14px 38px ${theme.p1Color}40`,
             } as React.CSSProperties}
           >
@@ -319,6 +326,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
               ✕
             </button>
           </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
