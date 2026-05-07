@@ -46,32 +46,36 @@ interface Props {
   selected?: WedgeKey | 'lion' | null;
 }
 
+// Red for "what this piece kills" (outgoing) — the aggressive direction.
+// Yellow for "what kills this piece" (incoming) — the warning direction.
+// Picked for high contrast against the dark background AND from each
+// other, so a glance tells you which is which without reading labels.
+const COLOR_OUT  = '#ef4444';   // bright red
+const COLOR_IN   = '#fbbf24';   // sunny yellow
+
 export default function KillCycleWheel({ onPick, selected }: Props) {
   const { theme } = useSettings();
   const [hovered, setHovered] = useState<WedgeKey | 'lion' | null>(null);
-  const [paused, setPaused] = useState(false);
   const active = hovered ?? selected ?? null;
 
   const idx: Record<WedgeKey, number> = {
     elephant: 0, ant: 1, butterfly: 2, bat: 3, monkey: 4,
   };
 
-  // An arrow lights up when EITHER end of it is the active piece — so
-  // tapping the Lion shows both the centre-out arrows AND the Elephant
-  // arrow coming in, and tapping the Butterfly shows the Bat arrow
-  // coming in. Without this, only outgoing arrows lit up and players
-  // couldn't see "who beats me" at a glance.
-  const isHot = (from: WedgeKey | 'lion', to: WedgeKey | 'lion') =>
-    active != null && (active === from || active === to);
+  // For each arrow, decide whether it's "outgoing" from the active
+  // piece (shows what the active piece kills — red), "incoming" to it
+  // (shows what kills the active piece — yellow), or unrelated (dim).
+  type ArrowState = 'out' | 'in' | 'dim';
+  const arrowState = (from: WedgeKey | 'lion', to: WedgeKey | 'lion'): ArrowState => {
+    if (active === from) return 'out';
+    if (active === to)   return 'in';
+    return 'dim';
+  };
 
   return (
     <div
-      className={`relative ${paused ? 'zi-cycle-paused' : ''}`}
+      className="relative"
       style={{ width: SIZE, height: SIZE, margin: '0 auto' }}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
     >
       {/* Spinning ring. Holds both the arrow SVG and the piece bubbles,
           so they orbit together — pieces never drift away from the
@@ -80,8 +84,6 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
       <div className="absolute inset-0 zi-cycle-spin">
         <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}>
           <defs>
-            {/* Soft glow under bright arrows — punchier than the
-                previous build so a hot arrow stands out clearly. */}
             <filter id="zi-arrow-glow" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="3" result="b" />
               <feMerge>
@@ -89,14 +91,26 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
+            {/* Three coloured arrowheads. The marker fill must match the
+                line stroke for the join between line + head to look
+                continuous. */}
             <marker
-              id="zi-arrow-bright"
+              id="zi-arrow-out"
               viewBox="0 0 12 12"
               refX="9" refY="6"
               markerWidth="8" markerHeight="8"
               orient="auto-start-reverse"
             >
-              <path d="M 0 0 L 12 6 L 0 12 z" fill={theme.p1Color} />
+              <path d="M 0 0 L 12 6 L 0 12 z" fill={COLOR_OUT} />
+            </marker>
+            <marker
+              id="zi-arrow-in"
+              viewBox="0 0 12 12"
+              refX="9" refY="6"
+              markerWidth="8" markerHeight="8"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 12 6 L 0 12 z" fill={COLOR_IN} />
             </marker>
             <marker
               id="zi-arrow-dim"
@@ -110,39 +124,54 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
           </defs>
 
           {/* Ring → ring arrows (skipping the elephant→lion which goes
-              centre-in below). An arrow is "hot" if either of its
-              endpoints is the active piece, so tapping a piece lights
-              up everything that touches it — both who it beats and
-              who beats it. */}
+              centre-in below). Each arrow's colour reflects whether
+              it's the active piece's outgoing kill (red) or incoming
+              death (yellow), or unrelated (dim grey). */}
           {RING.map(p => {
             if (p.kills === 'lion') return null;
             const from = ringPoint(idx[p.key]);
             const to   = ringPoint(idx[p.kills]);
-            const hot  = isHot(p.key, p.kills);
+            const st   = arrowState(p.key, p.kills);
             const dx = to.x - from.x, dy = to.y - from.y;
             const len = Math.hypot(dx, dy);
             const tx = from.x + (dx / len) * (len - PIECE_RADIUS - 6);
             const ty = from.y + (dy / len) * (len - PIECE_RADIUS - 6);
             const sx = from.x + (dx / len) * (PIECE_RADIUS + 4);
             const sy = from.y + (dy / len) * (PIECE_RADIUS + 4);
+            const stroke =
+              st === 'out' ? COLOR_OUT  :
+              st === 'in'  ? COLOR_IN   :
+              theme.textMuted;
+            const markerId =
+              st === 'out' ? 'zi-arrow-out' :
+              st === 'in'  ? 'zi-arrow-in'  :
+              'zi-arrow-dim';
             return (
               <line
                 key={`ring-${p.key}`}
                 x1={sx} y1={sy} x2={tx} y2={ty}
-                stroke={hot ? theme.p1Color : theme.textMuted}
-                strokeOpacity={hot ? 1 : 0.35}
-                strokeWidth={hot ? 4 : 2}
+                stroke={stroke}
+                strokeOpacity={st === 'dim' ? 0.35 : 1}
+                strokeWidth={st === 'dim' ? 2 : 4}
                 strokeLinecap="round"
-                filter={hot ? 'url(#zi-arrow-glow)' : undefined}
-                markerEnd={hot ? 'url(#zi-arrow-bright)' : 'url(#zi-arrow-dim)'}
+                filter={st === 'dim' ? undefined : 'url(#zi-arrow-glow)'}
+                markerEnd={`url(#${markerId})`}
               />
             );
           })}
 
-          {/* Lion → all 5 ring pieces (centre-out). Drawn whenever the
-              Lion is the focus, so the player sees "Lion beats anyone"
-              at a glance. */}
-          {active === 'lion' && RING.map(p => {
+          {/* Lion → ring arrows (centre-out). Drawn in two cases:
+                – ALL FIVE in red when Lion is active (Lion kills any
+                  enemy, so the wheel shows the universal-killer bouquet).
+                – JUST lion→monkey in yellow when Monkey is active —
+                  Monkey's cycle-killer is the Lion specifically. Every
+                  other ring piece has its incoming killer on the ring,
+                  drawn by the ring-to-ring loop above. */}
+          {RING.map(p => {
+            const lionIsActive    = active === 'lion';
+            const monkeyIsActive  = p.key === 'monkey' && active === 'monkey';
+            if (!lionIsActive && !monkeyIsActive) return null;
+
             const to = ringPoint(idx[p.key]);
             const dx = to.x - CENTER, dy = to.y - CENTER;
             const len = Math.hypot(dx, dy);
@@ -150,25 +179,25 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
             const ty = CENTER + (dy / len) * (len - PIECE_RADIUS - 6);
             const sx = CENTER + (dx / len) * (PIECE_RADIUS + 4);
             const sy = CENTER + (dy / len) * (PIECE_RADIUS + 4);
+            const stroke   = lionIsActive ? COLOR_OUT : COLOR_IN;
+            const markerId = lionIsActive ? 'zi-arrow-out' : 'zi-arrow-in';
             return (
               <line
                 key={`lion-${p.key}`}
                 x1={sx} y1={sy} x2={tx} y2={ty}
-                stroke={theme.p1Color}
+                stroke={stroke}
                 strokeOpacity={1}
                 strokeWidth={4}
                 strokeLinecap="round"
                 filter="url(#zi-arrow-glow)"
-                markerEnd="url(#zi-arrow-bright)"
+                markerEnd={`url(#${markerId})`}
               />
             );
           })}
 
-          {/* Elephant → Lion (centre-in). Always drawn so the cycle
-              never looks broken; brightens whenever EITHER endpoint is
-              the active piece — i.e. tapping Lion shows the "back"
-              arrow from Elephant, exactly the bidirectional behaviour
-              the lesson needs. */}
+          {/* Elephant → Lion (centre-in). Always drawn. When Elephant
+              is active, this is its OUTGOING (red); when Lion is
+              active, this is its INCOMING (yellow). Otherwise dim. */}
           {(() => {
             const from = ringPoint(idx.elephant);
             const dx = CENTER - from.x, dy = CENTER - from.y;
@@ -177,16 +206,24 @@ export default function KillCycleWheel({ onPick, selected }: Props) {
             const sy = from.y + (dy / len) * (PIECE_RADIUS + 4);
             const tx = from.x + (dx / len) * (len - PIECE_RADIUS - 8);
             const ty = from.y + (dy / len) * (len - PIECE_RADIUS - 8);
-            const hot = isHot('elephant', 'lion');
+            const st = arrowState('elephant', 'lion');
+            const stroke =
+              st === 'out' ? COLOR_OUT  :
+              st === 'in'  ? COLOR_IN   :
+              theme.textMuted;
+            const markerId =
+              st === 'out' ? 'zi-arrow-out' :
+              st === 'in'  ? 'zi-arrow-in'  :
+              'zi-arrow-dim';
             return (
               <line
                 x1={sx} y1={sy} x2={tx} y2={ty}
-                stroke={hot ? theme.p1Color : theme.textMuted}
-                strokeOpacity={hot ? 1 : 0.35}
-                strokeWidth={hot ? 4 : 2}
+                stroke={stroke}
+                strokeOpacity={st === 'dim' ? 0.35 : 1}
+                strokeWidth={st === 'dim' ? 2 : 4}
                 strokeLinecap="round"
-                filter={hot ? 'url(#zi-arrow-glow)' : undefined}
-                markerEnd={hot ? 'url(#zi-arrow-bright)' : 'url(#zi-arrow-dim)'}
+                filter={st === 'dim' ? undefined : 'url(#zi-arrow-glow)'}
+                markerEnd={`url(#${markerId})`}
               />
             );
           })()}
