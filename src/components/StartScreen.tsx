@@ -191,7 +191,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.0 }}
-          className="mb-3 lg:mb-2 lg:col-start-1 lg:row-start-4 lg:row-end-4 lg:self-end lg:justify-self-center"
+          className="mb-3 lg:mb-2 lg:col-start-1 lg:row-start-4 lg:row-end-4 lg:self-end lg:justify-self-center flex flex-wrap gap-2 justify-center"
         >
           <Link
             href="/tutorial"
@@ -203,6 +203,17 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
             }}
           >
             {t('tutorial.button')}
+          </Link>
+          <Link
+            href="/store"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
+            style={{
+              background: theme.panelBg,
+              border: `1px solid ${theme.p2AccentBorder}`,
+              color: theme.p2Color,
+            }}
+          >
+            {t('app.themeStore')}
           </Link>
         </motion.div>
 

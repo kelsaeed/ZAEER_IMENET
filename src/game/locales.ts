@@ -274,6 +274,26 @@ const en: Record<string, string> = {
   'settings.customThrone': 'Throne',
   'settings.customP1': 'Player 1',
   'settings.customP2': 'Player 2',
+  'settings.lockedNotice': 'Locked themes show a 🔒 — open the store to unlock them.',
+  'settings.openStore': 'Open theme store',
+
+  // Theme store (cosmetic catalog at /store)
+  'store.title': 'Theme Store',
+  'store.subtitle': 'Pick a look for your half of the board.',
+  'store.back': 'Back',
+  'store.signInPrompt': 'Sign in to claim free themes and save your pick.',
+  'store.signInCta': 'Sign in',
+  'store.signInToClaim': 'Sign in to claim',
+  'store.loading': 'Loading themes…',
+  'store.empty': 'No themes available yet — check back soon.',
+  'store.priceFree': 'Free',
+  'store.activePill': 'Active',
+  'store.equip': 'Equip',
+  'store.claimFree': 'Get for free',
+  'store.claiming': 'Claiming…',
+  'store.claimError': "Couldn't claim — try again.",
+  'store.comingSoon': 'Coming soon',
+  'app.themeStore': '🎨 Theme Store',
 
   // Auth
   'auth.signIn': 'Sign in',
@@ -576,6 +596,26 @@ const ar: Record<string, string> = {
   'settings.customThrone': 'العرش',
   'settings.customP1': 'اللاعب 1',
   'settings.customP2': 'اللاعب 2',
+  'settings.lockedNotice': 'المظاهر المقفولة عليها 🔒 — افتح المتجر لفتحها.',
+  'settings.openStore': 'افتح متجر المظاهر',
+
+  // متجر المظاهر
+  'store.title': 'متجر المظاهر',
+  'store.subtitle': 'اختر شكل نصفك من اللوح.',
+  'store.back': 'رجوع',
+  'store.signInPrompt': 'سجّل الدخول لتحصل على المظاهر المجانية وتحفظ اختيارك.',
+  'store.signInCta': 'سجّل الدخول',
+  'store.signInToClaim': 'سجّل الدخول للحصول عليه',
+  'store.loading': 'جاري تحميل المظاهر…',
+  'store.empty': 'لا توجد مظاهر حالياً — رجّع لاحقاً.',
+  'store.priceFree': 'مجاني',
+  'store.activePill': 'مفعّل',
+  'store.equip': 'استخدم',
+  'store.claimFree': 'احصل عليه مجاناً',
+  'store.claiming': 'جارٍ الإضافة…',
+  'store.claimError': 'تعذّر إضافته — حاول مرة أخرى.',
+  'store.comingSoon': 'قريباً',
+  'app.themeStore': '🎨 متجر المظاهر',
 
   // Auth
   'auth.signIn': 'تسجيل الدخول',

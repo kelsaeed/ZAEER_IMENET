@@ -110,6 +110,13 @@ export default function AuthBadge({ side }: Props) {
             >
               {t('auth.profile')}
             </Link>
+            <Link
+              href="/store"
+              onClick={() => setOpen(false)}
+              className="block px-3 py-2 text-sm hover:opacity-80"
+            >
+              {t('app.themeStore')}
+            </Link>
             <button
               type="button"
               onClick={() => {

@@ -1,6 +1,7 @@
 'use client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import { useSettings } from '@/hooks/useSettings';
 import { useUser } from '@/hooks/useUser';
 import { builtInLocale } from '@/game/locales';
@@ -25,8 +26,12 @@ export default function SettingsPanel({ onClose }: Props) {
   // Admin gate for the "Add Language" form and "Edit translations" tab.
   // These edit shared content stored in Supabase and broadcast to every
   // player; non-admins only get to pick which language to use.
-  const { profile } = useUser();
+  // ownedThemeIds drives the lock badges in the theme grid — signed-out
+  // users get an empty set and we treat that as "no gating" so the
+  // local-only theme experience still works without sign-in.
+  const { profile, user, ownedThemeIds } = useUser();
   const isAdmin = !!profile?.is_admin;
+  const gateThemes = !!user;
 
   const [tab, setTab] = useState<Tab>('theme');
 
@@ -131,33 +136,70 @@ export default function SettingsPanel({ onClose }: Props) {
             {tab === 'theme' && (
               <div className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {themes.map(th => (
-                    <button
-                      key={th.id}
-                      onClick={() => setThemeId(th.id)}
-                      className="rounded-xl p-3 text-start transition-transform hover:scale-[1.02]"
-                      style={{
-                        background: th.bgGradient,
-                        border: `2px solid ${themeId === th.id ? th.selectedRing : 'transparent'}`,
-                        color: th.textPrimary,
-                      }}
-                    >
-                      <div className="font-bold mb-2">{th.name}</div>
-                      <div className="flex gap-1 mb-2">
-                        <span className="w-6 h-6 rounded" style={{ background: th.cellLight, border: `1px solid ${th.boardBorder}` }} />
-                        <span className="w-6 h-6 rounded" style={{ background: th.cellDark, border: `1px solid ${th.boardBorder}` }} />
-                        <span className="w-6 h-6 rounded" style={{ background: th.throneBg, border: `1px solid ${th.throneBorder}` }} />
-                        <span className="w-6 h-6 rounded" style={{ background: th.barrierBg, border: `1px solid ${th.barrierBorder}` }} />
-                      </div>
-                      <div className="flex gap-2 items-center">
-                        <span className="w-5 h-5 rounded-full" style={{ background: th.p1Color, border: `1px solid ${th.p1Border}` }} />
-                        <span className="w-5 h-5 rounded-full" style={{ background: th.p2Color, border: `1px solid ${th.p2Border}` }} />
-                        <span className="text-xs opacity-70">{themeId === th.id ? '✓' : ''}</span>
-                      </div>
-                    </button>
-                  ))}
+                  {themes.map(th => {
+                    // Locked when the user is signed in but doesn't own
+                    // the theme. Signed-out users skip the gate entirely
+                    // (gateThemes=false) so first-touch users can still
+                    // try every palette before deciding to claim.
+                    const locked = gateThemes && !ownedThemeIds.has(th.id);
+                    const isActive = themeId === th.id;
+                    const cardBody = (
+                      <>
+                        <div className="font-bold mb-2 flex items-center justify-between gap-2">
+                          <span>{th.name}</span>
+                          {locked && <span aria-hidden>🔒</span>}
+                        </div>
+                        <div className="flex gap-1 mb-2">
+                          <span className="w-6 h-6 rounded" style={{ background: th.cellLight, border: `1px solid ${th.boardBorder}` }} />
+                          <span className="w-6 h-6 rounded" style={{ background: th.cellDark, border: `1px solid ${th.boardBorder}` }} />
+                          <span className="w-6 h-6 rounded" style={{ background: th.throneBg, border: `1px solid ${th.throneBorder}` }} />
+                          <span className="w-6 h-6 rounded" style={{ background: th.barrierBg, border: `1px solid ${th.barrierBorder}` }} />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <span className="w-5 h-5 rounded-full" style={{ background: th.p1Color, border: `1px solid ${th.p1Border}` }} />
+                          <span className="w-5 h-5 rounded-full" style={{ background: th.p2Color, border: `1px solid ${th.p2Border}` }} />
+                          <span className="text-xs opacity-70">{isActive ? '✓' : ''}</span>
+                        </div>
+                      </>
+                    );
+                    const cardStyle = {
+                      background: th.bgGradient,
+                      border: `2px solid ${isActive ? th.selectedRing : 'transparent'}`,
+                      color: th.textPrimary,
+                      opacity: locked ? 0.7 : 1,
+                    };
+                    if (locked) {
+                      // Locked card → routes to the store. Closing the
+                      // panel first prevents the modal from sitting on
+                      // top of /store on tab-back navigation.
+                      return (
+                        <Link
+                          key={th.id}
+                          href="/store"
+                          onClick={onClose}
+                          className="rounded-xl p-3 text-start transition-transform hover:scale-[1.02]"
+                          style={cardStyle}
+                        >
+                          {cardBody}
+                        </Link>
+                      );
+                    }
+                    return (
+                      <button
+                        key={th.id}
+                        onClick={() => setThemeId(th.id)}
+                        className="rounded-xl p-3 text-start transition-transform hover:scale-[1.02]"
+                        style={cardStyle}
+                      >
+                        {cardBody}
+                      </button>
+                    );
+                  })}
 
-                  {/* Custom theme tile */}
+                  {/* Custom theme tile — never locked. The 'custom'
+                      theme has no catalog row, the enforce_owned_theme
+                      trigger explicitly allows it, and the colors live
+                      entirely in localStorage. */}
                   <button
                     onClick={() => setThemeId('custom')}
                     className="rounded-xl p-3 text-start transition-transform hover:scale-[1.02]"
@@ -180,6 +222,30 @@ export default function SettingsPanel({ onClose }: Props) {
                       <span className="text-xs opacity-70">{themeId === 'custom' ? '✓' : ''}</span>
                     </div>
                   </button>
+                </div>
+
+                {/* Always-visible link to the full theme store. The
+                    notice line only appears when at least one theme is
+                    locked, so signed-out users (who see no locks) get
+                    a clean grid with just the store link. */}
+                <div className="flex flex-col gap-2 -mt-1">
+                  {gateThemes && themes.some(th => !ownedThemeIds.has(th.id)) && (
+                    <div className="text-xs opacity-70" style={{ color: theme.textMuted }}>
+                      {t('settings.lockedNotice')}
+                    </div>
+                  )}
+                  <Link
+                    href="/store"
+                    onClick={onClose}
+                    className="self-start rounded-full px-3 py-1.5 text-sm font-bold"
+                    style={{
+                      background: theme.p1AccentBg,
+                      border: `1px solid ${theme.p1AccentBorder}`,
+                      color: theme.p1Color,
+                    }}
+                  >
+                    🎨 {t('settings.openStore')}
+                  </Link>
                 </div>
 
                 {/* Audio + haptics — three toggles, persisted in
