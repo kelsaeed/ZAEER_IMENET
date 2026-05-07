@@ -23,6 +23,12 @@ export interface Profile {
   wins: number;
   losses: number;
   draws: number;
+  // Daily-puzzle streak counters (added in migration 0011). Optional so
+  // the type still loads against an unmigrated database without throwing
+  // — they read as undefined and the UI defaults to 0.
+  puzzle_current_streak?: number;
+  puzzle_best_streak?: number;
+  puzzle_last_solved_date?: string | null;
 }
 
 interface UserState {

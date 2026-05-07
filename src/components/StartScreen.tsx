@@ -241,6 +241,25 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           >
             <span>{t('app.onlineGame')}</span>
           </motion.a>
+
+          <motion.a
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.3, duration: 0.35, ease: 'easeOut' }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            href="/puzzle"
+            className="px-8 sm:px-10 py-3 sm:py-4 rounded-2xl text-lg sm:text-xl font-extrabold text-center w-full sm:w-auto transition-all duration-300 flex items-center justify-center gap-2"
+            style={{
+              fontWeight: 800,
+              color: theme.textPrimary,
+              background: theme.panelBg,
+              border: `1px solid ${theme.p1AccentBorder}`,
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <span>{t('app.dailyPuzzle')}</span>
+          </motion.a>
         </div>
       </div>
 

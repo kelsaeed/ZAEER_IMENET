@@ -18,6 +18,30 @@ const en: Record<string, string> = {
   'app.playOnline': 'Play Online',
   'app.onlineGame': '🌐 Online Game',
   'app.offlineGame': '⚔️ Offline Game ⚔️',
+  'app.dailyPuzzle': '🧩 Daily Puzzle',
+
+  // Daily puzzle screen
+  'puzzle.title': 'Today’s Puzzle',
+  'puzzle.yourTurnP1': 'Player 1 to move — kill the lion',
+  'puzzle.yourTurnP2': 'Player 2 to move — kill the lion',
+  'puzzle.solved': 'You got it!',
+  'puzzle.wrong': 'Not quite — try again',
+  'puzzle.thinking': 'Checking…',
+  'puzzle.giveUp': 'I give up',
+  'puzzle.showHow': 'Show me how',
+  'puzzle.streak': '{n}-day streak',
+  'puzzle.noToday': 'No puzzle today — check back tomorrow.',
+  'puzzle.unavailable': 'This puzzle is being checked. Try again in a moment.',
+  'puzzle.wrongCount': 'Wrong moves: {n}',
+  'puzzle.backToMenu': 'Back to menu',
+  'puzzle.giveUpConfirm': 'Give up and see the answer?',
+  'puzzle.showingSolution': 'Here’s the winning line:',
+  'puzzle.signInToPlay': 'Sign in to play the daily puzzle.',
+  'puzzle.signIn': 'Sign in',
+
+  // Match-chat emoji reactions
+  'reactions.muteHint': 'Mute reactions from others',
+  'reactions.unmuteHint': 'Unmute reactions',
 
   // Game-mode picker on the start screen
   'mode.heading': 'Game Mode',
@@ -308,6 +332,30 @@ const ar: Record<string, string> = {
   'app.playOnline': 'العب أونلاين',
   'app.onlineGame': '🌐 لعبة أونلاين',
   'app.offlineGame': '⚔️ لعبة محلية ⚔️',
+  'app.dailyPuzzle': '🧩 أحجية اليوم',
+
+  // Daily puzzle screen
+  'puzzle.title': 'أحجية اليوم',
+  'puzzle.yourTurnP1': 'دور اللاعب الأول — اقتل الأسد',
+  'puzzle.yourTurnP2': 'دور اللاعب الثاني — اقتل الأسد',
+  'puzzle.solved': 'أحسنت!',
+  'puzzle.wrong': 'ليس بعد — حاول مرة أخرى',
+  'puzzle.thinking': 'جارٍ التحقق…',
+  'puzzle.giveUp': 'أستسلم',
+  'puzzle.showHow': 'أرني الحل',
+  'puzzle.streak': '{n} يوم متتالي',
+  'puzzle.noToday': 'لا يوجد لغز اليوم — عد غداً.',
+  'puzzle.unavailable': 'يتم التحقق من هذا اللغز. حاول بعد قليل.',
+  'puzzle.wrongCount': 'محاولات خاطئة: {n}',
+  'puzzle.backToMenu': 'العودة للقائمة',
+  'puzzle.giveUpConfirm': 'أستسلم وأشاهد الحل؟',
+  'puzzle.showingSolution': 'هذا هو الحل:',
+  'puzzle.signInToPlay': 'سجّل الدخول للعب أحجية اليوم.',
+  'puzzle.signIn': 'تسجيل الدخول',
+
+  // Match-chat emoji reactions
+  'reactions.muteHint': 'كتم تفاعلات الآخرين',
+  'reactions.unmuteHint': 'إلغاء كتم التفاعلات',
 
   'mode.heading': 'نوع اللعبة',
   'mode.local': 'لاعبان محلياً',
