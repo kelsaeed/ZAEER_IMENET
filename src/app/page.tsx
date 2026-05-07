@@ -130,7 +130,10 @@ export default function Home() {
   if (state.phase === 'menu') {
     return (
       <>
-        <StartScreen onStart={startGame} onOpenSettings={() => setSettingsOpen(true)} />
+        <StartScreen
+          onStart={(aiLevel, tc) => startGame(aiLevel, tc)}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
         {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
       </>
     );

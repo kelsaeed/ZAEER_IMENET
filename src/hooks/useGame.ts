@@ -1,8 +1,8 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import { GameState, Orientation, AiLevel } from '@/game/types';
+import { GameState, Orientation, AiLevel, TimeControl } from '@/game/types';
 import { createInitialState } from '@/game/initialState';
-import { getValidMoves, applyMove, applyEndTurn, getAntCells, getInteractiveAtCell } from '@/game/logic';
+import { getValidMoves, applyMove, applyEndTurn, applyTimeout, getAntCells, getInteractiveAtCell } from '@/game/logic';
 import { isInBounds, isBarrier } from '@/game/constants';
 import { chooseAiMove } from '@/game/ai';
 
@@ -61,9 +61,9 @@ export function useGame() {
     }
   }, [state.bounceEffect?.pieceId, state.turn]);
 
-  const startGame = useCallback((aiLevel: AiLevel | null = null) => {
+  const startGame = useCallback((aiLevel: AiLevel | null = null, timeControl: TimeControl = { kind: 'none' }) => {
     setState({
-      ...createInitialState(),
+      ...createInitialState({ timeControl }),
       phase: 'playing',
       lastAction: { key: 'action.player1Turn' },
       aiLevel,
@@ -78,16 +78,42 @@ export function useGame() {
 
   /** Restart the match in place — fresh pieces, no phase change. The player
    *  stays on the board instead of returning to the menu. The current AI
-   *  level (if any) is preserved so a player who picked "vs Hard AI" stays
-   *  in that mode after a Restart Match. */
+   *  level + time control (if any) are preserved so a player who picked
+   *  "vs Hard AI · Blitz 3+2" stays in that mode after a Restart Match. */
   const restartMatch = useCallback(() => {
     setState(prev => ({
-      ...createInitialState(),
+      ...createInitialState({ timeControl: prev.timeControl }),
       phase: 'playing',
       lastAction: { key: 'action.player1Turn' },
       aiLevel: prev.aiLevel ?? null,
     }));
   }, []);
+
+  // ── Clock tick (offline) ──────────────────────────────────────────────
+  // Drives the visible countdown for the active player. When their clock
+  // hits 0 we apply the timeout transition locally — no network involved.
+  // The interval is re-armed on every state change but a 1-Hz timer is
+  // cheap, and we exit early when the game isn't actively timed.
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (state.phase !== 'playing') return;
+    if (!state.clocks || state.timeControl?.kind !== 'clock') return;
+    const id = setInterval(() => {
+      setState(prev => {
+        if (prev.phase !== 'playing' || !prev.clocks || prev.timeControl?.kind !== 'clock') return prev;
+        const elapsed = (Date.now() - new Date(prev.clocks.startedAt).getTime()) / 1000;
+        const matchKey = prev.currentPlayer === 1 ? 'p1Seconds' : 'p2Seconds';
+        const remaining = prev.clocks[matchKey] - elapsed;
+        const perMoveExpired = prev.clocks.perMoveSeconds > 0
+          && elapsed > prev.clocks.perMoveSeconds;
+        if (remaining <= 0 || perMoveExpired) {
+          return applyTimeout(prev, prev.currentPlayer);
+        }
+        return prev;
+      });
+    }, 250);
+    return () => clearInterval(id);
+  }, [isHydrated, state.phase, state.timeControl?.kind, state.clocks?.startedAt, state.currentPlayer]);
 
   // ── AI scheduler ──────────────────────────────────────────────────────────
   // When the local game is in vs-AI mode and it's player 2's turn, queue an

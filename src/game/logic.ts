@@ -1,9 +1,83 @@
-import { GamePiece, GameState, Player, Position, Orientation, PieceType, BounceEffect, ActionMessage, HistorySnapshot } from './types';
+import { GamePiece, GameState, Player, Position, Orientation, PieceType, BounceEffect, ActionMessage, HistorySnapshot, Clocks } from './types';
 import { isInBounds, isThrone, isBarrier, canPieceKill, BOARD_SIZE, ORIENTATION_ORDER } from './constants';
 
 // ─── History helper ──────────────────────────────────────────────────────────
 // Cap so a long replay-game doesn't bloat sessionStorage indefinitely.
 const HISTORY_LIMIT = 250;
+
+// ─── Time control / clocks ───────────────────────────────────────────────────
+// Single source of truth for clock arithmetic on a turn flip. The active
+// player is the one whose turn is *ending* (about to flip to the other
+// side). We:
+//   1. compute elapsed since clocks.startedAt and subtract from their
+//      match clock (and the per-move clock if one is active),
+//   2. flag timeout if either clock hit zero,
+//   3. add Fischer increment to the player who just acted,
+//   4. reset the per-move clock for whoever is about to play,
+//   5. stamp startedAt = now so the new active player's clock starts
+//      counting from this instant.
+//
+// Returns either:
+//   { timedOut: false, clocks } — happy path; caller uses `clocks`
+//   { timedOut: true,  losingPlayer } — caller flips phase='won' with
+//                                        the OTHER player as winner.
+
+interface ClockTickHappy { timedOut: false; clocks: Clocks }
+interface ClockTickLoss  { timedOut: true;  losingPlayer: Player }
+type ClockTickResult = ClockTickHappy | ClockTickLoss;
+
+function tickClockOnTurnFlip(state: GameState, actingPlayer: Player): ClockTickResult | null {
+  const tc = state.timeControl;
+  if (!tc || tc.kind !== 'clock' || !state.clocks) return null;
+  const elapsed = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(state.clocks.startedAt).getTime()) / 1000),
+  );
+  const matchKey = actingPlayer === 1 ? 'p1Seconds' : 'p2Seconds';
+  const remaining = state.clocks[matchKey] - elapsed;
+  // Per-move clock only "expires" if the player set one (>0); a 0 cap
+  // means no per-move limit, so we never time out on it.
+  const perMoveExpired = state.clocks.perMoveSeconds > 0
+    && elapsed > state.clocks.perMoveSeconds;
+  if (remaining <= 0 || perMoveExpired) {
+    return { timedOut: true, losingPlayer: actingPlayer };
+  }
+  const matchAfter = remaining + (tc.increment ?? 0);
+  const nextClocks: Clocks = {
+    p1Seconds: actingPlayer === 1 ? matchAfter : state.clocks.p1Seconds,
+    p2Seconds: actingPlayer === 2 ? matchAfter : state.clocks.p2Seconds,
+    perMoveSeconds: tc.perMoveSeconds,
+    startedAt: new Date().toISOString(),
+  };
+  return { timedOut: false, clocks: nextClocks };
+}
+
+/** Apply clock-tick result to a candidate next-state. If the active player
+ *  ran out of time, override the next-state with a 'won' phase for the
+ *  other side. Otherwise merge in the new clocks. */
+function applyClockTick(
+  next: GameState,
+  tick: ClockTickResult | null,
+): GameState {
+  if (!tick) return next;
+  if (tick.timedOut) {
+    const winner: Player = tick.losingPlayer === 1 ? 2 : 1;
+    return {
+      ...next,
+      phase: 'won',
+      winner,
+      lastAction: { key: 'action.timeout', vars: { n: winner } },
+      // Keep the clocks as-is (with the loser at 0) for the post-game review.
+      clocks: next.clocks
+        ? {
+            ...next.clocks,
+            [tick.losingPlayer === 1 ? 'p1Seconds' : 'p2Seconds']: 0,
+          } as Clocks
+        : next.clocks,
+    };
+  }
+  return { ...next, clocks: tick.clocks };
+}
 
 function pushHistory(
   state: GameState,
@@ -838,7 +912,11 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
   const finalAction = lastAction || state.lastAction;
   const newTurn = state.turn + 1;
 
-  return {
+  // Only tick the clock when the turn actually flips (a winning move
+  // doesn't flip the player, and the loser's clock should freeze where
+  // it is — they got the win first; time-out trumps).
+  const tick = phase === 'won' ? null : tickClockOnTurnFlip(state, state.currentPlayer);
+  const candidate: GameState = {
     ...state,
     pieces,
     currentPlayer: newPlayer,
@@ -859,6 +937,7 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
     history: pushHistory(state, pieces, newPlayer, finalAction, newTurn),
     viewingHistoryIndex: null,
   };
+  return applyClockTick(candidate, tick);
 }
 
 // ─── Kill helper ──────────────────────────────────────────────────────────────
@@ -907,7 +986,8 @@ export function applyEndTurn(state: GameState): GameState {
   const newPlayer: Player = state.currentPlayer === 1 ? 2 : 1;
   const newTurn = state.turn + 1;
   const lastAction = state.antMovedThisTurn ? { key: 'action.turnEnded' } : { key: 'action.antRotated' };
-  return {
+  const tick = tickClockOnTurnFlip(state, state.currentPlayer);
+  const candidate: GameState = {
     ...state,
     pieces,
     currentPlayer: newPlayer,
@@ -924,5 +1004,27 @@ export function applyEndTurn(state: GameState): GameState {
     viewingHistoryIndex: null,
     turn: newTurn,
     lastAction,
+  };
+  return applyClockTick(candidate, tick);
+}
+
+// ─── Force-timeout (called from the HUD tick when the active player's
+// clock visibly hits 0 without them having made a move). Returns a
+// candidate next state with phase='won' for the OTHER player. The hook
+// passes this through saveGameState for online games.
+export function applyTimeout(state: GameState, losingPlayer: Player): GameState {
+  if (state.phase !== 'playing') return state;
+  const winner: Player = losingPlayer === 1 ? 2 : 1;
+  return {
+    ...state,
+    phase: 'won',
+    winner,
+    lastAction: { key: 'action.timeout', vars: { n: winner } },
+    clocks: state.clocks
+      ? {
+          ...state.clocks,
+          [losingPlayer === 1 ? 'p1Seconds' : 'p2Seconds']: 0,
+        } as Clocks
+      : state.clocks,
   };
 }

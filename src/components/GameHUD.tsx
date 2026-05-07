@@ -1,10 +1,11 @@
 'use client';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
-import { GameState, Orientation } from '@/game/types';
+import { GameState, Orientation, Player } from '@/game/types';
 import { PIECE_EMOJI, squareLabel } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
 import { format } from '@/game/locales';
+import { formatClockMmSs } from '@/game/timeControl';
 
 interface Props {
   state: GameState;
@@ -132,6 +133,11 @@ export default function GameHUD({
         </div>
         <div className="opacity-70 mt-1 font-normal" style={{ fontSize: fs.small }}>{format(t('hud.turnCounter'), { n: turn })}</div>
       </motion.div>
+
+      {/* Clocks (only when the match has a clock attached). */}
+      {state.timeControl?.kind === 'clock' && state.clocks && (
+        <ClocksPanel state={state} />
+      )}
 
       {/* Last action */}
       <div className="opacity-85 text-center"
@@ -455,5 +461,99 @@ function ReviewBtn({
     >
       {label}
     </button>
+  );
+}
+
+// ─── Clocks panel ─────────────────────────────────────────────────────
+// Two side-by-side cards showing each player's match clock as mm:ss.
+// The active player's clock ticks visibly (a `tick` state nudges the
+// display every 250ms), but the underlying state.clocks is only written
+// when the turn flips — the visible countdown is purely cosmetic until
+// then. When a clock is below 10s the card flashes red so the player
+// notices before they flag.
+
+function ClocksPanel({ state }: { state: GameState }) {
+  const { theme, t } = useSettings();
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (state.phase !== 'playing') return;
+    if (state.timeControl?.kind !== 'clock' || !state.clocks) return;
+    const id = setInterval(() => setTick(n => n + 1), 250);
+    return () => clearInterval(id);
+  }, [state.phase, state.timeControl?.kind, state.clocks?.startedAt]);
+
+  if (state.timeControl?.kind !== 'clock' || !state.clocks) return null;
+
+  const elapsed = Math.max(0, (Date.now() - new Date(state.clocks.startedAt).getTime()) / 1000);
+  const isActive = (p: Player) => state.phase === 'playing' && state.currentPlayer === p;
+  const remaining = (p: Player) => {
+    const base = p === 1 ? state.clocks!.p1Seconds : state.clocks!.p2Seconds;
+    return isActive(p) ? Math.max(0, base - elapsed) : Math.max(0, base);
+  };
+  const r1 = remaining(1);
+  const r2 = remaining(2);
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <ClockCard
+        label={t('hud.clockP1')}
+        seconds={r1}
+        active={isActive(1)}
+        accentBg={theme.p1AccentBg}
+        accentBorder={theme.p1AccentBorder}
+        accentText={theme.p1Color}
+        theme={theme}
+      />
+      <ClockCard
+        label={t('hud.clockP2')}
+        seconds={r2}
+        active={isActive(2)}
+        accentBg={theme.p2AccentBg}
+        accentBorder={theme.p2AccentBorder}
+        accentText={theme.p2Color}
+        theme={theme}
+      />
+    </div>
+  );
+}
+
+function ClockCard({
+  label, seconds, active, accentBg, accentBorder, accentText, theme,
+}: {
+  label: string;
+  seconds: number;
+  active: boolean;
+  accentBg: string;
+  accentBorder: string;
+  accentText: string;
+  theme: ReturnType<typeof useSettings>['theme'];
+}) {
+  const low = seconds < 10;
+  // Red flash kicks in under 10s — drives a CSS transition so it pulses
+  // rather than slamming on. We just toggle border + text colour.
+  const danger = active && low;
+  return (
+    <div
+      className="rounded-xl text-center"
+      style={{
+        background: active ? accentBg : theme.panelBg,
+        border: `1px solid ${danger ? '#ef4444' : (active ? accentBorder : theme.panelBorder)}`,
+        padding: '6px 8px',
+        boxShadow: danger ? '0 0 12px rgba(239,68,68,0.55)' : 'none',
+        transition: 'box-shadow 0.25s ease, border-color 0.25s ease',
+      }}
+    >
+      <div className="text-[10px] uppercase tracking-wider opacity-65">{label}</div>
+      <div
+        className="font-extrabold font-mono leading-none mt-0.5"
+        style={{
+          color: danger ? '#ef4444' : (active ? accentText : theme.textPrimary),
+          fontSize: 'clamp(14px, 1rem + 0.4vw, 22px)',
+        }}
+      >
+        {formatClockMmSs(seconds)}
+      </div>
+    </div>
   );
 }

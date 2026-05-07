@@ -4,7 +4,7 @@ import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { saveGameState, GameRow } from '@/lib/supabase/games';
 import { createInitialState } from '@/game/initialState';
 import { useUser } from '@/hooks/useUser';
-import { applyMove, applyEndTurn, getValidMoves } from '@/game/logic';
+import { applyMove, applyEndTurn, applyTimeout, getValidMoves } from '@/game/logic';
 import type { GameState, Player, Orientation } from '@/game/types';
 
 interface OpponentInfo {
@@ -224,6 +224,46 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
   const state = game?.state ?? null;
   const isPlaying = game?.status === 'playing';
   const isMyTurn = !!(state && myPlayerNumber !== null && state.currentPlayer === myPlayerNumber && isPlaying && viewingHistoryIndex === null);
+
+  // ── Clock tick (online) ─────────────────────────────────────────────
+  // Only the *active* player checks the timeout and writes it to the DB.
+  // Without that guard both clients would race a timeout write when they
+  // both see the clock visibly hit 0 in the same animation frame. The
+  // realtime echo of the winner's write fans the result back to the other
+  // side. We poll at 250ms — granular enough to feel responsive without
+  // burning network on a row that almost never needs to flush.
+  useEffect(() => {
+    if (!isPlaying || !isMyTurn || !state) return;
+    if (state.timeControl?.kind !== 'clock' || !state.clocks) return;
+    const id = setInterval(() => {
+      // Read latest game synchronously via state closure refresh.
+      if (!game?.state || !game.state.clocks) return;
+      const cur = game.state;
+      if (cur.phase !== 'playing') return;
+      const elapsed = (Date.now() - new Date(cur.clocks!.startedAt).getTime()) / 1000;
+      const matchKey = cur.currentPlayer === 1 ? 'p1Seconds' : 'p2Seconds';
+      const remaining = cur.clocks![matchKey] - elapsed;
+      const perMoveExpired = cur.clocks!.perMoveSeconds > 0
+        && elapsed > cur.clocks!.perMoveSeconds;
+      if (remaining > 0 && !perMoveExpired) return;
+      // Active player's flag fell — write the timeout to the DB so the
+      // opponent gets the win via Realtime. saveGameState bakes phase='won'
+      // and winner_id from state.winner, which applyTimeout sets to the
+      // OTHER player.
+      const losing = cur.currentPlayer;
+      const next = applyTimeout(cur, losing);
+      saveGameState({
+        gameId: game.id,
+        state: next,
+        player1Id: game.player1_id,
+        player2Id: game.player2_id,
+      }).catch(err => console.error('[online] timeout write failed', err));
+      // Reflect locally so the HUD flips immediately, even before Realtime
+      // echoes it back.
+      setGame(prev => prev ? { ...prev, state: next } : prev);
+    }, 250);
+    return () => clearInterval(id);
+  }, [isPlaying, isMyTurn, state, game]);
 
   /** Update local React state only — no DB write. Used for selection /
    *  deselection / piece switching / in-progress ant rotation. None of

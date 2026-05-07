@@ -1,6 +1,7 @@
 'use client';
-import type { GameState, Player } from '@/game/types';
+import type { GameState, Player, TimeControl } from '@/game/types';
 import { createInitialState } from '@/game/initialState';
+import { timeControlsMatch } from '@/game/timeControl';
 import { getSupabaseBrowser } from './client';
 
 export type GameStatus = 'waiting' | 'playing' | 'finished' | 'abandoned';
@@ -23,6 +24,9 @@ export interface GameRow {
   last_move_at: string | null;
   /** Player whose turn it is (mirror of state.currentPlayer, set by trigger). */
   awaiting_player_id: string | null;
+  /** Time control for the match. Async games are constrained to {kind:'none'}
+   *  by a DB check — see migration 0009. */
+  time_control: TimeControl;
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -44,17 +48,23 @@ export function generateInviteCode(): string {
 }
 
 /** Create a new online game. Caller becomes player 1. Defaults to a live
- *  match; pass `mode: 'async'` for a correspondence game (opponent gets
- *  a "your turn" bell notification after each move). */
+ *  untimed match; pass `mode: 'async'` for correspondence and/or a
+ *  `timeControl` to attach a chess clock. Async games are forced to
+ *  untimed (DB constraint will reject anything else). */
 export async function createOnlineGame(opts: {
   userId: string;
   isPublic: boolean;
   mode?: GameMode;
+  timeControl?: TimeControl;
 }): Promise<GameRow> {
   const supabase = getSupabaseBrowser();
+  const mode: GameMode = opts.mode ?? 'live';
+  const timeControl: TimeControl = mode === 'async'
+    ? { kind: 'none' }
+    : (opts.timeControl ?? { kind: 'none' });
   // Build a clean playing state — phase 'playing', currentPlayer 1, fresh pieces.
   const initial: GameState = {
-    ...createInitialState(),
+    ...createInitialState({ timeControl }),
     phase: 'playing',
     lastAction: { key: 'action.player1Turn' },
   };
@@ -66,7 +76,8 @@ export async function createOnlineGame(opts: {
       state: initial,
       current_turn: 0,
       is_public: opts.isPublic,
-      mode: opts.mode ?? 'live',
+      mode,
+      time_control: timeControl,
       invite_code: generateInviteCode(),
     })
     .select()
@@ -128,37 +139,51 @@ export async function saveGameState(opts: {
   if (error) throw new Error(error.message);
 }
 
-/** Quick Match: try to join the oldest open public game in the requested
- *  mode, or create one. Live and async never mix in the same room — a
- *  player picking "Quick Match — Live" doesn't want to land in a
- *  correspondence game and vice-versa. */
-export async function quickMatch(opts: { userId: string; mode?: GameMode }): Promise<{ gameId: string; created: boolean }> {
+/** Quick Match: try to join the oldest open public game with the SAME
+ *  mode + time control, or create one. We never silently drop a player
+ *  into a different ruleset (a Blitz seeker landing in a Bullet room
+ *  would be miserable), so the search is fully filtered. */
+export async function quickMatch(opts: {
+  userId: string;
+  mode?: GameMode;
+  timeControl?: TimeControl;
+}): Promise<{ gameId: string; created: boolean }> {
   const supabase = getSupabaseBrowser();
   const mode: GameMode = opts.mode ?? 'live';
+  const timeControl: TimeControl = mode === 'async'
+    ? { kind: 'none' }
+    : (opts.timeControl ?? { kind: 'none' });
 
+  // First fetch all candidate rooms (mode + open). We then filter by
+  // exact time control client-side because Postgres jsonb equality is
+  // sensitive to key ordering and the client is small enough that the
+  // extra hop doesn't matter.
   const { data: open, error: searchError } = await supabase
     .from('games')
-    .select('id')
+    .select('id, time_control')
     .eq('status', 'waiting')
     .eq('is_public', true)
     .eq('mode', mode)
     .neq('player1_id', opts.userId)
     .is('player2_id', null)
     .order('created_at', { ascending: true })
-    .limit(1);
+    .limit(20);
   if (searchError) throw new Error(searchError.message);
 
-  if (open && open.length > 0) {
-    const target = open[0].id;
+  const candidates = (open ?? []).filter(r =>
+    timeControlsMatch((r as { time_control: TimeControl }).time_control ?? { kind: 'none' }, timeControl)
+  );
+
+  for (const c of candidates) {
     try {
-      await joinOnlineGame({ userId: opts.userId, gameId: target });
-      return { gameId: target, created: false };
+      await joinOnlineGame({ userId: opts.userId, gameId: c.id });
+      return { gameId: c.id, created: false };
     } catch {
-      // Lost a race against another joiner — fall through and create one.
+      // Lost a race; try the next one.
     }
   }
 
-  const newGame = await createOnlineGame({ userId: opts.userId, isPublic: true, mode });
+  const newGame = await createOnlineGame({ userId: opts.userId, isPublic: true, mode, timeControl });
   return { gameId: newGame.id, created: true };
 }
 
@@ -168,6 +193,7 @@ export async function quickMatch(opts: { userId: string; mode?: GameMode }): Pro
 export interface AsyncOpenRoom {
   id: string;
   created_at: string;
+  time_control: TimeControl;   // always {kind:'none'} for async, but kept for shape parity
   player1: {
     id: string;
     username: string;
@@ -181,7 +207,7 @@ export async function listAsyncOpenRooms(opts: { userId: string; limit?: number 
   const { data, error } = await supabase
     .from('games')
     .select(`
-      id, created_at,
+      id, created_at, time_control,
       player1:profiles!games_player1_id_fkey(id, username, display_name, avatar_url, rating)
     `)
     .eq('status', 'waiting')
@@ -199,6 +225,7 @@ export interface ActiveGame {
   id: string;
   status: GameStatus;
   mode: GameMode;
+  time_control: TimeControl;
   current_turn: number;
   is_public: boolean;
   invite_code: string | null;
@@ -231,7 +258,7 @@ export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
   const { data, error } = await supabase
     .from('games')
     .select(`
-      id, status, mode, current_turn, is_public, invite_code, updated_at, last_move_at,
+      id, status, mode, time_control, current_turn, is_public, invite_code, updated_at, last_move_at,
       player1_id, player2_id, state,
       p1:profiles!games_player1_id_fkey(id, username, display_name, avatar_url),
       p2:profiles!games_player2_id_fkey(id, username, display_name, avatar_url)
@@ -245,6 +272,7 @@ export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
     id: string;
     status: GameStatus;
     mode: GameMode;
+    time_control: TimeControl | null;
     current_turn: number;
     is_public: boolean;
     invite_code: string | null;
@@ -265,6 +293,7 @@ export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
       id: r.id,
       status: r.status,
       mode: r.mode ?? 'live',
+      time_control: r.time_control ?? { kind: 'none' },
       current_turn: r.current_turn,
       is_public: r.is_public,
       invite_code: r.invite_code,

@@ -17,6 +17,9 @@ import {
   AsyncOpenRoom,
   GameMode,
 } from '@/lib/supabase/games';
+import { formatClockShort } from '@/game/timeControl';
+import type { TimeControl } from '@/game/types';
+import OnlineCreateModal from '@/components/OnlineCreateModal';
 import {
   listFriendships,
   removeFriendship,
@@ -34,6 +37,7 @@ import FriendDm from '@/components/FriendDm';
 interface PublicGame {
   id: string;
   player1_id: string;
+  time_control: TimeControl;
   player1: { username: string; display_name: string; avatar_url: string | null } | null;
 }
 
@@ -46,51 +50,48 @@ export default function LobbyPage() {
   const [tab, setTab] = useState<LobbyTab>('play');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  // Live vs async mode for the create / quick-match buttons. Persists so
-  // a player who likes correspondence games doesn't have to re-pick on
-  // every visit. Defaults to live (the existing behaviour).
-  const [mode, setMode] = useState<GameMode>('live');
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const saved = window.localStorage.getItem('zaeer.lobbyMode');
-    if (saved === 'live' || saved === 'async') setMode(saved);
-  }, []);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('zaeer.lobbyMode', mode);
-  }, [mode]);
+  // The single "Create / Match" modal handles mode + timer + which button
+  // (Quick Match / public / private). The lobby just holds open state.
+  const [createOpen, setCreateOpen] = useState(false);
 
   // Bounce unauthenticated visitors.
   useEffect(() => {
     if (!userLoading && !user) router.replace('/login?next=/play');
   }, [userLoading, user, router]);
 
-  // ── Quick Match ────────────────────────────────────────────────────────
-  const handleQuickMatch = useCallback(async () => {
+  // ── Modal callbacks ────────────────────────────────────────────────────
+  const handleQuickMatch = useCallback(async (opts: { mode: GameMode; timeControl: TimeControl }) => {
     if (!user || busy) return;
     setError(null);
     setBusy('quick');
+    setCreateOpen(false);
     try {
-      const { gameId } = await quickMatch({ userId: user.id, mode });
+      const { gameId } = await quickMatch({ userId: user.id, mode: opts.mode, timeControl: opts.timeControl });
       router.push(`/play/${gameId}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not start a quick match.');
       setBusy(null);
     }
-  }, [user, busy, router, mode]);
+  }, [user, busy, router]);
 
-  const handleCreate = useCallback(async (isPublic: boolean) => {
+  const handleCreate = useCallback(async (opts: { mode: GameMode; timeControl: TimeControl; isPublic: boolean }) => {
     if (!user || busy) return;
     setError(null);
-    setBusy(isPublic ? 'public' : 'private');
+    setBusy(opts.isPublic ? 'public' : 'private');
+    setCreateOpen(false);
     try {
-      const game = await createOnlineGame({ userId: user.id, isPublic, mode });
+      const game = await createOnlineGame({
+        userId: user.id,
+        isPublic: opts.isPublic,
+        mode: opts.mode,
+        timeControl: opts.timeControl,
+      });
       router.push(`/play/${game.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not create game.');
       setBusy(null);
     }
-  }, [user, busy, router, mode]);
+  }, [user, busy, router]);
 
   return (
     <main
@@ -141,10 +142,7 @@ export default function LobbyPage() {
           <PlayTab
             theme={theme}
             busy={busy}
-            mode={mode}
-            setMode={setMode}
-            onQuickMatch={handleQuickMatch}
-            onCreate={handleCreate}
+            onOpenCreate={() => setCreateOpen(true)}
             setBusy={setBusy}
             setError={setError}
             user={user}
@@ -157,6 +155,7 @@ export default function LobbyPage() {
             theme={theme}
             user={user}
             setError={setError}
+            onChallenge={() => setCreateOpen(true)}
           />
         )}
 
@@ -166,6 +165,13 @@ export default function LobbyPage() {
           </div>
         )}
       </div>
+
+      <OnlineCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onQuickMatch={handleQuickMatch}
+        onCreate={handleCreate}
+      />
     </main>
   );
 }
@@ -189,19 +195,17 @@ function TabBtn({ label, active, onClick, theme }: { label: string; active: bool
 // ─── Play tab ─────────────────────────────────────────────────────────────
 
 function PlayTab({
-  theme, busy, mode, setMode, onQuickMatch, onCreate, setBusy, setError, user, router,
+  theme, busy, onOpenCreate, setBusy, setError, user, router,
 }: {
   theme: ReturnType<typeof useSettings>['theme'];
   busy: string | null;
-  mode: GameMode;
-  setMode: (m: GameMode) => void;
-  onQuickMatch: () => void;
-  onCreate: (isPublic: boolean) => void;
+  onOpenCreate: () => void;
   setBusy: (b: string | null) => void;
   setError: (e: string | null) => void;
   user: ReturnType<typeof useUser>['user'];
   router: ReturnType<typeof useRouter>;
 }) {
+  const { t } = useSettings();
   const [joinCode, setJoinCode] = useState('');
   const [games, setGames] = useState<PublicGame[]>([]);
   const [gamesLoading, setGamesLoading] = useState(true);
@@ -233,7 +237,7 @@ function PlayTab({
       const [{ data: liveData }, asyncList] = await Promise.all([
         supabase
           .from('games')
-          .select('id, player1_id, player1:profiles!games_player1_id_fkey(username, display_name, avatar_url)')
+          .select('id, player1_id, time_control, player1:profiles!games_player1_id_fkey(username, display_name, avatar_url)')
           .eq('status', 'waiting')
           .eq('is_public', true)
           .eq('mode', 'live')
@@ -292,7 +296,6 @@ function PlayTab({
     }
   }
 
-  const isAsync = mode === 'async';
   return (
     <>
       {/* Resume strip — shown only when the caller has at least one match
@@ -302,34 +305,18 @@ function PlayTab({
         <ResumeGames games={active} theme={theme} router={router} />
       )}
 
-      {/* Live ↔ Async mode toggle. Drives Quick Match + Play with Friend
-          + the public-rooms list. Async games stay around even when the
-          host walks away — opponent gets a "your turn" bell ping when
-          they next come back. */}
-      <ModeToggle mode={mode} setMode={setMode} theme={theme} />
-
-      {/* The 3 hero actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+      {/* Two hero actions: open the create-modal (which packs Quick Match
+          + public + private + live/async + timer) and the inline Join
+          with Code. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         <ActionCard
-          icon={isAsync ? '📨' : '🎯'}
-          title={isAsync ? 'Quick Async Match' : 'Quick Match'}
-          desc={isAsync
-            ? 'Hop into the oldest open async room, or create one. Make a move and walk away.'
-            : 'Find or create the fastest available match. Starts immediately.'}
+          icon="🎯"
+          title="Find a Match"
+          desc="Quick Match, public room, or private room — pick your time control on the next screen."
           accent
-          loading={busy === 'quick'}
+          loading={busy === 'quick' || busy === 'public' || busy === 'private'}
           theme={theme}
-          onClick={onQuickMatch}
-        />
-        <ActionCard
-          icon="👥"
-          title="Play with Friend"
-          desc={isAsync
-            ? 'Private async room — share the code and play whenever.'
-            : 'Create a private room and share the 6-char code.'}
-          loading={busy === 'private'}
-          theme={theme}
-          onClick={() => onCreate(false)}
+          onClick={onOpenCreate}
         />
         <div
           className="rounded-xl p-4"
@@ -474,7 +461,10 @@ function PlayTab({
                     accent="p2"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold truncate text-sm">{g.player1?.display_name ?? 'Anonymous'}</div>
+                    <div className="font-bold truncate text-sm flex items-center gap-2">
+                      <span className="truncate">{g.player1?.display_name ?? 'Anonymous'}</span>
+                      <TimeControlChip tc={g.time_control} theme={theme} t={t} />
+                    </div>
                     <div className="text-xs opacity-70 truncate">@{g.player1?.username ?? '?'}</div>
                   </div>
                   <button
@@ -499,43 +489,25 @@ function PlayTab({
   );
 }
 
-function ModeToggle({ mode, setMode, theme }: { mode: GameMode; setMode: (m: GameMode) => void; theme: ReturnType<typeof useSettings>['theme'] }) {
+/** Compact pill that shows a room's time control on lobby cards. The
+ *  shape mirrors chess.com's "10+0" badge, with an `∞ Untimed` fallback
+ *  when no clock is attached. Dropping a clock chip on every card means
+ *  a player browsing rooms can pick a Bullet game vs. a Classical one
+ *  without opening the room first. */
+function TimeControlChip({ tc, theme, t }: { tc: TimeControl; theme: ReturnType<typeof useSettings>['theme']; t: (k: string, v?: Record<string, string | number>) => string }) {
+  const isClock = tc.kind === 'clock';
+  const label = isClock ? formatClockShort(tc) : t('timer.untimed');
   return (
-    <div
-      className="rounded-xl p-3 mb-4 flex items-center gap-3 flex-wrap"
-      style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+    <span
+      className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-1 font-mono"
+      style={{
+        background: isClock ? theme.p1AccentBg : theme.inputBg,
+        border: `1px solid ${isClock ? theme.p1AccentBorder : theme.buttonBorder}`,
+        color: isClock ? theme.p1Color : theme.textPrimary,
+      }}
     >
-      <div className="text-xs font-bold uppercase tracking-wider opacity-70 shrink-0">Mode</div>
-      <div className="flex gap-1 rounded-lg p-1 flex-1 min-w-[220px]" style={{ background: theme.inputBg, border: `1px solid ${theme.buttonBorder}` }}>
-        <button
-          onClick={() => setMode('live')}
-          className="flex-1 rounded-md py-1.5 px-3 text-xs font-bold transition-colors"
-          style={{
-            background: mode === 'live' ? theme.buttonRotateBg : 'transparent',
-            color: mode === 'live' ? theme.buttonRotateText : theme.textPrimary,
-            opacity: mode === 'live' ? 1 : 0.7,
-          }}
-        >
-          ⚡ Live
-        </button>
-        <button
-          onClick={() => setMode('async')}
-          className="flex-1 rounded-md py-1.5 px-3 text-xs font-bold transition-colors"
-          style={{
-            background: mode === 'async' ? theme.buttonRotateBg : 'transparent',
-            color: mode === 'async' ? theme.buttonRotateText : theme.textPrimary,
-            opacity: mode === 'async' ? 1 : 0.7,
-          }}
-        >
-          📨 Async
-        </button>
-      </div>
-      <div className="text-xs opacity-65 basis-full sm:basis-auto sm:flex-1 sm:min-w-[180px]">
-        {mode === 'live'
-          ? 'Both players sit down at the same time.'
-          : 'Make a move and walk away — opponent gets a bell when it\'s their turn.'}
-      </div>
-    </div>
+      {isClock ? '⏱' : '∞'} <span>{label}</span>
+    </span>
   );
 }
 
@@ -691,13 +663,16 @@ interface SearchResult {
 }
 
 function FriendsTab({
-  theme, user, setError,
+  theme, user, setError, onChallenge,
 }: {
   theme: ReturnType<typeof useSettings>['theme'];
   user: ReturnType<typeof useUser>['user'];
   setError: (e: string | null) => void;
+  /** Pop the lobby's create modal so the user can pick mode + timer for
+   *  the friend match. (We share the same modal instance to keep choices
+   *  in one place — no duplicated UI for friend-specific settings.) */
+  onChallenge: () => void;
 }) {
-  const router = useRouter();
   const [friends, setFriends] = useState<FriendProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -794,17 +769,12 @@ function FriendsTab({
     }
   }
 
-  async function handleChallenge(f: FriendProfile) {
-    if (!user) return;
+  function handleChallenge(_f: FriendProfile) {
+    // Punt over to the lobby's create modal so the user gets the same
+    // mode + timer picker. After they pick "Create private", they'll get
+    // an invite code to send the friend.
     setError(null);
-    setActionBusy(`challenge-${f.friendshipId}`);
-    try {
-      const game = await createOnlineGame({ userId: user.id, isPublic: false });
-      router.push(`/play/${game.id}`);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not create game.');
-      setActionBusy(null);
-    }
+    onChallenge();
   }
 
   const incoming = friends.filter(f => f.status === 'pending' && !f.outgoing);

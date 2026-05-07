@@ -2,6 +2,44 @@ export type PieceType = 'lion' | 'elephant' | 'ant' | 'butterfly' | 'bat' | 'mon
 export type Player = 1 | 2;
 export type Orientation = 'horizontal' | 'vertical' | 'diagonal' | 'antidiagonal';
 
+/** Chess-style time control attached to a game. `none` is the default and
+ *  preserves the original "no clock" experience. `clock` is the standard
+ *  chess pattern: each player gets `matchSeconds`; their clock counts
+ *  down only while it's their turn; finishing a move adds `increment`
+ *  seconds back to the player who moved (Fischer); `perMoveSeconds` is
+ *  a separate hard cap on a single move (0 disables it). */
+export type TimeControl =
+  | { kind: 'none' }
+  | { kind: 'clock'; matchSeconds: number; increment: number; perMoveSeconds: number };
+
+/** Live remaining time, mirrored on every state update. The clock that
+ *  is *actively counting* is whichever player matches `currentPlayer`;
+ *  the other clock holds its value until the turn flips back. */
+export interface Clocks {
+  /** Match-clock seconds remaining for player 1. */
+  p1Seconds: number;
+  /** Match-clock seconds remaining for player 2. */
+  p2Seconds: number;
+  /** Per-move seconds remaining for the active player; resets at every
+   *  turn flip. 0 if perMoveSeconds was 0 (i.e. no per-move limit). */
+  perMoveSeconds: number;
+  /** Wall-clock instant the active player's clock started ticking, in
+   *  ISO. Clients compute display time as `activeSeconds - (now - this)`.
+   *  Persisted with the game state so reconciliation across reload /
+   *  Realtime echo is straightforward. */
+  startedAt: string;
+}
+
+/** Compact-friendly preset used by the lobby modals. Resolves to a
+ *  full TimeControl when the player launches a game. */
+export interface TimeControlPreset {
+  id: string;
+  /** Localisation key for the preset label, e.g. 'preset.rapid'. */
+  labelKey: string;
+  matchSeconds: number;
+  increment: number;
+}
+
 /** Local single-player AI difficulty levels.
  *  - 'butterfly' = easy (random legal move)
  *  - 'monkey'    = medium (1-ply greedy heuristic)
@@ -96,4 +134,11 @@ export interface GameState {
    *  null/undefined = regular pass-and-play. The online game leaves this
    *  unset — both sides are humans on different devices. */
   aiLevel?: AiLevel | null;
+  /** Time control for this match. Optional/undefined = legacy untimed.
+   *  Mirrors `games.time_control` on online games. */
+  timeControl?: TimeControl;
+  /** Live clock readout — present only when timeControl.kind === 'clock'.
+   *  Updated on every turn flip; the active player's display ticks down
+   *  via a setInterval in the HUD without needing a state write. */
+  clocks?: Clocks;
 }

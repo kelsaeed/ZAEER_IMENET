@@ -1,4 +1,4 @@
-import { GamePiece, GameState, Player, PieceType, Orientation } from './types';
+import { GamePiece, GameState, Player, PieceType, Orientation, TimeControl, Clocks } from './types';
 
 interface PlacementDef {
   type: PieceType;
@@ -47,9 +47,20 @@ function createPieces(): GamePiece[] {
   return pieces;
 }
 
-export function createInitialState(): GameState {
+function clocksFor(tc: TimeControl | undefined): Clocks | undefined {
+  if (!tc || tc.kind !== 'clock') return undefined;
+  return {
+    p1Seconds: tc.matchSeconds,
+    p2Seconds: tc.matchSeconds,
+    perMoveSeconds: tc.perMoveSeconds,
+    startedAt: new Date().toISOString(),
+  };
+}
+
+export function createInitialState(opts?: { timeControl?: TimeControl }): GameState {
   const pieces = createPieces();
   const startAction = { key: 'action.gameReady' };
+  const timeControl: TimeControl = opts?.timeControl ?? { kind: 'none' };
   return {
     pieces,
     currentPlayer: 1,
@@ -81,5 +92,7 @@ export function createInitialState(): GameState {
     viewingHistoryIndex: null,
     winScreenDismissed: false,
     aiLevel: null,
+    timeControl,
+    clocks: clocksFor(timeControl),
   };
 }

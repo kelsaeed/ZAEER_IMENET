@@ -16,6 +16,8 @@ const en: Record<string, string> = {
   'app.boardSummary': '16×16 Board · 2 Players · Round-based',
   'app.startButton': '⚔️ Start Game ⚔️',
   'app.playOnline': 'Play Online',
+  'app.onlineGame': '🌐 Online Game',
+  'app.offlineGame': '⚔️ Offline Game ⚔️',
 
   // Game-mode picker on the start screen
   'mode.heading': 'Game Mode',
@@ -23,6 +25,53 @@ const en: Record<string, string> = {
   'mode.aiEasy': 'vs AI · Easy',
   'mode.aiMedium': 'vs AI · Medium',
   'mode.aiHard': 'vs AI · Hard',
+
+  // Offline modal
+  'offline.title': 'Offline Game',
+  'offline.subtitle': 'Pick a mode and (optionally) a clock.',
+  'offline.start': 'Start',
+
+  // Online create modal
+  'online.createTitle': 'Create a game',
+  'online.createSubtitle': 'Pick how you play, then how long it lasts.',
+  'online.live': '⚡ Live',
+  'online.async': '📨 Async',
+  'online.liveDesc': 'Both players sit down at the same time.',
+  'online.asyncDesc': 'Make a move and walk away — opponent gets a bell.',
+  'online.public': 'Public room',
+  'online.private': 'Private room (invite code)',
+  'online.create': 'Create game',
+  'online.quickMatch': 'Quick Match',
+  'online.asyncTimerNote': 'Async games are always untimed.',
+
+  // Timer settings (shared block)
+  'timer.title': 'Timer',
+  'timer.off': 'No timer',
+  'timer.on': 'Timer on',
+  'timer.preset': 'Preset',
+  'timer.matchClock': 'Match clock',
+  'timer.matchClockUnit': 'minutes per player',
+  'timer.increment': 'Increment',
+  'timer.incrementUnit': 'seconds per move',
+  'timer.perMove': 'Per-move cap',
+  'timer.perMoveUnit': 'seconds (0 = no cap)',
+  'timer.custom': 'Custom',
+  'timer.untimed': '∞ Untimed',
+  'timer.summary': '{match}+{inc}',
+  'timer.summaryWithCap': '{match}+{inc} · cap {cap}s',
+
+  // Rapid-style presets (chess-flavoured)
+  'preset.bullet': '🔫 Bullet 1+0',
+  'preset.blitz': '⚡ Blitz 3+2',
+  'preset.rapid': '🏃 Rapid 10+0',
+  'preset.classical': '♟ Classical 15+10',
+
+  // Clock HUD + timeout
+  'hud.clockP1': 'Player 1',
+  'hud.clockP2': 'Player 2',
+  'hud.flagged': 'Flag fell',
+  'action.timeout': '⏰ Player {n} wins on time!',
+  'win.timeout': 'Won on time',
 
   // AI status
   'ai.thinking': '🤖 AI is thinking…',
@@ -207,12 +256,56 @@ const ar: Record<string, string> = {
   'app.boardSummary': 'لوحة 16×16 · لاعبان · بالأدوار',
   'app.startButton': '⚔️ ابدأ اللعبة ⚔️',
   'app.playOnline': 'العب أونلاين',
+  'app.onlineGame': '🌐 لعبة أونلاين',
+  'app.offlineGame': '⚔️ لعبة محلية ⚔️',
 
   'mode.heading': 'نوع اللعبة',
   'mode.local': 'لاعبان محلياً',
   'mode.aiEasy': 'ضد الذكاء · سهل',
   'mode.aiMedium': 'ضد الذكاء · متوسط',
   'mode.aiHard': 'ضد الذكاء · صعب',
+
+  'offline.title': 'لعبة محلية',
+  'offline.subtitle': 'اختر نمط اللعب، وبشكل اختياري الوقت.',
+  'offline.start': 'ابدأ',
+
+  'online.createTitle': 'إنشاء مباراة',
+  'online.createSubtitle': 'اختر طريقة اللعب، ثم مدة المباراة.',
+  'online.live': '⚡ مباشرة',
+  'online.async': '📨 غير متزامنة',
+  'online.liveDesc': 'يلعب اللاعبان في نفس الوقت.',
+  'online.asyncDesc': 'العب نقلتك ثم اذهب — الخصم يتلقى تنبيهًا.',
+  'online.public': 'غرفة عامة',
+  'online.private': 'غرفة خاصة (كود دعوة)',
+  'online.create': 'إنشاء المباراة',
+  'online.quickMatch': 'مباراة سريعة',
+  'online.asyncTimerNote': 'المباريات غير المتزامنة بدون مؤقت دائمًا.',
+
+  'timer.title': 'المؤقت',
+  'timer.off': 'بدون مؤقت',
+  'timer.on': 'تشغيل المؤقت',
+  'timer.preset': 'قالب جاهز',
+  'timer.matchClock': 'وقت المباراة',
+  'timer.matchClockUnit': 'دقائق لكل لاعب',
+  'timer.increment': 'إضافة',
+  'timer.incrementUnit': 'ثوانٍ بعد كل نقلة',
+  'timer.perMove': 'حد النقلة',
+  'timer.perMoveUnit': 'ثوانٍ (0 = بدون حد)',
+  'timer.custom': 'مخصص',
+  'timer.untimed': '∞ بدون مؤقت',
+  'timer.summary': '{match}+{inc}',
+  'timer.summaryWithCap': '{match}+{inc} · حد {cap}ث',
+
+  'preset.bullet': '🔫 سريعة جداً 1+0',
+  'preset.blitz': '⚡ بليتس 3+2',
+  'preset.rapid': '🏃 رابيد 10+0',
+  'preset.classical': '♟ كلاسيكية 15+10',
+
+  'hud.clockP1': 'اللاعب 1',
+  'hud.clockP2': 'اللاعب 2',
+  'hud.flagged': 'سقطت الراية',
+  'action.timeout': '⏰ اللاعب {n} فاز بانتهاء الوقت!',
+  'win.timeout': 'فوز بالوقت',
 
   'ai.thinking': '🤖 الذكاء يفكّر…',
   'ai.opponent': '🤖 الذكاء ({level})',

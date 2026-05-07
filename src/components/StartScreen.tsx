@@ -3,29 +3,20 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useSettings } from '@/hooks/useSettings';
-import type { AiLevel } from '@/game/types';
-import { AI_LEVEL_META } from '@/game/ai';
+import type { AiLevel, TimeControl } from '@/game/types';
 import AuthBadge from './AuthBadge';
 import NotificationBell from './NotificationBell';
+import OfflineGameModal from './OfflineGameModal';
 
 const AnimatedBackground = dynamic(() => import('./AnimatedBackground'), { ssr: false });
 
 interface Props {
-  /** Pass null for local pass-and-play, or one of the AI levels to start
-   *  a vs-bot game (the human is always player 1). */
-  onStart: (aiLevel: AiLevel | null) => void;
+  /** Pass null for local pass-and-play, or an AI level. The second arg is
+   *  the time control chosen in the offline modal — `{kind:'none'}` when
+   *  the timer toggle is off. */
+  onStart: (aiLevel: AiLevel | null, timeControl: TimeControl) => void;
   onOpenSettings?: () => void;
 }
-
-type Mode = 'local' | AiLevel;
-const MODE_OPTIONS: { value: Mode; emoji: string; labelKey: string }[] = [
-  { value: 'local',     emoji: '👥', labelKey: 'mode.local' },
-  { value: 'butterfly', emoji: AI_LEVEL_META.butterfly.emoji, labelKey: 'mode.aiEasy' },
-  { value: 'monkey',    emoji: AI_LEVEL_META.monkey.emoji,    labelKey: 'mode.aiMedium' },
-  { value: 'lion',      emoji: AI_LEVEL_META.lion.emoji,      labelKey: 'mode.aiHard' },
-];
-
-const MODE_STORAGE_KEY = 'zaeer-imenet-mode-v1';
 
 const PIECE_TYPES = ['lion', 'elephant', 'monkey', 'bat', 'butterfly', 'ant'] as const;
 const PIECE_EMOJI_MAP: Record<typeof PIECE_TYPES[number], string> = {
@@ -35,31 +26,12 @@ const PIECE_EMOJI_MAP: Record<typeof PIECE_TYPES[number], string> = {
 export default function StartScreen({ onStart, onOpenSettings }: Props) {
   const { t, theme, isRTL } = useSettings();
   const [isMounted, setIsMounted] = useState(false);
-  // Game mode picker — defaults to local pass-and-play. We persist the
-  // last choice in localStorage so a player who keeps replaying vs the
-  // hard AI doesn't have to reselect it every time they hit Main Menu.
-  const [mode, setMode] = useState<Mode>('local');
+  const [offlineOpen, setOfflineOpen] = useState(false);
 
   // Only render particles after mount to avoid hydration mismatch
   useEffect(() => {
     setIsMounted(true);
-    if (typeof window === 'undefined') return;
-    try {
-      const raw = localStorage.getItem(MODE_STORAGE_KEY);
-      if (raw === 'local' || raw === 'butterfly' || raw === 'monkey' || raw === 'lion') {
-        setMode(raw);
-      }
-    } catch {
-      // localStorage may throw in private mode / sandboxed iframes — fine.
-    }
   }, []);
-
-  const selectMode = (m: Mode) => {
-    setMode(m);
-    try { localStorage.setItem(MODE_STORAGE_KEY, m); } catch { /* ignore */ }
-  };
-
-  const handleStart = () => onStart(mode === 'local' ? null : mode);
 
   return (
     <div
@@ -95,10 +67,8 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
       {isMounted && <AnimatedBackground />}
 
       {/* On lg+ everything reflows into a 2-column grid: title + rules +
-          legend + mode picker + buttons stack on the left (rows 1–5), the
-          6-card piece guide fills the right column (row-spans 1–5).
-          Mobile keeps the existing top-to-bottom JSX order untouched
-          (title → rules → pieces → legend → mode → buttons). */}
+          legend + buttons stack on the left, the 6-card piece guide
+          fills the right column. */}
       <div
         className="
           flex flex-col items-center w-full relative z-10 gap-0
@@ -145,9 +115,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           </div>
         </motion.div>
 
-        {/* Piece guide — 6 cards. On lg+ this fills the right column at full
-            size, spanning the full vertical extent of the left stack
-            (5 rows now: title, win conds, legend, mode picker, buttons). */}
+        {/* Piece guide — 6 cards. */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -155,7 +123,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           className="
             grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2
             gap-3 mb-8 lg:mb-0 max-w-2xl w-full
-            lg:col-start-2 lg:row-start-1 lg:row-span-5 lg:self-center
+            lg:col-start-2 lg:row-start-1 lg:row-span-4 lg:self-center
           "
           style={{ maxWidth: '42rem', width: '100%' }}
         >
@@ -198,57 +166,21 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           </div>
         </motion.div>
 
-        {/* Mode picker — radio-style segmented pills. Local pass-and-play
-            (default) or one of three AI difficulty levels. The selected
-            pill drives whether handleStart() launches a vs-AI game.
-            Mobile: pills wrap; PC: stays in the left column above the
-            Start / Online buttons. */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85 }}
-          className="w-full max-w-lg mb-4 lg:mb-3 lg:col-start-1 lg:row-start-4 lg:justify-self-center"
-        >
-          <div className="text-xs uppercase tracking-wider opacity-60 mb-2 text-center" style={{ color: theme.textMuted }}>
-            {t('mode.heading')}
-          </div>
-          <div className="flex flex-wrap justify-center gap-2">
-            {MODE_OPTIONS.map(opt => {
-              const selected = mode === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => selectMode(opt.value)}
-                  aria-pressed={selected}
-                  className="px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 transition-transform hover:scale-[1.03] active:scale-95"
-                  style={{
-                    background: selected ? theme.p1AccentBg : theme.panelBg,
-                    border: `1px solid ${selected ? theme.p1Color : theme.panelBorder}`,
-                    color: selected ? theme.p1Color : theme.textPrimary,
-                    boxShadow: selected ? `0 0 14px ${theme.p1Color}55` : 'none',
-                  }}
-                >
-                  <span aria-hidden>{opt.emoji}</span>
-                  <span>{t(opt.labelKey)}</span>
-                </button>
-              );
-            })}
-          </div>
-        </motion.div>
-
-        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md sm:max-w-none sm:w-auto lg:col-start-1 lg:row-start-5 lg:self-start">
+        {/* Two hero buttons: Online (routes to /play) + Offline (opens
+            modal with mode picker + timer). The mode picker pills that
+            used to live above this row moved into the offline modal. */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md sm:max-w-none sm:w-auto lg:col-start-1 lg:row-start-4 lg:self-start">
           <motion.button
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.1, duration: 0.35, ease: 'easeOut' }}
-            onClick={handleStart}
+            onClick={() => setOfflineOpen(true)}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="px-8 sm:px-10 py-3 sm:py-4 rounded-2xl text-lg sm:text-xl font-extrabold w-full sm:w-auto transition-all duration-300"
             style={{ fontWeight: 800, color: '#000', background: `linear-gradient(to right, ${theme.p1Color}, ${theme.selectedRing}, ${theme.p1Color})`, boxShadow: `0 0 30px ${theme.p1Color}80` }}
           >
-            {t('app.startButton')}
+            {t('app.offlineGame')}
           </motion.button>
 
           <motion.a
@@ -267,10 +199,19 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
               backdropFilter: 'blur(8px)',
             }}
           >
-            🌐 <span>{t('app.playOnline')}</span>
+            <span>{t('app.onlineGame')}</span>
           </motion.a>
         </div>
       </div>
+
+      <OfflineGameModal
+        open={offlineOpen}
+        onClose={() => setOfflineOpen(false)}
+        onStart={(aiLevel, tc) => {
+          setOfflineOpen(false);
+          onStart(aiLevel, tc);
+        }}
+      />
     </div>
   );
 }
