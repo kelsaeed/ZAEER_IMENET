@@ -208,13 +208,37 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       return;
     }
     const supabase = getSupabaseBrowser();
+    // Try the with-theme select first. If the database hasn't had
+    // migration 0013 applied yet the column doesn't exist and the
+    // SELECT fails — in that case retry without theme_id so the
+    // opponent profile still loads (just without their cosmetic
+    // pref) and the rest of the match keeps working.
     supabase
       .from('profiles')
       .select('id, username, display_name, avatar_url, theme_id')
       .eq('id', opponentId)
       .single()
-      .then(({ data }) => {
-        if (data) setOpponent(data as OpponentInfo);
+      .then(({ data, error }: { data: unknown; error: { message?: string } | null }) => {
+        if (data) {
+          setOpponent(data as OpponentInfo);
+          return;
+        }
+        if (!error) return;
+        const msg = error.message?.toLowerCase() ?? '';
+        if (!msg.includes('theme_id') && !msg.includes('column')) return;
+        // Column-missing fallback: refetch without theme_id and tag
+        // theme_id null on the resulting object so the rest of the
+        // app sees a consistent shape.
+        supabase
+          .from('profiles')
+          .select('id, username, display_name, avatar_url')
+          .eq('id', opponentId)
+          .single()
+          .then(({ data: fallback }: { data: unknown }) => {
+            if (fallback) {
+              setOpponent({ ...(fallback as Omit<OpponentInfo, 'theme_id'>), theme_id: null });
+            }
+          });
       });
   }, [game, user]);
 

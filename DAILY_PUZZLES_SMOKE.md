@@ -19,6 +19,7 @@ In the Supabase SQL editor, run in order if you haven't already:
 | `0001_init.sql` … `0010_notify_live_too.sql` | Base schema (already required for the rest of the app). |
 | `0011_daily_puzzles.sql` | Adds `daily_puzzles`, `daily_puzzle_solutions`, `puzzle_attempts`, profile streak fields, RLS, streak trigger. |
 | `0012_daily_puzzles_safety.sql` | Adds the auto-invalidate / cleanup-on-edit / friendly-publish-guard triggers. |
+| `0013_player_theme_id.sql` | Adds `profiles.theme_id` so the split-board theming has a place to store each player's pick. The board renders single-themed (viewer's theme on both halves) until this migration runs. |
 
 Verify in the SQL editor:
 

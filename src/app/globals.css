@@ -32,6 +32,55 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* The whole game UI is tap-driven — pieces, panels, the gear, the
+ * chat float, etc. None of those should show a text I-beam on hover
+ * or trap the user in text-selection mode after a tap. We force
+ * cursor: pointer + user-select: none on every button-shaped element
+ * so an emoji glyph inside a <button> can't drag the cursor into
+ * I-beam mode and a long-press on a piece can't accidentally start
+ * selecting text. Real text inputs (textareas, <input type=text>)
+ * keep their normal cursor + selection — selectors below opt them
+ * back in. */
+button,
+[role='button'],
+[type='button'],
+[type='submit'],
+a {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+button *,
+[role='button'] *,
+[type='button'] *,
+[type='submit'] *,
+a * {
+  cursor: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Disabled buttons get the not-allowed cursor instead of pointer. */
+button:disabled,
+[type='button']:disabled,
+[type='submit']:disabled {
+  cursor: not-allowed;
+}
+/* Real text-entry surfaces opt back in. */
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='search'],
+input[type='url'],
+input[type='tel'],
+input[type='number'],
+input[type='date'],
+input[type='color'],
+textarea {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* Extra scroll room on phones with home indicator */
 @supports (padding: max(0px)) {
   .pb-safe {
