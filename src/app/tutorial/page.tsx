@@ -7,7 +7,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { applyMove, getValidMoves } from '@/game/logic';
 import type { GameState } from '@/game/types';
 import { TUTORIAL_STEPS, tutorialState } from '@/game/tutorial';
-import KillCycleWheel, { PIECES_FOR_BODY, WedgeKey } from '@/components/KillCycleWheel';
+import KillCycleWheel from '@/components/KillCycleWheel';
 import GameBoard from '@/components/GameBoard';
 
 type Phase =
@@ -23,7 +23,6 @@ export default function TutorialPage() {
   const router = useRouter();
   const { theme, isRTL, t } = useSettings();
   const [phase, setPhase] = useState<Phase>({ kind: 'wheel' });
-  const [wheelPick, setWheelPick] = useState<WedgeKey | 'lion' | null>('lion');
   const [shake, setShake] = useState(0);
   const [cellSize, setCellSize] = useState(34);
 
@@ -163,16 +162,7 @@ export default function TutorialPage() {
               {t('tutorial.wheelTitle')}
             </h1>
             <p className="text-sm opacity-80 text-center max-w-md">{t('tutorial.wheelBody')}</p>
-            <KillCycleWheel onPick={setWheelPick} selected={wheelPick} />
-            <div
-              className="rounded-xl px-4 py-3 text-center text-sm min-h-[3.5rem] flex items-center justify-center max-w-md w-full"
-              style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
-            >
-              {(() => {
-                const entry = PIECES_FOR_BODY.find(e => e.key === wheelPick) ?? PIECES_FOR_BODY[0];
-                return t(entry.bodyKey);
-              })()}
-            </div>
+            <KillCycleWheel />
             <button
               type="button"
               onClick={startLessons}

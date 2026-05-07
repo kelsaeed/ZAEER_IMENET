@@ -85,7 +85,7 @@ const en: Record<string, string> = {
 
   // Tutorial — kill cycle wheel (intro)
   'tutorial.wheelTitle': 'Who Beats Who',
-  'tutorial.wheelBody': 'Tap a piece to see what it can kill. The Lion in the middle can kill anything.',
+  'tutorial.wheelBody': 'Each arrow shows who can kill who. The Lion in the middle can kill any enemy piece.',
   'tutorial.wheelLion': 'Lion kills any enemy piece.',
   'tutorial.wheelElephant': 'Elephant kills the Lion.',
   'tutorial.wheelMonkey': 'Monkey kills the Bat.',
@@ -367,7 +367,7 @@ const ar: Record<string, string> = {
   'tutorial.stepCounter': 'الخطوة {n} من {total}',
 
   'tutorial.wheelTitle': 'من يقتل من',
-  'tutorial.wheelBody': 'اضغط أي قطعة لترى ما تستطيع قتله. الأسد في المنتصف يقتل أي قطعة.',
+  'tutorial.wheelBody': 'كل سهم يبيّن من يقتل من. الأسد في المنتصف يقتل أي قطعة من الخصم.',
   'tutorial.wheelLion': 'الأسد يقتل أي قطعة من الخصم.',
   'tutorial.wheelElephant': 'الفيل يقتل الأسد.',
   'tutorial.wheelMonkey': 'القرد يقتل الخفاش.',
