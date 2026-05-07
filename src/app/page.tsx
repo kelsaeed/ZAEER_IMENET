@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useGame } from '@/hooks/useGame';
 import { useSettings } from '@/hooks/useSettings';
@@ -39,8 +40,27 @@ export default function Home() {
     showWinScreen,
   } = useGame();
   const { theme, isRTL, t } = useSettings();
+  const search = useSearchParams();
   const [cellSize, setCellSize] = useState(42);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Tutorial CTA: when the tutorial's "Play vs Easy AI" button routes
+  // back to /?ai=easy, auto-launch a fresh untimed easy-AI game so the
+  // player drops straight onto the board instead of having to re-click
+  // through the offline modal. We guard with a once-per-mount flag so a
+  // subsequent restart-match doesn't get hijacked by the same param.
+  const aiParam = search?.get('ai');
+  useEffect(() => {
+    if (aiParam !== 'easy') return;
+    if (state.phase !== 'menu') return;
+    startGame('butterfly', { kind: 'none' });
+    // Strip the param so a refresh / Main-Menu doesn't relaunch.
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('ai');
+      window.history.replaceState({}, '', url.pathname + url.search);
+    }
+  }, [aiParam, state.phase, startGame]);
 
   // While reviewing history, render the historical pieces but keep the live
   // selection state empty so highlights don't bleed into the review.

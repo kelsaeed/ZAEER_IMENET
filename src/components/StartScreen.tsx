@@ -1,6 +1,7 @@
 'use client';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useSettings } from '@/hooks/useSettings';
 import type { AiLevel, TimeControl } from '@/game/types';
@@ -27,11 +28,29 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
   const { t, theme, isRTL } = useSettings();
   const [isMounted, setIsMounted] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
+  // First-load tutorial nudge — small dismissable toast for users who've
+  // never opened the tour. Visiting /tutorial sets the flag, so anyone
+  // who's already taken (or skipped) the tour stops seeing this.
+  const [showTutorialToast, setShowTutorialToast] = useState(false);
 
   // Only render particles after mount to avoid hydration mismatch
   useEffect(() => {
     setIsMounted(true);
+    if (typeof window !== 'undefined') {
+      try {
+        if (!window.localStorage.getItem('zaeer.tutorialSeen')) {
+          setShowTutorialToast(true);
+        }
+      } catch { /* ignore */ }
+    }
   }, []);
+
+  function dismissTutorialToast() {
+    setShowTutorialToast(false);
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem('zaeer.tutorialSeen', '1'); } catch { /* ignore */ }
+    }
+  }
 
   return (
     <div
@@ -166,10 +185,31 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           </div>
         </motion.div>
 
+        {/* Tutorial entry — small, sits above the two hero buttons so
+            first-timers see it without crowding the main CTAs. */}
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.0 }}
+          className="mb-3 lg:mb-2 lg:col-start-1 lg:row-start-4 lg:row-end-4 lg:self-end lg:justify-self-center"
+        >
+          <Link
+            href="/tutorial"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
+            style={{
+              background: theme.panelBg,
+              border: `1px solid ${theme.p1AccentBorder}`,
+              color: theme.p1Color,
+            }}
+          >
+            {t('tutorial.button')}
+          </Link>
+        </motion.div>
+
         {/* Two hero buttons: Online (routes to /play) + Offline (opens
             modal with mode picker + timer). The mode picker pills that
             used to live above this row moved into the offline modal. */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md sm:max-w-none sm:w-auto lg:col-start-1 lg:row-start-4 lg:self-start">
+        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md sm:max-w-none sm:w-auto lg:col-start-1 lg:row-start-5 lg:self-start">
           <motion.button
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -212,6 +252,49 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           onStart(aiLevel, tc);
         }}
       />
+
+      {/* First-load nudge toward the tutorial. Doesn't block anything —
+          just floats at the bottom of the screen until the user opens
+          the tutorial or hits the dismiss ✕. The flag is also set when
+          the tutorial page mounts, so a casual peek counts as seen. */}
+      <AnimatePresence>
+        {showTutorialToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            transition={{ duration: 0.28 }}
+            className="fixed bottom-4 z-30 px-4 py-3 rounded-2xl flex items-center gap-3 shadow-2xl"
+            style={{
+              [isRTL ? 'right' : 'left']: '50%',
+              transform: 'translateX(-50%)',
+              background: theme.panelBg,
+              border: `1px solid ${theme.p1Color}`,
+              color: theme.textPrimary,
+              maxWidth: 'calc(100vw - 24px)',
+              boxShadow: `0 14px 38px ${theme.p1Color}40`,
+            } as React.CSSProperties}
+          >
+            <Link
+              href="/tutorial"
+              className="text-sm font-bold whitespace-nowrap"
+              style={{ color: theme.p1Color }}
+              onClick={dismissTutorialToast}
+            >
+              {t('tutorial.toast')}
+            </Link>
+            <button
+              type="button"
+              onClick={dismissTutorialToast}
+              aria-label={t('tutorial.toastDismiss')}
+              className="rounded-full w-7 h-7 inline-flex items-center justify-center text-xs opacity-70 hover:opacity-100 shrink-0"
+              style={{ background: theme.inputBg, border: `1px solid ${theme.buttonBorder}`, color: theme.textPrimary }}
+            >
+              ✕
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
