@@ -19,7 +19,9 @@ export const DEFAULT_CUSTOM: { matchSeconds: number; increment: number; perMoveS
   perMoveSeconds: 0,
 };
 
-export function presetToTimeControl(p: TimeControlPreset): TimeControl {
+/** Returns the `clock` variant specifically so callers can read fields
+ *  (matchSeconds / increment / perMoveSeconds) without re-narrowing. */
+export function presetToTimeControl(p: TimeControlPreset): Extract<TimeControl, { kind: 'clock' }> {
   return {
     kind: 'clock',
     matchSeconds: p.matchSeconds,
@@ -33,9 +35,9 @@ export function presetToTimeControl(p: TimeControlPreset): TimeControl {
  *  bullet room. Untimed matches against untimed; otherwise every field
  *  must agree. */
 export function timeControlsMatch(a: TimeControl, b: TimeControl): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === 'none') return true;
-  // both 'clock'
+  if (a.kind === 'none') return b.kind === 'none';
+  if (b.kind === 'none') return false;
+  // both narrowed to 'clock'
   return a.matchSeconds === b.matchSeconds
       && a.increment === b.increment
       && a.perMoveSeconds === b.perMoveSeconds;

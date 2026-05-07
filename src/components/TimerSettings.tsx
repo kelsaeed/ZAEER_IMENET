@@ -18,9 +18,11 @@ interface Props {
 export default function TimerSettings({ value, onChange, disabled, disabledNote }: Props) {
   const { theme, t } = useSettings();
   const isOn = value.kind === 'clock';
-  const matchMin = isOn ? Math.round(value.matchSeconds / 60) : Math.round(DEFAULT_CUSTOM.matchSeconds / 60);
-  const inc = isOn ? value.increment : DEFAULT_CUSTOM.increment;
-  const perMove = isOn ? value.perMoveSeconds : DEFAULT_CUSTOM.perMoveSeconds;
+  // Inline narrowing each time — TS doesn't carry the `isOn` alias's
+  // discriminant into `value.matchSeconds` accesses.
+  const matchMin = value.kind === 'clock' ? Math.round(value.matchSeconds / 60) : Math.round(DEFAULT_CUSTOM.matchSeconds / 60);
+  const inc      = value.kind === 'clock' ? value.increment       : DEFAULT_CUSTOM.increment;
+  const perMove  = value.kind === 'clock' ? value.perMoveSeconds  : DEFAULT_CUSTOM.perMoveSeconds;
 
   const setOn = (on: boolean) => {
     if (disabled) return;
@@ -105,7 +107,7 @@ export default function TimerSettings({ value, onChange, disabled, disabledNote 
             <div className="flex flex-wrap gap-1.5">
               {PRESETS.map(p => {
                 const tc = presetToTimeControl(p);
-                const selected = isOn
+                const selected = value.kind === 'clock'
                   && value.matchSeconds === tc.matchSeconds
                   && value.increment === tc.increment
                   && value.perMoveSeconds === 0;
