@@ -43,6 +43,14 @@ const en: Record<string, string> = {
   'reactions.muteHint': 'Mute reactions from others',
   'reactions.unmuteHint': 'Unmute reactions',
 
+  // Audio + haptics in the settings panel
+  'settings.audio': 'Sound & feel',
+  'settings.soundEffects': 'Sound effects',
+  'settings.backgroundMusic': 'Background music',
+  'settings.musicHint': 'Plays once you add a track in /public/music.',
+  'settings.haptics': 'Vibration',
+  'settings.hapticsHint': 'Light buzz on moves and big events (mobile).',
+
   // Game-mode picker on the start screen
   'mode.heading': 'Game Mode',
   'mode.local': '2-Player',
@@ -356,6 +364,14 @@ const ar: Record<string, string> = {
   // Match-chat emoji reactions
   'reactions.muteHint': 'كتم تفاعلات الآخرين',
   'reactions.unmuteHint': 'إلغاء كتم التفاعلات',
+
+  // Audio + haptics in the settings panel
+  'settings.audio': 'الصوت والإحساس',
+  'settings.soundEffects': 'المؤثرات الصوتية',
+  'settings.backgroundMusic': 'الموسيقى الخلفية',
+  'settings.musicHint': 'تعمل بعد إضافة مقطع في مجلد /public/music.',
+  'settings.haptics': 'الاهتزاز',
+  'settings.hapticsHint': 'اهتزاز خفيف عند الحركات والأحداث الكبيرة (الجوال).',
 
   'mode.heading': 'نوع اللعبة',
   'mode.local': 'لاعبان محلياً',

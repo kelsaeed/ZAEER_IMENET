@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useGame } from '@/hooks/useGame';
+import { useGameAudio } from '@/hooks/useGameAudio';
 import { useSettings } from '@/hooks/useSettings';
 import { AI_LEVEL_META } from '@/game/ai';
 import StartScreen from '@/components/StartScreen';
@@ -40,6 +41,13 @@ export default function Home() {
     showWinScreen,
   } = useGame();
   const { theme, isRTL, t } = useSettings();
+
+  // Sound + haptics. Offline play has the human as player 1, so we
+  // pass viewerPlayer=1; pass-and-play with two humans on the same
+  // device technically has two viewers but they share a screen, so
+  // any single choice for "who's the local user" is fine for cues.
+  useGameAudio({ state, viewerPlayer: 1 });
+
   const search = useSearchParams();
   const [cellSize, setCellSize] = useState(42);
   const [settingsOpen, setSettingsOpen] = useState(false);

@@ -15,6 +15,14 @@ import {
 const THEME_KEY = 'zaeer-imenet-theme';
 const CUSTOM_COLORS_KEY = 'zaeer-imenet-custom-colors';
 const LOCALE_KEY = 'zaeer-imenet-locale';
+// Audio + haptics prefs. SFX defaults on (the cue is information, not
+// noise). Music defaults off — there's no track shipping yet, so leaving
+// it on would just be the user toggling a thing that does nothing.
+// Haptics default on; navigator.vibrate is a no-op on devices that don't
+// support it, so the default doesn't punish anyone.
+const SFX_KEY = 'zaeer-imenet-sfx';
+const MUSIC_KEY = 'zaeer-imenet-music';
+const HAPTICS_KEY = 'zaeer-imenet-haptics';
 
 type Overrides = Record<string, Record<string, string>>; // localeId → key → value
 
@@ -42,6 +50,13 @@ interface SettingsValue {
   setTranslation: (localeId: string, key: string, value: string) => void;
   resetTranslation: (localeId: string, key: string) => void;
   isBuiltIn: (id: string) => boolean;
+  // Audio + haptics
+  soundEnabled: boolean;
+  setSoundEnabled: (next: boolean) => void;
+  musicEnabled: boolean;
+  setMusicEnabled: (next: boolean) => void;
+  hapticsEnabled: boolean;
+  setHapticsEnabled: (next: boolean) => void;
 }
 
 const Ctx = createContext<SettingsValue | null>(null);
@@ -63,6 +78,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [localeId, setLocaleIdState] = useState<string>(DEFAULT_LOCALE_ID);
   const [customLocales, setCustomLocales] = useState<Locale[]>([]);
   const [overrides, setOverrides] = useState<Overrides>({});
+  // Audio prefs default to true (sound) / false (music) / true (haptics).
+  // See the storage-key block above for the rationale.
+  const [soundEnabled, setSoundEnabledState] = useState<boolean>(true);
+  const [musicEnabled, setMusicEnabledState] = useState<boolean>(false);
+  const [hapticsEnabled, setHapticsEnabledState] = useState<boolean>(true);
   const [hydrated, setHydrated] = useState(false);
 
   // Hydrate personal prefs from localStorage on mount.
@@ -70,6 +90,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setThemeIdState(localStorage.getItem(THEME_KEY) || DEFAULT_THEME_ID);
     setCustomColors(readJSON<CustomThemeColors>(CUSTOM_COLORS_KEY, DEFAULT_CUSTOM_COLORS));
     setLocaleIdState(localStorage.getItem(LOCALE_KEY) || DEFAULT_LOCALE_ID);
+    // localStorage stores strings; treat anything other than '0' as on so
+    // we never reach a "user toggled it on but it stuck off" state from
+    // a missing key after a fresh install.
+    const sfxRaw = localStorage.getItem(SFX_KEY);
+    if (sfxRaw !== null) setSoundEnabledState(sfxRaw !== '0');
+    const musicRaw = localStorage.getItem(MUSIC_KEY);
+    if (musicRaw !== null) setMusicEnabledState(musicRaw === '1');
+    const hapRaw = localStorage.getItem(HAPTICS_KEY);
+    if (hapRaw !== null) setHapticsEnabledState(hapRaw !== '0');
     setHydrated(true);
   }, []);
 
@@ -78,6 +107,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => { if (hydrated) localStorage.setItem(THEME_KEY, themeId); }, [themeId, hydrated]);
   useEffect(() => { if (hydrated) localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(customColors)); }, [customColors, hydrated]);
   useEffect(() => { if (hydrated) localStorage.setItem(LOCALE_KEY, localeId); }, [localeId, hydrated]);
+  useEffect(() => { if (hydrated) localStorage.setItem(SFX_KEY, soundEnabled ? '1' : '0'); }, [soundEnabled, hydrated]);
+  useEffect(() => { if (hydrated) localStorage.setItem(MUSIC_KEY, musicEnabled ? '1' : '0'); }, [musicEnabled, hydrated]);
+  useEffect(() => { if (hydrated) localStorage.setItem(HAPTICS_KEY, hapticsEnabled ? '1' : '0'); }, [hapticsEnabled, hydrated]);
 
   // ── Hydrate shared content from the database ────────────────────────────
   // Custom locales and translation overrides are admin-edited and visible
@@ -205,6 +237,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const isBuiltIn = useCallback((id: string) => builtInLocaleIds().includes(id), []);
 
+  const setSoundEnabled = useCallback((next: boolean) => setSoundEnabledState(next), []);
+  const setMusicEnabled = useCallback((next: boolean) => setMusicEnabledState(next), []);
+  const setHapticsEnabled = useCallback((next: boolean) => setHapticsEnabledState(next), []);
+
   // Memoize the context value. Without this, every render of SettingsProvider
   // produces a fresh `value` object reference, which forces every consumer of
   // useSettings to re-render — and the GameBoard alone has 256 cells calling
@@ -230,11 +266,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setTranslation,
       resetTranslation,
       isBuiltIn,
+      soundEnabled,
+      setSoundEnabled,
+      musicEnabled,
+      setMusicEnabled,
+      hapticsEnabled,
+      setHapticsEnabled,
     }),
     [
       theme, themeId, customColors, locale, allLocales, t,
       setThemeId, setCustomColor, resetCustomColors, setLocaleId,
       addCustomLocale, removeCustomLocale, setTranslation, resetTranslation, isBuiltIn,
+      soundEnabled, setSoundEnabled,
+      musicEnabled, setMusicEnabled,
+      hapticsEnabled, setHapticsEnabled,
     ],
   );
 
@@ -246,3 +291,12 @@ export function useSettings(): SettingsValue {
   if (!v) throw new Error('useSettings must be used within SettingsProvider');
   return v;
 }
+
+// Re-export the audio pref keys so the rare consumer that wants to read
+// them outside of React (e.g. a one-shot click handler that fires a
+// cue without subscribing to the context) can do `localStorage.getItem`.
+export const AUDIO_STORAGE_KEYS = {
+  sfx: SFX_KEY,
+  music: MUSIC_KEY,
+  haptics: HAPTICS_KEY,
+} as const;

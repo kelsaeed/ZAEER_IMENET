@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
 import { useOnlineGame } from '@/hooks/useOnlineGame';
+import { useGameAudio } from '@/hooks/useGameAudio';
 import GameBoard from '@/components/GameBoard';
 import GameHUD from '@/components/GameHUD';
 import AuthBadge from '@/components/AuthBadge';
@@ -63,6 +64,11 @@ export default function OnlineGamePage() {
     historyToLive,
     historyJumpTo,
   } = useOnlineGame(gameId);
+
+  // Sound + haptics. viewerPlayer is whichever side the local user
+  // actually plays as so the win/lose cue lands on the right side of
+  // the table.
+  useGameAudio({ state, viewerPlayer: myPlayerNumber });
 
   // Auth gate.
   useEffect(() => {

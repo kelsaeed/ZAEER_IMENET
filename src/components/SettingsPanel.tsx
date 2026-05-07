@@ -18,6 +18,9 @@ export default function SettingsPanel({ onClose }: Props) {
     locale, locales, setLocaleId, isRTL,
     t, addCustomLocale, removeCustomLocale, isBuiltIn,
     setTranslation, resetTranslation,
+    soundEnabled, setSoundEnabled,
+    musicEnabled, setMusicEnabled,
+    hapticsEnabled, setHapticsEnabled,
   } = useSettings();
   // Admin gate for the "Add Language" form and "Edit translations" tab.
   // These edit shared content stored in Supabase and broadcast to every
@@ -177,6 +180,37 @@ export default function SettingsPanel({ onClose }: Props) {
                       <span className="text-xs opacity-70">{themeId === 'custom' ? '✓' : ''}</span>
                     </div>
                   </button>
+                </div>
+
+                {/* Audio + haptics — three toggles, persisted in
+                    localStorage. Lives inside the theme tab so all the
+                    "feel" prefs (look + sound + buzz) are one click in. */}
+                <div
+                  className="rounded-xl p-3"
+                  style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+                >
+                  <div className="text-sm font-semibold mb-3 opacity-85">
+                    🔊 {t('settings.audio')}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <ToggleRow
+                      label={t('settings.soundEffects')}
+                      checked={soundEnabled}
+                      onChange={setSoundEnabled}
+                    />
+                    <ToggleRow
+                      label={t('settings.backgroundMusic')}
+                      hint={t('settings.musicHint')}
+                      checked={musicEnabled}
+                      onChange={setMusicEnabled}
+                    />
+                    <ToggleRow
+                      label={t('settings.haptics')}
+                      hint={t('settings.hapticsHint')}
+                      checked={hapticsEnabled}
+                      onChange={setHapticsEnabled}
+                    />
+                  </div>
                 </div>
 
                 {/* Color pickers — only when Custom is the active theme */}
@@ -392,5 +426,63 @@ export default function SettingsPanel({ onClose }: Props) {
         </motion.div>
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
+interface ToggleRowProps {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}
+
+/** Plain on/off row for the audio settings group. Big tap target so it
+ *  doesn't fight thumbs on phones, theme-aware so it adapts to whichever
+ *  palette the user is on. */
+function ToggleRow({ label, hint, checked, onChange }: ToggleRowProps) {
+  const { theme } = useSettings();
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="rounded-lg p-2 flex items-center gap-3 text-start transition-transform active:scale-[0.99]"
+      style={{
+        background: theme.inputBg,
+        border: `1px solid ${theme.buttonBorder}`,
+        color: theme.textPrimary,
+      }}
+      aria-pressed={checked}
+    >
+      <span
+        className="rounded-full inline-flex items-center"
+        style={{
+          width: 36,
+          height: 20,
+          padding: 2,
+          background: checked ? theme.buttonRotateBg : 'rgba(255,255,255,0.08)',
+          border: `1px solid ${checked ? theme.buttonRotateBorder : theme.buttonBorder}`,
+          justifyContent: checked ? 'flex-end' : 'flex-start',
+          transition: 'all 0.18s ease',
+        }}
+      >
+        <span
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: '50%',
+            background: checked ? theme.buttonRotateText : 'rgba(255,255,255,0.7)',
+            transition: 'background 0.18s ease',
+          }}
+        />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="text-sm font-semibold block">{label}</span>
+        {hint && (
+          <span className="text-xs opacity-60 block mt-0.5">{hint}</span>
+        )}
+      </span>
+    </button>
   );
 }
