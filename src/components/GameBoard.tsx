@@ -2,6 +2,7 @@
 import { GameState } from '@/game/types';
 import BoardCell from './BoardCell';
 import BoardDecor from './BoardDecor';
+import RotationHint from './RotationHint';
 import { BOARD_SIZE, colLabel, rowLabel } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -15,9 +16,18 @@ interface Props {
    *  cell size resizes — much simpler than positioning an external
    *  overlay against a fragile column-label height. */
   tutorialHighlight?: { row: number; col: number } | null;
+  /** When set, paints a large clickable down-arrow over the given
+   *  cell as a hint that rotation / end-turn buttons live in the HUD
+   *  below the board. Tapping it fires onRotationHintClick — the
+   *  parent should smooth-scroll to the rotation section. */
+  rotationHintAt?: { row: number; col: number } | null;
+  onRotationHintClick?: () => void;
 }
 
-export default function GameBoard({ state, cellSize, onCellClick, tutorialHighlight }: Props) {
+export default function GameBoard({
+  state, cellSize, onCellClick, tutorialHighlight,
+  rotationHintAt, onRotationHintClick,
+}: Props) {
   const { pieces, selectedPieceId, validMoves, bounceEffect } = state;
   const { theme } = useSettings();
   const labelColor = `color-mix(in srgb, ${theme.textPrimary} 30%, transparent)`;
@@ -122,6 +132,19 @@ export default function GameBoard({ state, cellSize, onCellClick, tutorialHighli
               boxShadow: `0 0 18px ${theme.p1Color}, inset 0 0 14px ${theme.p1Color}66`,
               zIndex: 5,
             }}
+          />
+        )}
+
+        {/* "Pick direction below" hint — large clickable down-arrow
+            anchored on the ant's centre cell. Drawn in SVG so it
+            scales crisply with cellSize and inherits theme accents. */}
+        {rotationHintAt && onRotationHintClick && (
+          <RotationHint
+            visible
+            cellSize={cellSize}
+            antRow={rotationHintAt.row}
+            antCol={rotationHintAt.col}
+            onClick={onRotationHintClick}
           />
         )}
       </div>

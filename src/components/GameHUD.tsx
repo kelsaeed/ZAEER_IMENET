@@ -286,9 +286,11 @@ export default function GameHUD({
             </motion.button>
           )}
 
-          {/* Ant: rotation options (only valid) and End Turn */}
+          {/* Ant: rotation options (only valid) and End Turn.
+              id is the smooth-scroll target for <RotationHint/>'s
+              tap-the-arrow-to-jump behaviour. */}
           {isAntSelected && (
-            <div className="flex flex-col mt-2" style={{ gap: sp.gap }}>
+            <div id="zi-ant-rotation-section" className="flex flex-col mt-2" style={{ gap: sp.gap }}>
               <div className="opacity-80 mb-1" style={{ fontSize: fs.base }}>{t('hud.rotateTo')}</div>
               <div className="flex flex-wrap" style={{ gap: 'clamp(4px, 0.3rem + 0.1vw, 8px)' }}>
                 {(validRotations ?? []).map(ori => (

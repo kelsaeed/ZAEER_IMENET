@@ -12,7 +12,15 @@ import { PlayerThemesProvider } from '@/hooks/usePlayerThemes';
 import SplitBackground from '@/components/SplitBackground';
 import GameBoard from '@/components/GameBoard';
 import GameHUD from '@/components/GameHUD';
-import RotationHint from '@/components/RotationHint';
+
+/** Smooth-scroll to the rotation/end-turn buttons in GameHUD. Mirrors
+ *  the helper in app/page.tsx — the on-board <RotationHint/> arrow
+ *  fires this when tapped. */
+function scrollToRotationSection() {
+  if (typeof window === 'undefined') return;
+  const el = document.getElementById('zi-ant-rotation-section');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
 import LoadingEmojis from '@/components/LoadingEmojis';
@@ -424,6 +432,17 @@ export default function OnlineGamePage() {
           state={displayState!}
           cellSize={cellSize}
           onCellClick={isSpectator ? () => {} : clickCell}
+          rotationHintAt={
+            state.canRotate && state.phase === 'playing' && isMyTurn && state.selectedPieceId
+              ? (() => {
+                  const ant = state.pieces.find(
+                    p => p.id === state.selectedPieceId && p.type === 'ant',
+                  );
+                  return ant ? { row: ant.row, col: ant.col } : null;
+                })()
+              : null
+          }
+          onRotationHintClick={scrollToRotationSection}
         />
       </div>
 
@@ -507,12 +526,6 @@ export default function OnlineGamePage() {
       )}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
-
-      {/* Mobile-only "look down" hint when an ant has rotation
-          options pending. */}
-      <RotationHint
-        visible={state.canRotate && state.phase === 'playing' && isMyTurn}
-      />
 
       {/* Opponent menu — small popover on opponent-chip tap, expandable to
           a full-screen profile modal with head-to-head record. */}

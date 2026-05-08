@@ -10,8 +10,17 @@ import StartScreen from '@/components/StartScreen';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
 import SplitBackground from '@/components/SplitBackground';
-import RotationHint from '@/components/RotationHint';
 import { PlayerThemesProvider } from '@/hooks/usePlayerThemes';
+
+/** Smooth-scroll to the rotation/end-turn buttons in the HUD. The id
+ *  is set on GameHUD's ant-rotation block. Wrapped here so both
+ *  GameBoard's <RotationHint/> tap handler and any future caller share
+ *  one entry point. */
+function scrollToRotationSection() {
+  if (typeof window === 'undefined') return;
+  const el = document.getElementById('zi-ant-rotation-section');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 
 // Heavy panel — only load it when the user actually opens it.
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
@@ -213,6 +222,17 @@ export default function Home() {
           state={displayState}
           cellSize={cellSize}
           onCellClick={clickCell}
+          rotationHintAt={
+            state.canRotate && state.phase === 'playing' && !aiThinking && state.selectedPieceId
+              ? (() => {
+                  const ant = state.pieces.find(
+                    p => p.id === state.selectedPieceId && p.type === 'ant',
+                  );
+                  return ant ? { row: ant.row, col: ant.col } : null;
+                })()
+              : null
+          }
+          onRotationHintClick={scrollToRotationSection}
         />
         {reviewing && (
           <div
@@ -287,13 +307,6 @@ export default function Home() {
           🏆 Player {state.winner} won — view result
         </button>
       )}
-
-      {/* Mobile-only "look down" hint when an ant has rotation
-          options pending. Hidden on desktop (HUD sits beside the
-          board there). */}
-      <RotationHint
-        visible={state.canRotate && state.phase === 'playing' && !aiThinking}
-      />
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </main>
