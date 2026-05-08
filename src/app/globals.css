@@ -593,8 +593,17 @@ input, select, textarea {
     calc((100vw - 12px) / 16.6),
     calc((100dvh - 140px) / 16.6)
   );
-  min-width: calc(var(--zi-board-cs) * 16.5);
-  min-height: calc(var(--zi-board-cs) * 16.45);
+  /* GameBoard's intrinsic footprint:
+   *   width  = 16 cells + 0.5-cell row label + 4 px (2-px border × 2)
+   *   height = 16 cells + column labels (~max(10px, cs*0.22) × ~1.4
+   *            line-height, capped at ~22 px on mobile, ~28 on lg+)
+   *            + 4 px border
+   * Pad each axis with a generous slack (8 px / 36 px) so the
+   * reservation is *always* ≥ the actual board, never below — a
+   * shortfall on either axis pushes the wrapper to grow when the
+   * dynamic chunk lands and Lighthouse logs that as a CLS shift. */
+  min-width: calc(var(--zi-board-cs) * 16.5 + 8px);
+  min-height: calc(var(--zi-board-cs) * 16 + 36px);
 }
 @media (min-width: 1024px) {
   .zi-board-reserve {
@@ -603,6 +612,9 @@ input, select, textarea {
       calc((100vw - 24px - clamp(176px, 15vw, 320px) - 12px) / 16.6),
       calc((100dvh - 56px) / 16.6)
     );
+    /* Column labels are slightly bigger on lg+ (font scales with cs).
+     * Bump the vertical slack accordingly. */
+    min-height: calc(var(--zi-board-cs) * 16 + 44px);
   }
 }
 
