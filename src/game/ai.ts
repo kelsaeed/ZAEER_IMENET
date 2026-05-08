@@ -550,8 +550,18 @@ export function chooseAiMove(state: GameState, player: Player, level: AiLevel): 
 
 /** Display labels — used by the HUD / start screen. Kept here so the
  *  difficulty list lives next to the AI logic itself. */
-export const AI_LEVEL_META: Record<AiLevel, { emoji: string; label: string }> = {
-  butterfly: { emoji: '🦋', label: 'Easy' },
-  monkey:    { emoji: '🐒', label: 'Medium' },
-  lion:      { emoji: '🦁', label: 'Hard' },
+/** Display metadata for each bot. The `personalityKey` is a locale
+ *  prefix (`bot.<key>.name` / `bot.<key>.tagline`) so flavour text
+ *  can be edited per-locale without touching this file. The `label`
+ *  retains the difficulty word for places that still need it (the
+ *  AI_LEVEL_META consumers in tests, etc.) — UI surfaces should
+ *  prefer the personality `name`. */
+export const AI_LEVEL_META: Record<AiLevel, {
+  emoji: string;
+  label: string;
+  personalityKey: 'butterflyDrift' | 'monkeyTrickster' | 'lionElder';
+}> = {
+  butterfly: { emoji: '🦋', label: 'Easy',   personalityKey: 'butterflyDrift'  },
+  monkey:    { emoji: '🐒', label: 'Medium', personalityKey: 'monkeyTrickster' },
+  lion:      { emoji: '🦁', label: 'Hard',   personalityKey: 'lionElder'       },
 };

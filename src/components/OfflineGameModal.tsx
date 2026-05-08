@@ -77,11 +77,30 @@ export default function OfflineGameModal({ open, onClose, onStart }: Props) {
     onStart(mode === 'local' ? null : mode, choice.timeControl);
   };
 
-  const MODE_BUTTONS: { value: OfflineChoice['mode']; emoji: string; labelKey: string }[] = [
-    { value: 'local',     emoji: '👥', labelKey: 'mode.local' },
-    { value: 'butterfly', emoji: AI_LEVEL_META.butterfly.emoji, labelKey: 'mode.aiEasy' },
-    { value: 'monkey',    emoji: AI_LEVEL_META.monkey.emoji,    labelKey: 'mode.aiMedium' },
-    { value: 'lion',      emoji: AI_LEVEL_META.lion.emoji,      labelKey: 'mode.aiHard' },
+  // Local pass-and-play first, then the three named bot personalities.
+  // For AI rows we resolve the personality key off AI_LEVEL_META so the
+  // names/taglines (Petra / Loki / Atlas) can be edited per locale
+  // without touching this file.
+  type ModeOption = {
+    value: OfflineChoice['mode'];
+    emoji: string;
+    labelKey: string;
+    /** Difficulty word for the small chip on bot cards. */
+    difficultyKey?: string;
+    /** Locale prefix for `bot.<key>.name` + `bot.<key>.tagline`. */
+    personalityKey?: 'butterflyDrift' | 'monkeyTrickster' | 'lionElder';
+  };
+  const MODE_BUTTONS: ModeOption[] = [
+    { value: 'local',     emoji: '👥',                              labelKey: 'mode.local'    },
+    { value: 'butterfly', emoji: AI_LEVEL_META.butterfly.emoji, labelKey: 'mode.aiEasy',
+      difficultyKey: 'mode.difficulty.easy',
+      personalityKey: AI_LEVEL_META.butterfly.personalityKey },
+    { value: 'monkey',    emoji: AI_LEVEL_META.monkey.emoji,    labelKey: 'mode.aiMedium',
+      difficultyKey: 'mode.difficulty.medium',
+      personalityKey: AI_LEVEL_META.monkey.personalityKey },
+    { value: 'lion',      emoji: AI_LEVEL_META.lion.emoji,      labelKey: 'mode.aiHard',
+      difficultyKey: 'mode.difficulty.hard',
+      personalityKey: AI_LEVEL_META.lion.personalityKey },
   ];
 
   return (
@@ -132,24 +151,55 @@ export default function OfflineGameModal({ open, onClose, onStart }: Props) {
                 onChange={tc => setChoice(c => ({ ...c, timeControl: tc }))}
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {MODE_BUTTONS.map(opt => (
-                  <motion.button
-                    key={opt.value}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => launch(opt.value)}
-                    className="rounded-xl p-3 text-start transition-all flex items-center gap-3"
-                    style={{
-                      background: theme.panelBg,
-                      border: `1px solid ${theme.panelBorder}`,
-                      color: theme.textPrimary,
-                    }}
-                  >
-                    <span className="text-2xl shrink-0" aria-hidden>{opt.emoji}</span>
-                    <span className="text-sm font-bold">{t(opt.labelKey)}</span>
-                  </motion.button>
-                ))}
+              <div className="flex flex-col gap-2">
+                {MODE_BUTTONS.map(opt => {
+                  const isBot = opt.personalityKey != null;
+                  const name = isBot
+                    ? t(`bot.${opt.personalityKey}.name`)
+                    : t(opt.labelKey);
+                  const tagline = isBot
+                    ? t(`bot.${opt.personalityKey}.tagline`)
+                    : null;
+                  const difficulty = opt.difficultyKey ? t(opt.difficultyKey) : null;
+                  return (
+                    <motion.button
+                      key={opt.value}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => launch(opt.value)}
+                      className="rounded-xl p-3 text-start transition-all flex items-center gap-3 w-full"
+                      style={{
+                        background: theme.panelBg,
+                        border: `1px solid ${theme.panelBorder}`,
+                        color: theme.textPrimary,
+                      }}
+                    >
+                      <span className="text-3xl shrink-0 leading-none" aria-hidden>{opt.emoji}</span>
+                      <span className="flex flex-col min-w-0 flex-1">
+                        <span className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold truncate">{name}</span>
+                          {difficulty && (
+                            <span
+                              className="text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5"
+                              style={{
+                                background: theme.buttonRotateBg,
+                                border: `1px solid ${theme.buttonRotateBorder}`,
+                                color: theme.buttonRotateText,
+                              }}
+                            >
+                              {difficulty}
+                            </span>
+                          )}
+                        </span>
+                        {tagline && (
+                          <span className="text-xs opacity-70 leading-snug mt-0.5">
+                            {tagline}
+                          </span>
+                        )}
+                      </span>
+                    </motion.button>
+                  );
+                })}
               </div>
             </div>
           </motion.div>

@@ -86,12 +86,16 @@ export default function WinScreen({ winner, onRestart, onMenu, onDismiss, turn }
         animate={{ scale: 1, y: 0 }}
         transition={{ type: 'spring', damping: 15, stiffness: 200 }}
         onClick={(e) => e.stopPropagation()}
-        className={`rounded-3xl p-6 sm:p-10 text-center max-w-md w-full mx-3 sm:mx-4 border-2 relative overflow-hidden ${
+        className={`rounded-3xl p-5 sm:p-8 text-center max-w-md w-full mx-3 sm:mx-4 border-2 relative overflow-hidden ${
           isP1
             ? 'bg-gradient-to-br from-amber-950 to-yellow-900 border-amber-400'
             : 'bg-gradient-to-br from-blue-950 to-indigo-900 border-blue-400'
         }`}
-        style={{ zIndex: 2 }}
+        // max-h + overflow-y-auto so the modal scrolls instead of
+        // overflowing on landscape mobile where viewport height is
+        // ~375 px and there's a lot to show (crown + headline + 6
+        // piece icons + 2 buttons + share + dismiss).
+        style={{ zIndex: 2, maxHeight: '90dvh', overflowY: 'auto' }}
       >
         {onDismiss && (
           <button

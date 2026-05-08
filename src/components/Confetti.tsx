@@ -1,13 +1,14 @@
 'use client';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 
 interface Props {
   /** Palette the falling pieces are picked from. Pass the winner's
    *  theme accents so the confetti reads as "their colours". */
   colors: string[];
-  /** Number of pieces. 60 looks lively without dropping frames on
-   *  mobile; 100+ starts to chunk on low-end Android. */
+  /** Number of pieces. Defaults to 60 on desktop, 32 on mobile so
+   *  low-end Android compositors don't drop frames during the win
+   *  modal animation. Override only if you have a reason. */
   count?: number;
   /** How long any single piece stays in flight. Each piece picks a
    *  random value in [duration*0.7, duration*1.3] so the field
@@ -20,13 +21,25 @@ interface Props {
  *  modal or anywhere a `position: relative` ancestor exists. The
  *  parent should `pointer-events: none` so the falling pieces never
  *  intercept the celebration buttons underneath. */
-export default function Confetti({ colors, count = 60, duration = 4 }: Props) {
+export default function Confetti({ colors, count, duration = 4 }: Props) {
+  // Default count picks based on viewport — fewer pieces on mobile so
+  // the compositor stays smooth alongside the win-modal spring + the
+  // bobbing crown + the 6 hopping piece icons.
+  const [defaultCount, setDefaultCount] = useState(60);
+  useEffect(() => {
+    const update = () => setDefaultCount(window.innerWidth < 768 ? 32 : 60);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  const pieceCount = count ?? defaultCount;
+
   // Generate piece geometry once so the field doesn't re-randomise
   // each render. Includes intentional left-right drift via x-end so
   // pieces don't fall in straight perfectly-vertical lines.
   const pieces = useMemo(() => {
     const palette = colors.length > 0 ? colors : ['#fbbf24'];
-    return Array.from({ length: count }, (_, i) => {
+    return Array.from({ length: pieceCount }, (_, i) => {
       const dx = (Math.random() - 0.5) * 30;            // -15% .. +15%
       return {
         id: i,
@@ -40,7 +53,7 @@ export default function Confetti({ colors, count = 60, duration = 4 }: Props) {
         dxPct: dx,
       };
     });
-  }, [colors, count, duration]);
+  }, [colors, pieceCount, duration]);
 
   return (
     <div

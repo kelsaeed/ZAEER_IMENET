@@ -57,6 +57,19 @@ const en: Record<string, string> = {
   'mode.aiEasy': 'vs AI · Easy',
   'mode.aiMedium': 'vs AI · Medium',
   'mode.aiHard': 'vs AI · Hard',
+  'mode.difficulty.easy': 'Easy',
+  'mode.difficulty.medium': 'Medium',
+  'mode.difficulty.hard': 'Hard',
+
+  // Bot personalities — the offline modal renders these instead of
+  // the bare difficulty pills, so picking an opponent feels like
+  // sitting down with someone rather than picking a slider value.
+  'bot.butterflyDrift.name': 'Petra',
+  'bot.butterflyDrift.tagline': 'Daydreams between moves. Friendly to new players.',
+  'bot.monkeyTrickster.name': 'Loki',
+  'bot.monkeyTrickster.tagline': 'Loves a trick. Punishes blunders.',
+  'bot.lionElder.name': 'Atlas',
+  'bot.lionElder.tagline': 'Plans far ahead. Hard to break through.',
 
   // Offline modal
   'offline.title': 'Offline Game',
@@ -156,7 +169,7 @@ const en: Record<string, string> = {
   'tutorial.endHome': 'Back to home',
 
   // AI status
-  'ai.thinking': '🤖 AI is thinking…',
+  'ai.thinking': 'is thinking…',
   'ai.opponent': '🤖 AI ({level})',
   'ai.levelEasy': 'Easy',
   'ai.levelMedium': 'Medium',
@@ -472,6 +485,16 @@ const ar: Record<string, string> = {
   'mode.aiEasy': 'ضد الذكاء · سهل',
   'mode.aiMedium': 'ضد الذكاء · متوسط',
   'mode.aiHard': 'ضد الذكاء · صعب',
+  'mode.difficulty.easy': 'سهل',
+  'mode.difficulty.medium': 'متوسط',
+  'mode.difficulty.hard': 'صعب',
+
+  'bot.butterflyDrift.name': 'بترا',
+  'bot.butterflyDrift.tagline': 'تسرح بين النقلات. لطيفة مع المبتدئين.',
+  'bot.monkeyTrickster.name': 'لوكي',
+  'bot.monkeyTrickster.tagline': 'يحب الحيلة. يعاقب الأخطاء.',
+  'bot.lionElder.name': 'أطلس',
+  'bot.lionElder.tagline': 'يخطط بعيداً. صعب اختراقه.',
 
   'offline.title': 'لعبة محلية',
   'offline.subtitle': 'اختر نمط اللعب، وبشكل اختياري الوقت.',
@@ -561,7 +584,7 @@ const ar: Record<string, string> = {
   'tutorial.endTryAi': '🤖 العب ضد ذكاء سهل',
   'tutorial.endHome': 'العودة للرئيسية',
 
-  'ai.thinking': '🤖 الذكاء يفكّر…',
+  'ai.thinking': 'يفكّر…',
   'ai.opponent': '🤖 الذكاء ({level})',
   'ai.levelEasy': 'سهل',
   'ai.levelMedium': 'متوسط',

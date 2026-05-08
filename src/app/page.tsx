@@ -258,7 +258,7 @@ export default function Home() {
             so it can never collide with the corner buttons. */}
         {aiThinking && !reviewing && state.aiLevel && (
           <div
-            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none flex items-center gap-1.5"
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-20 rounded-full px-4 py-1.5 text-sm font-semibold pointer-events-none flex items-center gap-1.5 max-w-[calc(100%-1.5rem)]"
             style={{
               background: theme.panelBg,
               border: `1px solid ${theme.p2AccentBorder}`,
@@ -266,8 +266,15 @@ export default function Home() {
               backdropFilter: 'blur(6px)',
             }}
           >
-            <span className="zi-emoji-bob" aria-hidden>{AI_LEVEL_META[state.aiLevel].emoji}</span>
-            <span>{t('ai.thinking')}</span>
+            <span className="zi-emoji-bob shrink-0" aria-hidden>{AI_LEVEL_META[state.aiLevel].emoji}</span>
+            {/* Show "<Bot name> is thinking…" so the bot reads as a
+                character. Uses the personality key off AI_LEVEL_META
+                so the name stays in lockstep with the offline modal. */}
+            <span className="truncate">
+              {t(`bot.${AI_LEVEL_META[state.aiLevel].personalityKey}.name`)}
+              {' '}
+              {t('ai.thinking')}
+            </span>
           </div>
         )}
       </div>
