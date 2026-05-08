@@ -247,6 +247,9 @@ const en: Record<string, string> = {
   'win.playAgain': '🔄 Play Again',
   'win.mainMenu': '🏠 Main Menu',
   'win.reviewBoard': 'Close & review the game',
+  'win.share': 'Share result',
+  'win.shareCopied': 'Copied!',
+  'win.turnsTaken': 'In {n} turns',
 
   // Settings panel
   'settings.title': 'Settings',
@@ -641,6 +644,9 @@ const ar: Record<string, string> = {
   'win.playAgain': '🔄 العب مجدداً',
   'win.mainMenu': '🏠 القائمة الرئيسية',
   'win.reviewBoard': 'إغلاق ومراجعة المباراة',
+  'win.share': 'شارك النتيجة',
+  'win.shareCopied': 'تم النسخ!',
+  'win.turnsTaken': 'في {n} دور',
 
   'settings.title': 'الإعدادات',
   'settings.theme': 'المظهر',

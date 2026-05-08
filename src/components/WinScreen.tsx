@@ -1,19 +1,70 @@
 'use client';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Player } from '@/game/types';
 import { useSettings } from '@/hooks/useSettings';
+import { usePlayerThemes } from '@/hooks/usePlayerThemes';
 import { format } from '@/game/locales';
+import Confetti from './Confetti';
 
 interface Props {
   winner: Player;
   onRestart: () => void;
   onMenu: () => void;
   onDismiss?: () => void;
+  /** Optional turn count from the engine. When provided the share
+   *  string includes "in N turns" so the result line carries a bit
+   *  more bragging rights. */
+  turn?: number;
 }
 
-export default function WinScreen({ winner, onRestart, onMenu, onDismiss }: Props) {
+export default function WinScreen({ winner, onRestart, onMenu, onDismiss, turn }: Props) {
   const { t } = useSettings();
+  const playerThemes = usePlayerThemes();
   const isP1 = winner === 1;
+
+  // Confetti palette: winner's accent on top of a festive multi-tint
+  // mix so the field reads as "their colour, but a celebration".
+  const winnerTheme = isP1 ? playerThemes.p1 : playerThemes.p2;
+  const accent = isP1 ? winnerTheme.p1Color : winnerTheme.p2Color;
+  const confettiColors = useMemo(() => ([
+    accent,
+    winnerTheme.throneBg,
+    winnerTheme.selectedRing,
+    '#ffffff',
+    '#f472b6',
+    '#a78bfa',
+    '#34d399',
+  ]), [accent, winnerTheme.throneBg, winnerTheme.selectedRing]);
+
+  // Share line. Lives on the modal as a single tap-to-copy button so
+  // a player who just won can fire the result at a friend without
+  // leaving the result screen.
+  const [copied, setCopied] = useState(false);
+  const shareText = useMemo(() => {
+    const url = typeof window !== 'undefined' ? window.location.origin : 'https://zaeer-imenet.vercel.app';
+    const turnsLine = typeof turn === 'number' ? ` in ${turn} turns` : '';
+    return `🏆 Won at Zaeer Imenet${turnsLine}! Play it: ${url}`;
+  }, [turn]);
+
+  async function handleShare() {
+    // Native share sheet first (mobile), copy-to-clipboard fallback.
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: shareText });
+        return;
+      }
+    } catch {
+      // User cancelled or share unavailable — fall through to copy.
+    }
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      /* clipboard blocked — silent */
+    }
+  }
 
   return (
     <motion.div
@@ -25,6 +76,11 @@ export default function WinScreen({ winner, onRestart, onMenu, onDismiss }: Prop
       role={onDismiss ? 'button' : undefined}
       aria-label={onDismiss ? 'Close result and review the board' : undefined}
     >
+      {/* Confetti rains from the top of the modal backdrop, behind
+          the celebration card. pointer-events: none so it can't
+          swallow the buttons underneath. */}
+      <Confetti colors={confettiColors} />
+
       <motion.div
         initial={{ scale: 0.5, y: -60 }}
         animate={{ scale: 1, y: 0 }}
@@ -35,6 +91,7 @@ export default function WinScreen({ winner, onRestart, onMenu, onDismiss }: Prop
             ? 'bg-gradient-to-br from-amber-950 to-yellow-900 border-amber-400'
             : 'bg-gradient-to-br from-blue-950 to-indigo-900 border-blue-400'
         }`}
+        style={{ zIndex: 2 }}
       >
         {onDismiss && (
           <button
@@ -71,9 +128,14 @@ export default function WinScreen({ winner, onRestart, onMenu, onDismiss }: Prop
           <p className={`text-xl font-bold mb-1 ${isP1 ? 'text-amber-200' : 'text-blue-200'}`}>
             {format(t('win.playerWins'), { n: winner })}
           </p>
-          <p className="text-slate-300 text-sm mb-8">
+          <p className="text-slate-300 text-sm mb-2">
             {isP1 ? t('win.goldenLion') : t('win.silverLion')}
           </p>
+          {typeof turn === 'number' && (
+            <p className="text-slate-400 text-xs mb-6">
+              {format(t('win.turnsTaken'), { n: turn })}
+            </p>
+          )}
 
           {/* Piece icons */}
           <motion.div
@@ -113,10 +175,20 @@ export default function WinScreen({ winner, onRestart, onMenu, onDismiss }: Prop
             </button>
           </div>
 
+          {/* Share button — uses navigator.share on mobile, falls back
+              to clipboard. The transient "Copied!" pill replaces the
+              label for ~2 s after a successful copy. */}
+          <button
+            onClick={handleShare}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs sm:text-sm font-bold text-white/90 border border-white/25 hover:border-white/55 bg-white/5 hover:bg-white/10 transition-all active:scale-95"
+          >
+            {copied ? `✓ ${t('win.shareCopied')}` : `📤 ${t('win.share')}`}
+          </button>
+
           {onDismiss && (
             <button
               onClick={onDismiss}
-              className="mt-4 text-sm opacity-70 hover:opacity-100 transition-opacity"
+              className="block mx-auto mt-3 text-sm opacity-70 hover:opacity-100 transition-opacity"
             >
               {t('win.reviewBoard')} →
             </button>

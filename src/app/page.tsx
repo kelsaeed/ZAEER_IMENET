@@ -295,6 +295,7 @@ export default function Home() {
           onRestart={restartMatch}
           onMenu={resetGame}
           onDismiss={dismissWinScreen}
+          turn={state.turn}
         />
       )}
 
