@@ -10,8 +10,13 @@ import { useOnlineGame } from '@/hooks/useOnlineGame';
 import { useGameAudio } from '@/hooks/useGameAudio';
 import { PlayerThemesProvider } from '@/hooks/usePlayerThemes';
 import SplitBackground from '@/components/SplitBackground';
-import GameBoard from '@/components/GameBoard';
-import GameHUD from '@/components/GameHUD';
+import AuthBadge from '@/components/AuthBadge';
+import NotificationBell from '@/components/NotificationBell';
+import LoadingEmojis from '@/components/LoadingEmojis';
+import Avatar from '@/components/Avatar';
+import { markGameNotificationsRead } from '@/lib/supabase/notifications';
+import type { Player } from '@/game/types';
+import type { Theme } from '@/game/themes';
 
 /** Smooth-scroll to the rotation/end-turn buttons in GameHUD. Mirrors
  *  the helper in app/page.tsx — the on-board <RotationHint/> arrow
@@ -21,15 +26,16 @@ function scrollToRotationSection() {
   const el = document.getElementById('zi-ant-rotation-section');
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
-import AuthBadge from '@/components/AuthBadge';
-import NotificationBell from '@/components/NotificationBell';
-import LoadingEmojis from '@/components/LoadingEmojis';
-import Avatar from '@/components/Avatar';
-import MatchChat from '@/components/MatchChat';
-import { markGameNotificationsRead } from '@/lib/supabase/notifications';
-import type { Player } from '@/game/types';
-import type { Theme } from '@/game/themes';
 
+// Heavy match-only components are dynamic-imported so the initial
+// JS payload doesn't drag along the 256-cell board, framer-motion
+// piece animations, the HUD, the chat panel etc. before we even
+// know whether the user is allowed to see the match. Mobile LCP on
+// /play/[id] was 5.2s on slow-4G Moto G; bringing this set out of
+// the critical path is the single biggest win.
+const GameBoard = dynamic(() => import('@/components/GameBoard'), { ssr: false });
+const GameHUD = dynamic(() => import('@/components/GameHUD'), { ssr: false });
+const MatchChat = dynamic(() => import('@/components/MatchChat'), { ssr: false });
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
 const OpponentMenu = dynamic(() => import('@/components/OpponentMenu'), { ssr: false });
 
@@ -102,6 +108,17 @@ export default function OnlineGamePage() {
   useEffect(() => {
     setWinDismissed(false);
   }, [game?.match_number]);
+
+  // Preload the heavy match chunks in the background as soon as the
+  // page mounts. The dynamic imports above keep them off the
+  // critical render path, but we still want them in the browser
+  // cache by the time the game state arrives so the board doesn't
+  // blink in late.
+  useEffect(() => {
+    void import('@/components/GameBoard');
+    void import('@/components/GameHUD');
+    void import('@/components/MatchChat');
+  }, []);
 
   // Responsive cell sizing — same RAF-throttled logic as the local page.
   useEffect(() => {

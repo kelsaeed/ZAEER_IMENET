@@ -56,10 +56,18 @@ export default function MatchChat({ gameId, topInset = 70, spectator }: Props) {
     return () => { mounted = false; };
   }, [gameId]);
 
-  // Pull the local user's mute list once on mount and refresh whenever the
-  // panel opens — covers the "mute opponent → reopen chat" round trip.
+  // Pull the local user's mute list ONLY when the chat panel actually
+  // opens. Previous version fired on mount, which paid a network
+  // round-trip on every match page load even for users who never tap
+  // the chat icon — and on a project that hasn't applied migration
+  // 0007 yet, that round-trip fails with a 404 every match. Mute
+  // filtering on incoming-message notifications is a tiny edge case
+  // not worth the eager fetch; we accept that the unread badge may
+  // briefly include muted senders' messages until the user opens
+  // the panel for the first time.
   useEffect(() => {
     if (!user) return;
+    if (!open) return;
     let mounted = true;
     listMutedIds(user.id)
       .then(ids => { if (mounted) setMutedIds(ids); })
