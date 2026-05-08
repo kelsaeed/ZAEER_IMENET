@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -121,7 +121,13 @@ export default function OnlineGamePage() {
   }, []);
 
   // Responsive cell sizing — same RAF-throttled logic as the local page.
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) runs synchronously before the browser
+  // paints, so the initial calc happens BEFORE the first frame and the
+  // GameBoard placeholder reservation in JSX below is sized to the real
+  // cellSize on the very first paint. With useEffect we'd render at the
+  // 42-px default first, then re-render at the real size — Lighthouse
+  // saw that reflow as a 0.13 CLS shift on mobile.
+  useLayoutEffect(() => {
     function calc() {
       const vw = window.innerWidth;
       const vh = window.innerHeight;

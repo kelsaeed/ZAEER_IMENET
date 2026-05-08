@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useGame } from '@/hooks/useGame';
@@ -114,7 +114,12 @@ export default function Home() {
     void import('@/components/WinScreen');
   }, [state.phase]);
 
-  useEffect(() => {
+  // useLayoutEffect runs synchronously before the browser paints, so
+  // the initial cellSize calc happens before the first frame and the
+  // GameBoard reservation is sized correctly on first paint. Avoids
+  // the 42-px-default → real-size reflow that Lighthouse was scoring
+  // as a CLS shift on mobile.
+  useLayoutEffect(() => {
     function calc() {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
