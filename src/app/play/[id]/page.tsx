@@ -12,6 +12,7 @@ import { PlayerThemesProvider } from '@/hooks/usePlayerThemes';
 import SplitBackground from '@/components/SplitBackground';
 import GameBoard from '@/components/GameBoard';
 import GameHUD from '@/components/GameHUD';
+import RotationHint from '@/components/RotationHint';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
 import LoadingEmojis from '@/components/LoadingEmojis';
@@ -506,6 +507,12 @@ export default function OnlineGamePage() {
       )}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+
+      {/* Mobile-only "look down" hint when an ant has rotation
+          options pending. */}
+      <RotationHint
+        visible={state.canRotate && state.phase === 'playing' && isMyTurn}
+      />
 
       {/* Opponent menu — small popover on opponent-chip tap, expandable to
           a full-screen profile modal with head-to-head record. */}

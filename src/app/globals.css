@@ -33,15 +33,19 @@ body {
   color: var(--foreground);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   /* `overflow-x: clip` is stronger than `hidden`: the user can't
-   * scroll/pan the X axis even if a child overflows. `pan-y` +
-   * `pinch-zoom` on touch-action lets vertical scroll and pinch
-   * zoom work while killing the sideways drag that was letting
-   * users push the whole page (and the board) left/right on
-   * mobile. `overscroll-behavior-x: none` also blocks the bounce
-   * that some browsers show on edge-pulls. */
+   * scroll/pan the X axis even if a child overflows.
+   * `overscroll-behavior-x: none` blocks the bounce some browsers
+   * show on edge-pulls.
+   *
+   * `touch-action: manipulation` is the magic ingredient for mobile
+   * tap latency: it allows panning and pinch zoom but tells the
+   * browser there's no double-tap-to-zoom, so it can fire `click`
+   * without the historical ~300 ms wait-and-see. The previous
+   * `pan-y pinch-zoom` setting kept that delay in place, which is
+   * why every tap during a match felt sluggish on phones. */
   overflow-x: clip;
   overscroll-behavior-x: none;
-  touch-action: pan-y pinch-zoom;
+  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 

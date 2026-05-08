@@ -307,6 +307,8 @@ const en: Record<string, string> = {
   'store.redeemError': "Code didn't work. Check it and try again.",
   'store.redeemSignIn': 'Sign in first to redeem a code.',
 
+  'hint.rotateBelow': 'Pick direction below',
+
   'preview.label': 'Previewing:',
   'preview.equip': 'Use this theme',
   'preview.openStore': 'Open store',
@@ -695,6 +697,8 @@ const ar: Record<string, string> = {
   'store.redeemOk': 'تم فتح المظهر. اختره من الأسفل.',
   'store.redeemError': 'الكود ما اشتغل. تأكد منه وحاول مرة أخرى.',
   'store.redeemSignIn': 'سجّل الدخول أولاً لاستخدام الكود.',
+
+  'hint.rotateBelow': 'اختر الاتجاه من الأسفل',
 
   'preview.label': 'تجربة:',
   'preview.equip': 'استعمل هذا المظهر',

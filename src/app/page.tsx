@@ -10,6 +10,7 @@ import StartScreen from '@/components/StartScreen';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
 import SplitBackground from '@/components/SplitBackground';
+import RotationHint from '@/components/RotationHint';
 import { PlayerThemesProvider } from '@/hooks/usePlayerThemes';
 
 // Heavy panel — only load it when the user actually opens it.
@@ -286,6 +287,13 @@ export default function Home() {
           🏆 Player {state.winner} won — view result
         </button>
       )}
+
+      {/* Mobile-only "look down" hint when an ant has rotation
+          options pending. Hidden on desktop (HUD sits beside the
+          board there). */}
+      <RotationHint
+        visible={state.canRotate && state.phase === 'playing' && !aiThinking}
+      />
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </main>
