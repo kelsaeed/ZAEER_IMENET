@@ -64,12 +64,12 @@ const en: Record<string, string> = {
   // Bot personalities — the offline modal renders these instead of
   // the bare difficulty pills, so picking an opponent feels like
   // sitting down with someone rather than picking a slider value.
-  'bot.butterflyDrift.name': 'Petra',
-  'bot.butterflyDrift.tagline': 'Daydreams between moves. Friendly to new players.',
-  'bot.monkeyTrickster.name': 'Loki',
-  'bot.monkeyTrickster.tagline': 'Loves a trick. Punishes blunders.',
-  'bot.lionElder.name': 'Atlas',
-  'bot.lionElder.tagline': 'Plans far ahead. Hard to break through.',
+  'bot.butterflyDrift.name': 'Lolo',
+  'bot.butterflyDrift.tagline': 'Flutters between moves. Friendly to new players.',
+  'bot.monkeyTrickster.name': 'Rafiki',
+  'bot.monkeyTrickster.tagline': 'Wise but mischievous. Punishes blunders.',
+  'bot.lionElder.name': 'Simba',
+  'bot.lionElder.tagline': 'Future king. Plans far ahead. Hard to break through.',
 
   // Offline modal
   'offline.title': 'Offline Game',
@@ -489,12 +489,12 @@ const ar: Record<string, string> = {
   'mode.difficulty.medium': 'متوسط',
   'mode.difficulty.hard': 'صعب',
 
-  'bot.butterflyDrift.name': 'بترا',
-  'bot.butterflyDrift.tagline': 'تسرح بين النقلات. لطيفة مع المبتدئين.',
-  'bot.monkeyTrickster.name': 'لوكي',
-  'bot.monkeyTrickster.tagline': 'يحب الحيلة. يعاقب الأخطاء.',
-  'bot.lionElder.name': 'أطلس',
-  'bot.lionElder.tagline': 'يخطط بعيداً. صعب اختراقه.',
+  'bot.butterflyDrift.name': 'لولو',
+  'bot.butterflyDrift.tagline': 'ترفرف بين النقلات. لطيفة مع المبتدئين.',
+  'bot.monkeyTrickster.name': 'رافيكي',
+  'bot.monkeyTrickster.tagline': 'حكيم لكنه مشاكس. يعاقب الأخطاء.',
+  'bot.lionElder.name': 'سيمبا',
+  'bot.lionElder.tagline': 'الملك القادم. يخطط بعيداً. صعب اختراقه.',
 
   'offline.title': 'لعبة محلية',
   'offline.subtitle': 'اختر نمط اللعب، وبشكل اختياري الوقت.',
