@@ -428,13 +428,14 @@ export const THEMES: Theme[] = [
     inputText: '#2a0f3f',
     buttonBg: 'rgba(255,255,255,0.7)',
     buttonBorder: 'rgba(91,33,182,0.4)',
-    // Bumped from 0.4 → 0.55 so the dark-amber buttonRotateText
-    // ("🏠 Main Menu", rotation pills, the store CTA) sits on a
-    // saturated-enough background to clear contrast on the light
-    // panelBg underneath.
-    buttonRotateBg: 'rgba(251,191,36,0.55)',
-    buttonRotateBorder: 'rgba(146,64,14,0.75)',
-    buttonRotateText: '#7c2d12',
+    // Near-solid amber surface. Earlier passes at 0.4 then 0.55
+    // alpha kept failing AA on the win-screen "Main Menu" button —
+    // the win screen panel underneath is also light, so even 0.55
+    // amber composited too pale for #7c2d12 text. 0.9 alpha gives
+    // a determinedly-amber surface with a hint of translucency.
+    buttonRotateBg: 'rgba(251,191,36,0.9)',
+    buttonRotateBorder: 'rgba(146,64,14,0.85)',
+    buttonRotateText: '#5c1a08',
     buttonEndTurnBg: 'rgba(244,114,182,0.5)',
     buttonEndTurnBorder: 'rgba(190,18,60,0.7)',
     buttonEndTurnText: '#9f1239',
