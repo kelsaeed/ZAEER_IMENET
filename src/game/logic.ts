@@ -169,6 +169,30 @@ function isAntWingAt(pieces: GamePiece[], row: number, col: number, excludeId?: 
   });
 }
 
+/** True when (row, col) cannot be a final landing square for the monkey
+ *  after killing a bat — used to walk back along the lunge axis when the
+ *  natural "stand adjacent" cell is blocked. The monkey id is excluded
+ *  from the occupancy check so its own original cell counts as empty
+ *  (the monkey is mid-move). The dying bat is also excluded. */
+function isMonkeyLandingBlocked(
+  pieces: GamePiece[],
+  row: number,
+  col: number,
+  monkeyId: string,
+  dyingPieceId: string,
+): boolean {
+  if (!isInBounds(row, col)) return true;
+  if (isBarrier(row, col)) return true;
+  if (isThrone(row, col)) return true;
+  // Ant wing of any other ant (the original bug — the paralysed ant's
+  // wing sat exactly where the monkey wanted to land, so the monkey
+  // got drawn under the wing).
+  if (isAntWingAt(pieces, row, col, monkeyId)) return true;
+  return pieces.some(p =>
+    p.id !== monkeyId && p.id !== dyingPieceId && p.row === row && p.col === col,
+  );
+}
+
 /** The "top" piece in combat at a cell: butterfly/bat overlay takes priority. */
 function getTopForCombat(pieces: GamePiece[], row: number, col: number): GamePiece | null {
   const all = pieces.filter(p => p.row === row && p.col === col);
@@ -660,10 +684,32 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
 
         if (paralyzingId) {
           // Bat WAS paralyzing — keep the lunge animation and stand adjacent.
-          const adjacentRow = targetRow - dr;
-          const adjacentCol = targetCol - dc;
-          mp2.row = adjacentRow;
-          mp2.col = adjacentCol;
+          //
+          // Bug fix (Monkey - Ant paralyzed): when the bat was on top of a
+          // VERTICAL or HORIZONTAL ant, the cell directly behind the bat
+          // along the lunge axis was the ant's WING, not an open square.
+          // The monkey would still land there and visually disappear under
+          // the wing. Walk back along (-dr, -dc) until we find a square
+          // that's actually free (not a wing, barrier, throne, or other
+          // piece). Each cell on the lunge path was passable for the
+          // monkey on the way in, so the search always terminates well
+          // before the board edge.
+          let stepBack = 1;
+          let landingRow = targetRow - dr;
+          let landingCol = targetCol - dc;
+          while (
+            stepBack < BOARD_SIZE &&
+            isMonkeyLandingBlocked(pieces, landingRow, landingCol, pieceId, top.id)
+          ) {
+            stepBack++;
+            const nextR = targetRow - stepBack * dr;
+            const nextC = targetCol - stepBack * dc;
+            if (!isInBounds(nextR, nextC)) break;
+            landingRow = nextR;
+            landingCol = nextC;
+          }
+          mp2.row = landingRow;
+          mp2.col = landingCol;
           bounceEffect = { pieceId, dr, dc };
           const released = pieces.find(p => p.id === paralyzingId);
           if (released) {
