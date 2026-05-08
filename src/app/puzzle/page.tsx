@@ -14,11 +14,13 @@ import {
 } from '@/game/puzzleTypes';
 import { simulatePuzzleMove } from '@/game/puzzleValidator';
 import { applyMove, applyEndTurn, getValidMoves } from '@/game/logic';
+import { chooseAiMove } from '@/game/ai';
 import type { GameState, Orientation, Player, Position } from '@/game/types';
 import { ORIENTATION_LABEL } from '@/game/constants';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
 import LoadingEmojis from '@/components/LoadingEmojis';
+import { markNewPuzzleNotificationsRead } from '@/lib/supabase/notifications';
 
 // Heavy chunks are only loaded once we know we have a puzzle to render.
 const GameBoard = dynamic(() => import('@/components/GameBoard'), { ssr: false });
@@ -46,6 +48,22 @@ type LoadState =
   | { kind: 'error'; message: string };
 
 type SubmitStatus = 'idle' | 'submitting' | 'wrong' | 'solved';
+
+// Wrong-move detail: when the player submits a wrong attacker move,
+// we keep the optimistic state on the board, then run the local hard
+// AI to find a defender reply that refutes it (often the move that
+// captures the player's lion). The result drives the inline
+// Retry / I quit panel.
+interface WrongDetail {
+  /** The defender reply we played to show what they would do.
+   *  Null means the AI couldn't pick anything (no legal reply, etc.).
+   *  In practice the validator guarantees a legal reply exists. */
+  defenderReply: PuzzleMove | null;
+  /** True iff the defender's reply ends the game with the defender
+   *  winning — used to swap the headline copy ("your lion was taken"
+   *  vs the softer "their best reply spoils your plan"). */
+  lionLost: boolean;
+}
 
 export default function PuzzlePage() {
   const { user, profile, loading: userLoading } = useUser();
@@ -225,6 +243,8 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showGiveUpConfirm, setShowGiveUpConfirm] = useState(false);
   const [revealedLine, setRevealedLine] = useState<unknown[] | null>(null);
+  // Detail for the wrong-move panel — populated only while status==='wrong'.
+  const [wrongDetail, setWrongDetail] = useState<WrongDetail | null>(null);
   const submittingRef = useRef(false);
 
   /** Reset all per-turn scaffolding. Called whenever the player's turn
@@ -274,6 +294,15 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
     void fetch(`/api/puzzles/${puzzle.id}/start`, { method: 'POST' }).catch(() => {});
   }, [puzzle.id]);
 
+  // Silence the "today's puzzle is up" bell entry once the player is
+  // actually on the page. Best-effort; failure is harmless (the row
+  // just stays unread until the next visit).
+  const { user } = useUser();
+  useEffect(() => {
+    if (!user) return;
+    void markNewPuzzleNotificationsRead(user.id).catch(() => {});
+  }, [user]);
+
   // The visual state we hand to the board — adds selection + valid-move
   // highlights so the existing GameBoard component renders them as it
   // does in the main game.
@@ -283,7 +312,13 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
     validMoves,
   }), [state, selectedPieceId, validMoves]);
 
-  const locked = status === 'submitting' || status === 'solved' || revealedLine !== null;
+  // Board is locked while submitting, after a wrong move (player must
+  // hit Retry/Quit before clicking again), once solved, or once the
+  // give-up replay has taken over.
+  const locked = status === 'submitting'
+    || status === 'wrong'
+    || status === 'solved'
+    || revealedLine !== null;
   const isPlayerTurn = state.currentPlayer === sideToMove && state.phase === 'playing';
 
   const submitMove = useCallback(async (move: PuzzleMove, optimisticState: GameState) => {
@@ -312,11 +347,38 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
         principalLine?: unknown[];
       };
       if (data.result === 'wrong') {
-        // Revert the optimistic board update.
-        setState(savedState);
-        resetTurn();
+        // KEEP the optimistic state on the board (the player's wrong
+        // attacker move stays applied) and run the local hard AI to
+        // pick a defender reply that refutes it. Showing the
+        // refutation on the board is the whole point of this branch:
+        // the player gets to see WHY their move loses (usually their
+        // lion getting taken), instead of a silent revert. Retry / I
+        // quit live in the side panel so the player can choose.
         setWrongCount(c => c + 1);
-        setFeedback(t('puzzle.wrong'));
+        resetTurn();
+        // Quick "showing reply" feedback; replaced once the AI returns.
+        setFeedback(t('puzzle.thinkingReply'));
+        const defenderSide = (3 - sideToMove) as Player;
+        // Yield once so React paints the optimistic state + feedback
+        // toast before chooseAiMove blocks for ~1.8s.
+        await new Promise(r => setTimeout(r, 0));
+        let refuted: GameState = optimisticState;
+        let reply: PuzzleMove | null = null;
+        try {
+          const ai = chooseAiMove(optimisticState, defenderSide, 'lion');
+          if (ai) {
+            reply = { pieceId: ai.pieceId, target: ai.target, rotateTo: ai.rotateTo };
+            refuted = simulatePuzzleMove(optimisticState, reply);
+          }
+        } catch {
+          // AI couldn't find a reply — fall back to just the wrong attacker
+          // state without a defender follow-up. The player still sees their
+          // own move on the board and the Retry / I quit panel.
+        }
+        const lionLost = refuted.phase === 'won' && refuted.winner === defenderSide;
+        setState(refuted);
+        setWrongDetail({ defenderReply: reply, lionLost });
+        setFeedback(lionLost ? t('puzzle.wrongLionLost') : t('puzzle.wrongRefuted'));
         setStatus('wrong');
         return;
       }
@@ -344,7 +406,7 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
     } finally {
       submittingRef.current = false;
     }
-  }, [puzzle.id, savedState, t, resetTurn]);
+  }, [puzzle.id, savedState, sideToMove, t, resetTurn]);
 
   const onCellClick = useCallback((row: number, col: number) => {
     if (locked || !isPlayerTurn) return;
@@ -353,10 +415,11 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
     // the player switch pieces or "snap back" mid-turn — useGame
     // explicitly forbids both for ants and we mirror that here.
     if (antTurnInProgress) return;
-    // Any new click clears the previous wrong-move toast so it doesn't
-    // hover stale over the board mid-attempt.
+    // Any new click clears the previous feedback toast so it doesn't
+    // hover stale over the board mid-attempt. Wrong-state itself locks
+    // the board (handled above via `locked`) and is exited by the
+    // Retry / I quit buttons in the side panel, not by a cell click.
     if (feedback) setFeedback(null);
-    if (status === 'wrong') setStatus('idle');
 
     // Click on a valid target with a piece selected — make the move.
     if (selectedPieceId) {
@@ -513,6 +576,8 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
   const onGiveUp = useCallback(async () => {
     setShowGiveUpConfirm(false);
     setStatus('submitting');
+    setFeedback(null);
+    setWrongDetail(null);
     try {
       const res = await fetch(`/api/puzzles/${puzzle.id}/give-up`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
@@ -522,6 +587,18 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
       setStatus('idle');
     }
   }, [puzzle.id]);
+
+  // Roll the board back to the position before the player's wrong
+  // attacker move. Used by the inline Retry button shown on the
+  // wrong-move panel so they can try a different move without
+  // navigating away.
+  const onRetry = useCallback(() => {
+    setState(savedState);
+    resetTurn();
+    setWrongDetail(null);
+    setFeedback(null);
+    setStatus('idle');
+  }, [savedState, resetTurn]);
 
   const title = locale === 'ar' && puzzle.title_ar
     ? puzzle.title_ar
@@ -655,6 +732,17 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
           </div>
         )}
 
+        {/* Wrong-move panel — replaces the bottom give-up button while
+            the player is staring at the defender's refutation. Retry
+            rolls the board back; I quit reveals the canonical line. */}
+        {status === 'wrong' && wrongDetail && !revealedLine && (
+          <WrongMovePanel
+            lionLost={wrongDetail.lionLost}
+            onRetry={onRetry}
+            onGiveUp={() => setShowGiveUpConfirm(true)}
+          />
+        )}
+
         {status === 'solved' && (
           <SolvedCard
             onMenu={() => location.assign('/')}
@@ -671,7 +759,7 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
           <RevealCard line={revealedLine} pieces={state.pieces} />
         )}
 
-        {status !== 'solved' && !revealedLine && (
+        {status !== 'solved' && status !== 'wrong' && !revealedLine && (
           <button
             onClick={() => setShowGiveUpConfirm(true)}
             disabled={locked}
@@ -818,6 +906,48 @@ function SolvedCard({
         </button>
         <button onClick={onMenu} style={smallBtn(theme)}>{t('puzzle.backToMenu')}</button>
         <button onClick={onPlayAgain} style={smallBtn(theme)}>↻</button>
+      </div>
+    </motion.div>
+  );
+}
+
+/** Inline panel shown right after a wrong attacker move, with the
+ *  defender's refuting reply already drawn on the board. Two buttons:
+ *  Retry (rolls the board back to before the player's move) and I quit
+ *  (calls /give-up and reveals the canonical winning line). */
+function WrongMovePanel({
+  lionLost,
+  onRetry,
+  onGiveUp,
+}: {
+  lionLost: boolean;
+  onRetry: () => void;
+  onGiveUp: () => void;
+}) {
+  const { theme, t } = useSettings();
+  return (
+    <motion.div
+      initial={{ scale: 0.96, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ duration: 0.22 }}
+      className="rounded-2xl p-4 text-center"
+      style={{
+        background: `linear-gradient(180deg, ${theme.p2AccentBg}, ${theme.panelBg})`,
+        border: `1px solid ${theme.p2AccentBorder}`,
+        color: theme.textPrimary,
+      }}
+    >
+      <div style={{ fontSize: 28, marginBottom: 4 }}>{lionLost ? '☠️' : '⚠️'}</div>
+      <div style={{ fontWeight: 800, fontSize: 14, color: theme.p2Color, marginBottom: 12 }}>
+        {lionLost ? t('puzzle.wrongLionLost') : t('puzzle.wrongRefuted')}
+      </div>
+      <div className="flex gap-2 justify-center flex-wrap">
+        <button onClick={onRetry} style={smallBtnAccent(theme)}>
+          {t('puzzle.retry')}
+        </button>
+        <button onClick={onGiveUp} style={smallBtn(theme)}>
+          {t('puzzle.giveUp')}
+        </button>
       </div>
     </motion.div>
   );

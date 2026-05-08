@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
 import { useNotifications, UnreadDmThread } from '@/hooks/useNotifications';
+import { format } from '@/game/locales';
 import { acceptFriendRequest, removeFriendship, FriendProfile } from '@/lib/supabase/friends';
 import LoadingEmojis from './LoadingEmojis';
 import Avatar from './Avatar';
@@ -30,8 +31,8 @@ function relTime(iso: string): string {
  *  open chat). Real-time updates via the useNotifications hook. */
 export default function NotificationBell() {
   const { user } = useUser();
-  const { theme } = useSettings();
-  const { loading, friendRequests, unreadDms, yourTurnGames, totalUnread, refresh } = useNotifications();
+  const { theme, t, localeId } = useSettings();
+  const { loading, friendRequests, unreadDms, yourTurnGames, newPuzzles, totalUnread, refresh } = useNotifications();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -154,6 +155,70 @@ export default function NotificationBell() {
                   </div>
                 ) : (
                   <>
+                    {newPuzzles.length > 0 && (() => {
+                      // Newest unread "today's puzzle is up" ping —
+                      // shown as a single prominent row that links to
+                      // /puzzle. Older unread rows (yesterday's still
+                      // unread, etc.) are hidden because the daily
+                      // puzzle page only shows today's anyway, so
+                      // listing past dates would just clutter the bell.
+                      const np = newPuzzles[0];
+                      const title = (localeId === 'ar' && np.titleAr)
+                        ? np.titleAr
+                        : (np.titleEn ?? t('puzzle.title'));
+                      return (
+                        <div>
+                          <div
+                            className="px-4 py-2 text-xs font-bold uppercase tracking-wider opacity-70"
+                            style={{ borderBottom: `1px solid ${theme.panelBorder}` }}
+                          >
+                            🧩 {t('puzzle.newPuzzleHeader')}
+                          </div>
+                          <Link
+                            href="/puzzle"
+                            onClick={() => setOpen(false)}
+                            className="px-4 py-3 flex items-center gap-3 w-full transition-colors hover:bg-white/5"
+                            style={{ borderBottom: `1px solid ${theme.panelBorder}` }}
+                          >
+                            <div
+                              className="shrink-0 rounded-full inline-flex items-center justify-center"
+                              style={{
+                                width: 36, height: 36,
+                                background: theme.p1AccentBg,
+                                border: `1px solid ${theme.p1AccentBorder}`,
+                                fontSize: 18,
+                              }}
+                              aria-hidden
+                            >
+                              🧩
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm truncate">
+                                  {title}
+                                </span>
+                                <span
+                                  className="text-[10px] font-extrabold rounded-full px-1.5 py-0.5 shrink-0"
+                                  style={{ background: theme.p1Color, color: theme.buttonRotateText }}
+                                >
+                                  NEW
+                                </span>
+                              </div>
+                              <div className="text-xs opacity-70 truncate">
+                                {np.puzzleDate
+                                  ? format('{date} · {sub}', {
+                                      date: np.puzzleDate,
+                                      sub: t('puzzle.newPuzzleSubtitle'),
+                                    })
+                                  : t('puzzle.newPuzzleSubtitle')}
+                              </div>
+                            </div>
+                            <span aria-hidden style={{ color: theme.p1Color }}>↗</span>
+                          </Link>
+                        </div>
+                      );
+                    })()}
+
                     {yourTurnGames.length > 0 && (
                       <div>
                         <div

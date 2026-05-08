@@ -3,7 +3,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useUser } from './useUser';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { listFriendships, FriendProfile } from '@/lib/supabase/friends';
-import { listYourTurnNotifications, YourTurnNotification } from '@/lib/supabase/notifications';
+import {
+  listYourTurnNotifications,
+  YourTurnNotification,
+  listNewPuzzleNotifications,
+  NewPuzzleNotification,
+} from '@/lib/supabase/notifications';
 
 export interface UnreadDmThread {
   /** The other user. */
@@ -29,6 +34,10 @@ interface NotificationsState {
    *  since the opponent's last move. One ping per game; emptied when the
    *  match page marks them read. */
   yourTurnGames: YourTurnNotification[];
+  /** "Today's puzzle is up" pings — fanned out by the publish trigger.
+   *  At most one is meaningful at a time (today's puzzle), but we list
+   *  the array in case the trigger fires on multiple days unread. */
+  newPuzzles: NewPuzzleNotification[];
   /** Sum of all individual notifications — used for the badge. */
   totalUnread: number;
   /** Manual refresh — exposed so child UIs can re-pull after acting on a notif. */
@@ -57,6 +66,7 @@ export function useNotifications(): NotificationsState {
   const [friendRequests, setFriendRequests] = useState<FriendProfile[]>([]);
   const [unreadDms, setUnreadDms] = useState<UnreadDmThread[]>([]);
   const [yourTurnGames, setYourTurnGames] = useState<YourTurnNotification[]>([]);
+  const [newPuzzles, setNewPuzzles] = useState<NewPuzzleNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -64,6 +74,7 @@ export function useNotifications(): NotificationsState {
       setFriendRequests([]);
       setUnreadDms([]);
       setYourTurnGames([]);
+      setNewPuzzles([]);
       setLoading(false);
       return;
     }
@@ -82,6 +93,13 @@ export function useNotifications(): NotificationsState {
       setYourTurnGames(await listYourTurnNotifications(user.id));
     } catch {
       setYourTurnGames([]);
+    }
+
+    // 1c. "Today's puzzle is up" pings — written by the publish trigger.
+    try {
+      setNewPuzzles(await listNewPuzzleNotifications(user.id));
+    } catch {
+      setNewPuzzles([]);
     }
 
     // 2. Unread DMs grouped by sender.
@@ -197,7 +215,8 @@ export function useNotifications(): NotificationsState {
   const totalUnread =
     friendRequests.length
     + unreadDms.reduce((s, d) => s + d.unreadCount, 0)
-    + yourTurnGames.length;
+    + yourTurnGames.length
+    + newPuzzles.length;
 
-  return { loading, friendRequests, unreadDms, yourTurnGames, totalUnread, refresh };
+  return { loading, friendRequests, unreadDms, yourTurnGames, newPuzzles, totalUnread, refresh };
 }
