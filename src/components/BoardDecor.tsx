@@ -25,6 +25,15 @@ export default function BoardDecor({ cellSize }: Props) {
   const { getDecorKind } = useSettings();
   const themes = usePlayerThemes();
 
+  // Mobile gate. The board decor (and the page-wide ThemeDecor under
+  // celestial) used to crush low-end Android phones — 38 animated
+  // elements with mix-blend-mode + blur layered on top of 256
+  // BoardCells starves the compositor and clicks lag for seconds.
+  // Below ~36px cell size we skip the on-board decor entirely; the
+  // local viewer still gets the page-wide ThemeDecor (which itself
+  // is dialled down on mobile).
+  if (cellSize < 36) return null;
+
   const topKind = getDecorKind(themes.p2.id);
   const bottomKind = getDecorKind(themes.p1.id);
   if (topKind === 'none' && bottomKind === 'none') return null;
@@ -65,10 +74,14 @@ function BoardDecorHalf({ decorKind, style }: HalfProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
+  // Halved counts vs. the first cut so the compositor has less to do
+  // each frame. 8 sparkles + 1 trail + 2 diagonals per half ≈ 22
+  // total animated elements when both players have celestial — about
+  // a third of the original budget.
   const sparkles = useMemo(() => {
     if (!mounted) return [];
     const palette = ['#ffffff', '#fde68a', '#fbcfe8', '#ddd6fe', '#a7f3d0'];
-    return Array.from({ length: 14 }, (_, i) => ({
+    return Array.from({ length: 8 }, (_, i) => ({
       id: i,
       top: rand(5, 95),
       left: rand(2, 98),
@@ -79,20 +92,13 @@ function BoardDecorHalf({ decorKind, style }: HalfProps) {
     }));
   }, [mounted]);
 
-  // Two short shooting trails per half — denser than the full-screen
-  // version would feel busy in such a small area.
   const trails = useMemo(() => [
-    { top: '20%', angle: '-22deg', delay: '1.5s', duration: '5.5s' },
-    { top: '70%', angle: '-28deg', delay: '5s',   duration: '6s'   },
+    { top: '40%', angle: '-24deg', delay: '2s', duration: '6s' },
   ], []);
 
-  // Long bottom-left → top-right diagonals. Three per half so the
-  // viewer's eye picks up a steady cadence of light streaks across
-  // the celestial player's territory.
   const diagonals = useMemo(() => [
-    { angle: '-26deg', delay: '0s', duration: '11s' },
-    { angle: '-32deg', delay: '4s', duration: '13s' },
-    { angle: '-22deg', delay: '8s', duration: '12s' },
+    { angle: '-26deg', delay: '0s', duration: '12s' },
+    { angle: '-32deg', delay: '6s', duration: '14s' },
   ], []);
 
   if (decorKind !== 'celestial') return null;

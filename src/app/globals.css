@@ -570,6 +570,32 @@ input, select, textarea {
   .zi-board-diagonal { animation: none !important; }
 }
 
+/* ─── Mobile perf relief ───────────────────────────────────────────────
+ * mix-blend-mode and filter: blur are the two most expensive things
+ * the celestial overlay does — both force per-frame compositing on
+ * the GPU and on a low-end Android with 256 BoardCells already
+ * rendering they easily starve the main thread enough that taps
+ * lag for seconds. Strip them on phones; the bloom + curtain
+ * gradients still read as a soft glow, just without the screen-blend
+ * lift. Element counts are also reduced JS-side in ThemeDecor. */
+@media (max-width: 768px) {
+  .zi-celestial-root,
+  .zi-board-decor-half {
+    mix-blend-mode: normal;
+  }
+  .zi-celestial-bloom,
+  .zi-celestial-curtain,
+  .zi-celestial-sparkle,
+  .zi-celestial-ribbon,
+  .zi-celestial-trail,
+  .zi-celestial-diagonal,
+  .zi-board-sparkle,
+  .zi-board-trail,
+  .zi-board-diagonal {
+    filter: none;
+  }
+}
+
 /* Decorative icons / emojis carry `aria-hidden="true"` by convention.
  * Without this rule, hovering a standalone emoji glyph shows the text
  * I-beam cursor (because emojis are characters), which feels broken on
