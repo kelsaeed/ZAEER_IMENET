@@ -1,12 +1,13 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import type { AttackerMove, PuzzleSnapshotV1 } from '@/game/puzzleTypes';
+import PositionEditor from './PositionEditor';
 
-// Minimal puzzle authoring UI. Per project guidance, this is intentionally
-// not a full CMS — the position editor is JSON-paste, not drag-and-drop,
-// and the validation happens through the existing /api/admin/puzzles/
-// validate route. The visual board editor is a phase-2 enhancement.
+// Minimal puzzle authoring UI. The position is built visually via
+// <PositionEditor/> (click-to-place pieces on a 16×16 board);
+// validation goes through the existing /api/admin/puzzles/validate
+// route. Solution moves are still authored as JSON for v1.
 
 export interface PuzzleEditorInitial {
   id: string;
@@ -41,9 +42,23 @@ interface ValidateResult {
   principalLine?: unknown;
 }
 
+// A blank starting snapshot — just two lions at their default
+// corners — used as the seed when an admin creates a new puzzle.
+const BLANK_SNAPSHOT: PuzzleSnapshotV1 = {
+  v: 1,
+  sideToMove: 1,
+  pieces: [
+    { id: 'lion_p1_seed', type: 'lion', player: 1, row: 15, col: 1,  hp: 1, isDamaged: false, isParalyzed: false },
+    { id: 'lion_p2_seed', type: 'lion', player: 2, row: 0,  col: 14, hp: 1, isDamaged: false, isParalyzed: false },
+  ],
+};
+
 export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValidated }: Props) {
-  const [positionJson, setPositionJson] = useState(
-    initial ? JSON.stringify(initial.position, null, 2) : SAMPLE_POSITION
+  // Position is the canonical state now; the JSON textarea was replaced
+  // by <PositionEditor/>. We keep a typed snapshot in state and derive
+  // a JSON string for the validate request body.
+  const [snapshot, setSnapshot] = useState<PuzzleSnapshotV1>(
+    initial?.position ?? BLANK_SNAPSHOT
   );
   const [solutionJson, setSolutionJson] = useState('[]');
   const [difficulty, setDifficulty] = useState(initial?.difficulty ?? 3);
@@ -59,23 +74,10 @@ export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValida
   const status = initial?.status ?? 'draft';
   const validatedAt = initial?.validated_at ?? result?.validatedAt ?? null;
 
-  const importJsonCombined = useMemo(() => {
-    // Lets curators paste a single { position, solution, ...meta } blob
-    // exported from another puzzle. Parsed lazily on the import button.
-    return '';
-  }, []);
-
   async function onValidate() {
     setBusy(true);
     setResult(null);
-    let position: unknown;
     let claimed: AttackerMove[];
-    try { position = JSON.parse(positionJson); }
-    catch (e) {
-      setBusy(false);
-      setResult({ ok: false, message: `Position is not valid JSON: ${e instanceof Error ? e.message : String(e)}` });
-      return;
-    }
     try {
       const parsed = JSON.parse(solutionJson);
       if (!Array.isArray(parsed)) throw new Error('solution must be a JSON array of moves');
@@ -91,7 +93,7 @@ export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValida
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           puzzleId: puzzleId ?? null,
-          position,
+          position: snapshot,
           claimedAttackerLine: claimed,
           difficulty,
           theme: theme || null,
@@ -197,18 +199,13 @@ export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValida
         </Row>
       </Section>
 
-      <Section title="Position (JSON)">
+      <Section title="Position">
         <p style={hint}>
-          Paste a <code>PuzzleSnapshotV1</code>: <code>{'{ v: 1, sideToMove, pieces[] }'}</code>.
-          Each piece needs id, type, player, row, col; optional fields default sensibly.
+          Pick a piece from the palette and click a cell to place it.
+          Use the eraser to remove. Click an ant with the rotate tool
+          to cycle its orientation. Side to move flips up top.
         </p>
-        <textarea
-          value={positionJson}
-          onChange={e => setPositionJson(e.target.value)}
-          rows={14}
-          spellCheck={false}
-          style={textareaStyle}
-        />
+        <PositionEditor value={snapshot} onChange={setSnapshot} />
       </Section>
 
       <Section title="Solution (JSON)">
@@ -319,12 +316,3 @@ const secondaryButton: React.CSSProperties = {
   cursor: 'pointer',
 };
 const hint: React.CSSProperties = { fontSize: 12, color: '#6b7280', marginBottom: 6 };
-
-const SAMPLE_POSITION = `{
-  "v": 1,
-  "sideToMove": 1,
-  "pieces": [
-    { "id": "lion_p1_1",  "type": "lion",  "player": 1, "row": 15, "col": 1, "hp": 1, "isDamaged": false, "isParalyzed": false },
-    { "id": "lion_p2_1",  "type": "lion",  "player": 2, "row": 0,  "col": 14, "hp": 1, "isDamaged": false, "isParalyzed": false }
-  ]
-}`;

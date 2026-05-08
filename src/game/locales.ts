@@ -336,6 +336,7 @@ const en: Record<string, string> = {
 
   // Admin theme studio (/admin/themes)
   'admin.themes.openCta': 'Theme studio',
+  'admin.puzzles.openCta': 'Puzzle studio',
   'admin.themes.title': 'Theme studio',
   'admin.themes.subtitle': 'Create, edit and price themes. Players see your changes live.',
   'admin.themes.backToStore': 'Back to store',
@@ -744,6 +745,7 @@ const ar: Record<string, string> = {
 
   // استوديو المظاهر — للمشرف فقط
   'admin.themes.openCta': 'استوديو المظاهر',
+  'admin.puzzles.openCta': 'استوديو الأحجيات',
   'admin.themes.title': 'استوديو المظاهر',
   'admin.themes.subtitle': 'أنشئ مظاهر، عدّل أسعارها، تعديلاتك تظهر للاعبين فوراً.',
   'admin.themes.backToStore': 'الرجوع للمتجر',
