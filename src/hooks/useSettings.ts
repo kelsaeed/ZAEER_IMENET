@@ -8,6 +8,7 @@ import {
   addAppLocale, removeAppLocale,
   upsertOverride, deleteOverride,
 } from '@/lib/supabase/locales';
+import { isTableMissing } from '@/lib/supabase/missingTable';
 
 // Personal preferences stay in localStorage (theme, language pick, custom
 // theme colours). Custom locales and translation overrides moved to the
@@ -171,19 +172,44 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setOverrides(ov);
   }, []);
 
+  // Defer the locales/overrides fetch + Realtime subscription until
+  // the page has had a chance to paint. Custom locales are admin-only
+  // content that 99% of users never touch, so pulling it inside the
+  // critical path was costing First Contentful Paint with no upside.
+  // 1500 ms is enough to clear LCP on slow 3G; if the tables turn out
+  // to be missing on the first call, we don't subscribe at all.
   useEffect(() => {
-    void refreshFromDb();
-    const supabase = getSupabaseBrowser();
-    const channel = supabase
-      .channel('app-locales-overrides')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'app_locales' },
-        () => { void refreshFromDb(); })
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'app_translation_overrides' },
-        () => { void refreshFromDb(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let cancelled = false;
+    let channel: ReturnType<ReturnType<typeof getSupabaseBrowser>['channel']> | null = null;
+    const id = setTimeout(() => {
+      void refreshFromDb().then(() => {
+        if (cancelled) return;
+        // Skip the Realtime subscription if both tables are confirmed
+        // missing — avoids opening a websocket the project doesn't need.
+        if (
+          isTableMissing('app_locales') &&
+          isTableMissing('app_translation_overrides')
+        ) return;
+        const supabase = getSupabaseBrowser();
+        channel = supabase
+          .channel('app-locales-overrides')
+          .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'app_locales' },
+            () => { void refreshFromDb(); })
+          .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'app_translation_overrides' },
+            () => { void refreshFromDb(); })
+          .subscribe();
+      });
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+      if (channel) {
+        const supabase = getSupabaseBrowser();
+        supabase.removeChannel(channel);
+      }
+    };
   }, [refreshFromDb]);
 
   // ── Hydrate DB themes from themes_catalog ────────────────────────────────
@@ -192,6 +218,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // means the row only carries store metadata for a built-in theme;
   // we still record the decor_kind so ThemeDecor can find it.
   const refreshDbThemes = useCallback(async () => {
+    if (isTableMissing('themes_catalog')) return;
     const supabase = getSupabaseBrowser();
     const { data, error } = await supabase
       .from('themes_catalog')
@@ -208,16 +235,33 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setDbThemes(next);
   }, []);
 
+  // Same defer story as the locales effect — themes_catalog is needed
+  // for /store and SettingsPanel's theme tab, neither of which is on
+  // the first-paint path.
   useEffect(() => {
-    void refreshDbThemes();
-    const supabase = getSupabaseBrowser();
-    const channel = supabase
-      .channel('themes-catalog-sync')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'themes_catalog' },
-        () => { void refreshDbThemes(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    let cancelled = false;
+    let channel: ReturnType<ReturnType<typeof getSupabaseBrowser>['channel']> | null = null;
+    const id = setTimeout(() => {
+      void refreshDbThemes().then(() => {
+        if (cancelled) return;
+        if (isTableMissing('themes_catalog')) return;
+        const supabase = getSupabaseBrowser();
+        channel = supabase
+          .channel('themes-catalog-sync')
+          .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'themes_catalog' },
+            () => { void refreshDbThemes(); })
+          .subscribe();
+      });
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+      if (channel) {
+        const supabase = getSupabaseBrowser();
+        supabase.removeChannel(channel);
+      }
+    };
   }, [refreshDbThemes]);
 
   const allLocales = useMemo(() => [...LOCALES, ...customLocales], [customLocales]);

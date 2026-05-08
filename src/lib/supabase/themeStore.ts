@@ -1,5 +1,6 @@
 'use client';
 import { getSupabaseBrowser } from './client';
+import { isTableMissing, markTableMissing } from './missingTable';
 import type { Theme } from '@/game/themes';
 
 /** A row from public.themes_catalog. The id matches the string used
@@ -44,23 +45,31 @@ const CATALOG_COLUMNS =
  *  unpublished rows from non-admins; admins get the full set including
  *  drafts via the admin-read policy. */
 export async function listThemeCatalog(): Promise<ThemeCatalogRow[]> {
+  if (isTableMissing('themes_catalog')) return [];
   const supabase = getSupabaseBrowser();
   const { data, error } = await supabase
     .from('themes_catalog')
     .select(CATALOG_COLUMNS)
     .order('sort_order', { ascending: true });
-  if (error) return [];
+  if (error) {
+    markTableMissing('themes_catalog', error);
+    return [];
+  }
   return (data ?? []) as ThemeCatalogRow[];
 }
 
 /** Theme ids the signed-in user owns. Returns [] for signed-out users
  *  since RLS blocks the read. */
 export async function listOwnedThemeIds(): Promise<string[]> {
+  if (isTableMissing('theme_ownership')) return [];
   const supabase = getSupabaseBrowser();
   const { data, error } = await supabase
     .from('theme_ownership')
     .select('theme_id');
-  if (error) return [];
+  if (error) {
+    markTableMissing('theme_ownership', error);
+    return [];
+  }
   return (data ?? []).map((r: { theme_id: string }) => r.theme_id);
 }
 

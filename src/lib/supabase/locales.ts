@@ -1,5 +1,6 @@
 'use client';
 import { getSupabaseBrowser } from './client';
+import { isTableMissing, markTableMissing } from './missingTable';
 
 export interface AppLocaleRow {
   id: string;
@@ -19,22 +20,30 @@ export interface OverrideRow {
  *  in this list — they live in `src/game/locales.ts` and are merged on
  *  top of these in useSettings. */
 export async function listAppLocales(): Promise<AppLocaleRow[]> {
+  if (isTableMissing('app_locales')) return [];
   const supabase = getSupabaseBrowser();
   const { data, error } = await supabase
     .from('app_locales')
     .select('id, name, flag, base_id, dir');
-  if (error) return [];
+  if (error) {
+    markTableMissing('app_locales', error);
+    return [];
+  }
   return (data ?? []) as AppLocaleRow[];
 }
 
 /** Every translation override stored in the DB, regardless of locale. The
  *  caller groups these by locale_id when applying them. */
 export async function listOverrides(): Promise<OverrideRow[]> {
+  if (isTableMissing('app_translation_overrides')) return [];
   const supabase = getSupabaseBrowser();
   const { data, error } = await supabase
     .from('app_translation_overrides')
     .select('locale_id, key, value');
-  if (error) return [];
+  if (error) {
+    markTableMissing('app_translation_overrides', error);
+    return [];
+  }
   return (data ?? []) as OverrideRow[];
 }
 

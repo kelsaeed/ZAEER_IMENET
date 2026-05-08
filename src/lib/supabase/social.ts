@@ -1,5 +1,6 @@
 'use client';
 import { getSupabaseBrowser } from './client';
+import { isTableMissing, markTableMissing } from './missingTable';
 
 // Backed by the `user_blocks` and `chat_mutes` tables in migration 0007 and
 // the existing `games` table for head-to-head stats. All inserts/deletes go
@@ -9,13 +10,18 @@ import { getSupabaseBrowser } from './client';
 
 /** True if `me` has blocked `them`. */
 export async function isBlockedByMe(myId: string, themId: string): Promise<boolean> {
+  if (isTableMissing('user_blocks')) return false;
   const supabase = getSupabaseBrowser();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('user_blocks')
     .select('blocker_id')
     .eq('blocker_id', myId)
     .eq('blocked_id', themId)
     .maybeSingle();
+  if (error) {
+    markTableMissing('user_blocks', error);
+    return false;
+  }
   return !!data;
 }
 
@@ -42,13 +48,18 @@ export async function unblockUser(myId: string, themId: string): Promise<void> {
 // ─── Chat mutes ─────────────────────────────────────────────────────────────
 
 export async function isMutedByMe(myId: string, themId: string): Promise<boolean> {
+  if (isTableMissing('chat_mutes')) return false;
   const supabase = getSupabaseBrowser();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('chat_mutes')
     .select('muter_id')
     .eq('muter_id', myId)
     .eq('muted_id', themId)
     .maybeSingle();
+  if (error) {
+    markTableMissing('chat_mutes', error);
+    return false;
+  }
   return !!data;
 }
 
@@ -74,11 +85,16 @@ export async function unmuteUserChat(myId: string, themId: string): Promise<void
 /** Returns the set of user ids the current user has muted. Used by the chat
  *  panel to filter incoming messages. Cheap — at most a handful of rows. */
 export async function listMutedIds(myId: string): Promise<Set<string>> {
+  if (isTableMissing('chat_mutes')) return new Set();
   const supabase = getSupabaseBrowser();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('chat_mutes')
     .select('muted_id')
     .eq('muter_id', myId);
+  if (error) {
+    markTableMissing('chat_mutes', error);
+    return new Set();
+  }
   return new Set((data ?? []).map(r => r.muted_id as string));
 }
 
