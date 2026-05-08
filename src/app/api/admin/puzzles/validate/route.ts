@@ -80,8 +80,21 @@ export async function POST(req: Request) {
     }, { status: 400 });
   }
 
-  // 3. Run the validator.
-  const result = validatePuzzle({ snapshot, claimedAttackerLine });
+  // 3. Run the validator. Wrap in try/catch so a thrown engine error
+  //    (e.g. an attacker move that points at a piece id which isn't
+  //    on the board) returns a structured JSON failure rather than
+  //    a 500 with an empty body that crashes the client's
+  //    res.json() with "Unexpected end of JSON input".
+  let result;
+  try {
+    result = validatePuzzle({ snapshot, claimedAttackerLine });
+  } catch (e) {
+    return NextResponse.json({
+      ok: false,
+      reason: 'engine_error',
+      message: e instanceof Error ? e.message : String(e),
+    }, { status: 422 });
+  }
   if (!result.ok) {
     return NextResponse.json({
       ok: false,

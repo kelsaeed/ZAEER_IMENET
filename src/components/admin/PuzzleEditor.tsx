@@ -103,7 +103,21 @@ export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValida
           flavour_ar: flavourAr || null,
         }),
       });
-      const data = await res.json() as ValidateResult;
+      // Read the body as text first so a non-JSON 500 (Vercel's HTML
+      // error page when an unhandled exception bubbles out of the
+      // route) shows a useful message instead of the unhelpful
+      // "Failed to execute 'json' on 'Response': Unexpected end of
+      // JSON input" the browser hands back when .json() chokes.
+      const raw = await res.text();
+      let data: ValidateResult;
+      try {
+        data = raw ? (JSON.parse(raw) as ValidateResult) : { ok: false };
+      } catch {
+        data = {
+          ok: false,
+          message: `Server returned a non-JSON response (HTTP ${res.status}). ${raw.slice(0, 200)}`,
+        };
+      }
       setResult(data);
       if (data.ok && data.puzzleId && onSavedAndValidated) onSavedAndValidated(data.puzzleId);
     } catch (e) {
