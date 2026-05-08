@@ -453,18 +453,14 @@ export default function OnlineGamePage() {
         <div className="lg:hidden">{ribbon}</div>
         {/* Reserve the board's eventual footprint up-front so the
             dynamic GameBoard chunk can paint into a pre-sized box.
-            Without this the lazy chunk arrives late and pushes
-            everything below it down — a 0.31 CLS hit on Lighthouse.
-            Width is 16.5 × cellSize (16 cells + the 0.5-cell row
-            label column), height is 16 cells + ~0.45 cell of column
-            labels above the grid. */}
-        <div
-          className="flex flex-col items-center"
-          style={{
-            minWidth: cellSize * 16.5,
-            minHeight: cellSize * 16.45,
-          }}
-        >
+            Sizing is driven by a viewport-based CSS class (zi-board-
+            reserve in globals.css) rather than inline JS state, so
+            the SSR-rendered HTML and the post-hydration version use
+            the same reservation. Inline JS sizing left a window
+            between SSR paint (cellSize=42 default) and the
+            useLayoutEffect's real cellSize where Lighthouse logged
+            a 0.13 CLS shift. */}
+        <div className="flex flex-col items-center zi-board-reserve">
         <GameBoard
           state={displayState!}
           cellSize={cellSize}
