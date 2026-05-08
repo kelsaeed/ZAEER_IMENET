@@ -4,32 +4,19 @@ import { BOARD_SIZE, isThrone, isBarrier, ORIENTATION_LABEL } from '@/game/const
 import { puzzleSnapshotToState, type PuzzleSnapshotV1, type PuzzleMove } from '@/game/puzzleTypes';
 import { simulatePuzzleMove } from '@/game/puzzleValidator';
 import { getValidMoves } from '@/game/logic';
+import { chooseAiMove } from '@/game/ai';
 import type { GameState, GamePiece, Orientation, Player, PieceType } from '@/game/types';
 
-// Each defender piece moves by its own movement rules (getValidMoves
-// enforces piece-specific geometry — elephants orthogonal only, lions
-// up to N squares, ants their wing geometry, etc.). We just pick
-// uniformly at random from the union of all (piece, target) candidates.
-// For ants, a post-rotation is included as part of the random roll
-// when one is available.
-function pickRandomDefenderMove(state: GameState, defender: Player): PuzzleMove | null {
-  const candidates: PuzzleMove[] = [];
-  for (const piece of state.pieces) {
-    if (piece.player !== defender) continue;
-    if (piece.isParalyzed) continue;
-    const { moves, validRotations } = getValidMoves(piece, state.pieces);
-    for (const m of moves) {
-      const base: PuzzleMove = { pieceId: piece.id, target: { row: m.row, col: m.col } };
-      candidates.push(base);
-      if (piece.type === 'ant' && validRotations.length > 0) {
-        for (const r of validRotations) {
-          candidates.push({ ...base, rotateTo: r });
-        }
-      }
-    }
-  }
-  if (candidates.length === 0) return null;
-  return candidates[Math.floor(Math.random() * candidates.length)];
+// Defender plays the strongest local AI ('lion' = hard, depth-5
+// iterative deepening, ~1.8s budget). The puzzle's correctness on
+// save still depends on EVERY defender reply (validator brute-forces
+// the AND/OR tree); the hard AI here just picks a tough-looking
+// principal variation so the curator sees the position the most
+// dangerous defender would steer to.
+function pickDefenderMove(state: GameState, defender: Player): PuzzleMove | null {
+  const dm = chooseAiMove(state, defender, 'lion');
+  if (!dm) return null;
+  return { pieceId: dm.pieceId, target: dm.target, rotateTo: dm.rotateTo };
 }
 
 // simulatePuzzleMove doesn't validate move geometry — it executes
@@ -106,23 +93,21 @@ export default function SolutionRecorder({ snapshot, value, onChange }: Props) {
     return () => window.removeEventListener('resize', calc);
   }, []);
 
-  // Cache of random defender replies, indexed by attacker move position.
-  // Without this, the defender would re-roll on every render — selecting
-  // a piece, hovering, etc. would silently change the past defender
-  // moves under the curator. With it, each attacker move triggers
-  // exactly one fresh defender roll, which then sticks until the line
-  // is changed below it. Tied to snapshot identity so authoring a
-  // different puzzle starts with an empty cache.
+  // Cache of defender replies, indexed by attacker move position.
+  // The hard AI is expensive (iterative deepening, ~1.8s per call) so
+  // without caching every unrelated re-render — selecting a piece,
+  // hovering, resizing — would re-run the search and freeze the page.
+  // With the cache, each attacker move triggers one search and the
+  // result sticks until the line above it changes. Tied to snapshot
+  // identity so authoring a different puzzle starts fresh.
   const defenderRollsRef = useRef<{ snapshot: PuzzleSnapshotV1; rolls: (PuzzleMove | null)[] }>({
     snapshot,
     rolls: [],
   });
 
-  // Replay the recorded line on top of the snapshot, picking a random
-  // defender response between attacker moves so the live board is
-  // always at "attacker to move" or "puzzle resolved". Each defender
-  // piece moves by its own movement rules; the picker just rolls
-  // uniformly from the union of legal moves.
+  // Replay the recorded line on top of the snapshot, letting the hard
+  // AI pick a defender response between attacker moves so the live
+  // board is always at "attacker to move" or "puzzle resolved".
   const liveState = useMemo<GameState>(() => {
     if (defenderRollsRef.current.snapshot !== snapshot) {
       defenderRollsRef.current = { snapshot, rolls: [] };
@@ -135,15 +120,15 @@ export default function SolutionRecorder({ snapshot, value, onChange }: Props) {
       catch { return s; }
       if (s.phase !== 'playing' || s.currentPlayer !== defenderSide) continue;
 
-      // Reuse the cached roll only if it's still legal in this state.
+      // Reuse the cached reply only if it's still legal in this state.
       // simulatePuzzleMove does not validate geometry, so without this
       // check a stale cached reply (e.g. piece that has since moved
       // because the attacker line above was edited) could teleport
-      // illegally. If invalid, drop it and roll fresh.
+      // illegally. If invalid, drop it and recompute.
       let reply: PuzzleMove | null = cache[i] ?? null;
       if (reply && !isStillLegal(s, reply, defenderSide)) reply = null;
       if (!reply) {
-        reply = pickRandomDefenderMove(s, defenderSide);
+        reply = pickDefenderMove(s, defenderSide);
         cache[i] = reply;
       }
       if (!reply) continue;
