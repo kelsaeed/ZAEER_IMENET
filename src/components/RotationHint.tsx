@@ -31,13 +31,23 @@ interface Props {
  *  whatever shows still tells the player "look down". */
 export default function RotationHint({ visible, cellSize, antRow, antCol, onClick }: Props) {
   const { theme, t } = useSettings();
+  // Anchor the arrow in the OPPOSITE half of the board from the ant
+  // so it never sits on the ant or any valid-move square (the ant's
+  // moves and rotations all live within ~4 cells of its centre).
+  // Same column as the ant — clamped so the 1.6-cell-wide arrow box
+  // doesn't run off the side — keeps the eye trail short: tap the
+  // arrow you can see, scroll to the controls.
+  const arrowRow = antRow <= 7 ? 13 : 2;
+  const arrowCol = Math.max(1, Math.min(14, antCol));
   // Cell layout: the row label takes the first 0.5 cellSize column,
-  // then 16 actual board cells. Centre the hint on the ant cell.
+  // then 16 actual board cells.
   const labelOffset = cellSize * 0.5;
-  const cellCentreX = labelOffset + (antCol + 0.5) * cellSize;
-  const cellCentreY = (antRow + 0.5) * cellSize;
-  // Arrow box: ~1.6 cells across, 2 cells tall — bigger than the ant,
-  // small enough to leave the surrounding cells visible.
+  const cellCentreX = labelOffset + (arrowCol + 0.5) * cellSize;
+  const cellCentreY = (arrowRow + 0.5) * cellSize;
+  // Arrow box: ~1.6 cells across, 2 cells tall — large enough to
+  // read at a glance, small enough to leave the surrounding cells
+  // visible (and pressable, on the rare chance a path of valid
+  // moves brushes up against it).
   const w = cellSize * 1.6;
   const h = cellSize * 2.2;
 
