@@ -445,6 +445,20 @@ export default function OnlineGamePage() {
             ribbon lives in the top bar (rendered above) so the board can
             occupy the full vertical space. */}
         <div className="lg:hidden">{ribbon}</div>
+        {/* Reserve the board's eventual footprint up-front so the
+            dynamic GameBoard chunk can paint into a pre-sized box.
+            Without this the lazy chunk arrives late and pushes
+            everything below it down — a 0.31 CLS hit on Lighthouse.
+            Width is 16.5 × cellSize (16 cells + the 0.5-cell row
+            label column), height is 16 cells + ~0.45 cell of column
+            labels above the grid. */}
+        <div
+          className="flex flex-col items-center"
+          style={{
+            minWidth: cellSize * 16.5,
+            minHeight: cellSize * 16.45,
+          }}
+        >
         <GameBoard
           state={displayState!}
           cellSize={cellSize}
@@ -461,6 +475,7 @@ export default function OnlineGamePage() {
           }
           onRotationHintClick={scrollToRotationSection}
         />
+        </div>
       </div>
 
       <GameHUD
