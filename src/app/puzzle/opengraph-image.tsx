@@ -14,6 +14,14 @@ import type { GamePiece } from '@/game/types';
 // branded thumbnail.
 
 export const runtime = 'nodejs';
+// Render per-request, never at build time. The OG image embeds the
+// live puzzle position so static generation would either bake in a
+// snapshot from the build moment or — when the build server has no
+// supabase env / no puzzle for today — feed `undefined` into the
+// satori renderer, which fails with "Cannot read properties of
+// undefined (reading 'trim')". `force-dynamic` makes Vercel call the
+// handler on every request.
+export const dynamic = 'force-dynamic';
 export const alt = 'Zaeer Imenet — Daily Puzzle';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
@@ -136,6 +144,13 @@ export default async function OpenGraphImage() {
                   const pieceTint = piece
                     ? piece.player === 1 ? PALETTE.p1Tint : PALETTE.p2Tint
                     : null;
+                  // Always render a non-empty string in the cell. Satori
+                  // walks children and calls .trim() on text nodes; an
+                  // empty cell that resolves to `undefined` (the result
+                  // of `piece && PIECE_EMOJI[piece.type]` when piece is
+                  // missing) crashes the renderer at build time.
+                  const glyph = piece ? (PIECE_EMOJI[piece.type] ?? '·') : '·';
+                  const showGlyph = !!piece;
                   return (
                     <div
                       key={col}
@@ -152,9 +167,10 @@ export default async function OpenGraphImage() {
                         borderBottom: row < BOARD_SIZE - 1 ? '1px solid rgba(255,255,255,0.04)' : undefined,
                         fontSize: cell - 8,
                         lineHeight: 1,
+                        color: showGlyph ? '#fff' : 'transparent',
                       }}
                     >
-                      {piece && PIECE_EMOJI[piece.type]}
+                      {glyph}
                     </div>
                   );
                 })}
