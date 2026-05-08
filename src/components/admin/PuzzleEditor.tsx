@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
-import type { AttackerMove, PuzzleSnapshotV1 } from '@/game/puzzleTypes';
+import type { AttackerMove, PuzzleSnapshotV1, PuzzleMove } from '@/game/puzzleTypes';
 import PositionEditor from './PositionEditor';
+import SolutionRecorder from './SolutionRecorder';
 
 // Minimal puzzle authoring UI. The position is built visually via
 // <PositionEditor/> (click-to-place pieces on a 16×16 board);
@@ -60,7 +61,10 @@ export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValida
   const [snapshot, setSnapshot] = useState<PuzzleSnapshotV1>(
     initial?.position ?? BLANK_SNAPSHOT
   );
-  const [solutionJson, setSolutionJson] = useState('[]');
+  // Recorded attacker line — built visually via <SolutionRecorder/>.
+  // We still hold the raw array in state (rather than a JSON string)
+  // so the validate request body uses the typed shape directly.
+  const [attackerLine, setAttackerLine] = useState<PuzzleMove[]>([]);
   const [difficulty, setDifficulty] = useState(initial?.difficulty ?? 3);
   const [theme, setTheme] = useState(initial?.theme ?? '');
   const [titleEn, setTitleEn] = useState(initial?.title_en ?? '');
@@ -77,16 +81,12 @@ export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValida
   async function onValidate() {
     setBusy(true);
     setResult(null);
-    let claimed: AttackerMove[];
-    try {
-      const parsed = JSON.parse(solutionJson);
-      if (!Array.isArray(parsed)) throw new Error('solution must be a JSON array of moves');
-      claimed = parsed as AttackerMove[];
-    } catch (e) {
+    if (attackerLine.length === 0) {
       setBusy(false);
-      setResult({ ok: false, message: `Solution is not valid JSON: ${e instanceof Error ? e.message : String(e)}` });
+      setResult({ ok: false, message: 'Record at least one attacker move before validating.' });
       return;
     }
+    const claimed = attackerLine as AttackerMove[];
     try {
       const res = await fetch('/api/admin/puzzles/validate', {
         method: 'POST',
@@ -208,17 +208,19 @@ export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValida
         <PositionEditor value={snapshot} onChange={setSnapshot} />
       </Section>
 
-      <Section title="Solution (JSON)">
+      <Section title="Solution">
         <p style={hint}>
-          Array of attacker moves: <code>{'[{ pieceId, target: { row, col }, rotateTo? }, ...]'}</code>.
-          Length sets the depth budget — three moves = mate-in-3.
+          Click your piece, then click a green target — that records one
+          attacker move. The local AI plays the defender between turns
+          just so you can see the next position; the validator on save
+          still proves every defender reply, not just the AI's.
+          Line length sets the depth budget — three attacker moves =
+          mate-in-3.
         </p>
-        <textarea
-          value={solutionJson}
-          onChange={e => setSolutionJson(e.target.value)}
-          rows={10}
-          spellCheck={false}
-          style={textareaStyle}
+        <SolutionRecorder
+          snapshot={snapshot}
+          value={attackerLine}
+          onChange={setAttackerLine}
         />
       </Section>
 
@@ -288,14 +290,6 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid #d1d5db',
   borderRadius: 4,
   fontSize: 14,
-};
-const textareaStyle: React.CSSProperties = {
-  width: '100%',
-  fontFamily: 'monospace',
-  fontSize: 12,
-  padding: 8,
-  border: '1px solid #d1d5db',
-  borderRadius: 4,
 };
 const primaryButton: React.CSSProperties = {
   padding: '8px 16px',
