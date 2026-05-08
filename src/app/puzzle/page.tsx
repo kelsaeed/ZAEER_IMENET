@@ -77,7 +77,12 @@ export default function PuzzlePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Top chrome shared across every state.
+  const isAdmin = !!profile?.is_admin;
+
+  // Top chrome shared across every state. Admins get a "Puzzle
+  // studio" pill next to the back arrow so they can jump into the
+  // composer from anywhere on the daily puzzle page — including
+  // when the page is showing "no puzzle today".
   const chrome = (
     <>
       <Link
@@ -94,6 +99,22 @@ export default function PuzzlePage() {
       >
         ←
       </Link>
+      {isAdmin && (
+        <Link
+          href="/admin/puzzles"
+          className="fixed top-3 z-30 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-transform hover:scale-105"
+          style={{
+            [isRTL ? 'right' : 'left']: 64,
+            background: theme.p2AccentBg,
+            border: `1px solid ${theme.p2AccentBorder}`,
+            color: theme.p2Color,
+            backdropFilter: 'blur(6px)',
+            top: 14,
+          } as React.CSSProperties}
+        >
+          🛡️ {t('admin.puzzles.openCta')}
+        </Link>
+      )}
       <div
         className="fixed top-3 z-30 flex items-center gap-2"
         style={{ [isRTL ? 'left' : 'right']: 12 } as React.CSSProperties}
@@ -113,7 +134,28 @@ export default function PuzzlePage() {
       {chrome}
 
       {load.kind === 'loading' && <CenteredCard><LoadingEmojis /></CenteredCard>}
-      {load.kind === 'no-puzzle' && <CenteredCard>{t('puzzle.noToday')}</CenteredCard>}
+      {load.kind === 'no-puzzle' && (
+        <CenteredCard>
+          <p style={{ marginBottom: isAdmin ? 16 : 0 }}>{t('puzzle.noToday')}</p>
+          {isAdmin && (
+            <Link
+              href="/admin/puzzles/new"
+              style={{
+                display: 'inline-block',
+                padding: '10px 20px',
+                borderRadius: 12,
+                background: theme.p1AccentBg,
+                border: `1px solid ${theme.p1AccentBorder}`,
+                color: theme.p1Color,
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              🛡️ {t('puzzle.createToday')}
+            </Link>
+          )}
+        </CenteredCard>
+      )}
       {load.kind === 'unavailable' && <CenteredCard>{t('puzzle.unavailable')}</CenteredCard>}
       {load.kind === 'error' && <CenteredCard>{load.message}</CenteredCard>}
 
