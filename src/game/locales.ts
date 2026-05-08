@@ -216,6 +216,7 @@ const en: Record<string, string> = {
   'hud.reviewBack': 'Step back',
   'hud.reviewForward': 'Step forward',
   'hud.reviewLive': 'Live',
+  'hud.reviewSlider': 'Jump to a turn in the match',
   'hud.settings': '⚙️',
 
   // Orientation labels
@@ -611,6 +612,7 @@ const ar: Record<string, string> = {
   'hud.reviewBack': 'خطوة للخلف',
   'hud.reviewForward': 'خطوة للأمام',
   'hud.reviewLive': 'الحالي',
+  'hud.reviewSlider': 'انتقل إلى دور معيّن في المباراة',
   'hud.settings': '⚙️',
 
   'orientation.horizontal': 'أفقي',

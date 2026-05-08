@@ -196,6 +196,8 @@ export default function GameHUD({
             onChange={e => onHistoryJumpTo(Number(e.target.value))}
             className="w-full"
             style={{ accentColor: theme.p1Color }}
+            aria-label={t('hud.reviewSlider')}
+            title={t('hud.reviewSlider')}
           />
         </div>
       )}

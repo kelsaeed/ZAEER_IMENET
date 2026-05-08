@@ -391,38 +391,50 @@ export const THEMES: Theme[] = [
     validMoveBorder: 'rgba(5,150,105,0.95)',
     attackFill: 'rgba(236,72,153,0.45)',                     // rose
     attackBorder: 'rgba(190,18,60,0.9)',
-    p1Color: '#b45309',                                      // rich amber-gold
-    p1Bg: 'rgba(251,191,36,0.28)',
-    p1BgSelected: 'rgba(251,191,36,0.6)',
-    p1Border: 'rgba(180,83,9,0.95)',
+    // Player accents are used both for piece colours AND for text on
+    // the HUD panel ("Player 1 Pieces", "Player 2 Pieces"). On a
+    // light theme the tone has to be dark enough for the text to pass
+    // WCAG AA contrast against the cream-rose panel background. The
+    // amber-700 / violet-700 originals failed Lighthouse's contrast
+    // audit; amber-800 (#92400e) and violet-800 (#5b21b6) clear it
+    // comfortably while still reading as distinct, premium accents
+    // on the board.
+    p1Color: '#92400e',                                      // deep amber
+    p1Bg: 'rgba(251,191,36,0.32)',
+    p1BgSelected: 'rgba(251,191,36,0.62)',
+    p1Border: 'rgba(146,64,14,0.95)',
     // Double-stack glow — outer halo + inner core — so pieces look
     // like they're emitting light rather than being lit by it.
-    p1Glow: '0 0 22px 8px rgba(251,191,36,0.85), 0 0 8px 2px rgba(180,83,9,0.65)',
-    p1AccentBg: 'linear-gradient(135deg, rgba(251,191,36,0.5), rgba(217,119,6,0.15))',
-    p1AccentBorder: 'rgba(180,83,9,0.7)',
-    p2Color: '#6d28d9',                                      // royal violet
-    p2Bg: 'rgba(167,139,250,0.28)',
-    p2BgSelected: 'rgba(167,139,250,0.6)',
-    p2Border: 'rgba(109,40,217,0.95)',
-    p2Glow: '0 0 22px 8px rgba(167,139,250,0.85), 0 0 8px 2px rgba(109,40,217,0.65)',
-    p2AccentBg: 'linear-gradient(135deg, rgba(167,139,250,0.5), rgba(91,33,182,0.15))',
-    p2AccentBorder: 'rgba(109,40,217,0.7)',
-    panelBg: 'linear-gradient(135deg, rgba(255,255,255,0.6), rgba(255,235,240,0.55))',
-    panelBorder: 'rgba(180,83,9,0.35)',
+    p1Glow: '0 0 22px 8px rgba(251,191,36,0.85), 0 0 8px 2px rgba(146,64,14,0.65)',
+    p1AccentBg: 'linear-gradient(135deg, rgba(251,191,36,0.55), rgba(146,64,14,0.18))',
+    p1AccentBorder: 'rgba(146,64,14,0.75)',
+    p2Color: '#5b21b6',                                      // deep violet
+    p2Bg: 'rgba(167,139,250,0.32)',
+    p2BgSelected: 'rgba(167,139,250,0.62)',
+    p2Border: 'rgba(91,33,182,0.95)',
+    p2Glow: '0 0 22px 8px rgba(167,139,250,0.85), 0 0 8px 2px rgba(91,33,182,0.65)',
+    p2AccentBg: 'linear-gradient(135deg, rgba(167,139,250,0.55), rgba(91,33,182,0.18))',
+    p2AccentBorder: 'rgba(91,33,182,0.75)',
+    panelBg: 'linear-gradient(135deg, rgba(255,255,255,0.7), rgba(255,235,240,0.65))',
+    panelBorder: 'rgba(146,64,14,0.4)',
     inputBg: '#fff8f3',
     inputText: '#2a0f3f',
-    buttonBg: 'rgba(255,255,255,0.55)',
-    buttonBorder: 'rgba(139,92,246,0.35)',
-    buttonRotateBg: 'rgba(251,191,36,0.4)',
-    buttonRotateBorder: 'rgba(180,83,9,0.7)',
-    buttonRotateText: '#92400e',
-    buttonEndTurnBg: 'rgba(244,114,182,0.35)',
-    buttonEndTurnBorder: 'rgba(190,18,60,0.6)',
+    buttonBg: 'rgba(255,255,255,0.7)',
+    buttonBorder: 'rgba(91,33,182,0.4)',
+    // Bumped from 0.4 → 0.55 so the dark-amber buttonRotateText
+    // ("🏠 Main Menu", rotation pills, the store CTA) sits on a
+    // saturated-enough background to clear contrast on the light
+    // panelBg underneath.
+    buttonRotateBg: 'rgba(251,191,36,0.55)',
+    buttonRotateBorder: 'rgba(146,64,14,0.75)',
+    buttonRotateText: '#7c2d12',
+    buttonEndTurnBg: 'rgba(244,114,182,0.5)',
+    buttonEndTurnBorder: 'rgba(190,18,60,0.7)',
     buttonEndTurnText: '#9f1239',
-    buttonSwitchBg: 'rgba(167,139,250,0.4)',
-    buttonSwitchBorder: 'rgba(109,40,217,0.7)',
-    buttonSwitchText: '#5b21b6',
-    selectedRing: '#d97706',
+    buttonSwitchBg: 'rgba(167,139,250,0.55)',
+    buttonSwitchBorder: 'rgba(91,33,182,0.75)',
+    buttonSwitchText: '#4c1d95',
+    selectedRing: '#7c2d12',
   },
   {
     id: 'royal',
