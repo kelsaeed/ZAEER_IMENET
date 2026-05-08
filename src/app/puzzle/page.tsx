@@ -614,7 +614,12 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
         )}
 
         {status === 'solved' && (
-          <SolvedCard onMenu={() => location.assign('/')} onPlayAgain={() => location.reload()} />
+          <SolvedCard
+            onMenu={() => location.assign('/')}
+            onPlayAgain={() => location.reload()}
+            wrongCount={wrongCount}
+            puzzleDate={puzzle.puzzle_date}
+          />
         )}
 
         {/* Text fallback for the principal line — shown whenever a line
@@ -704,8 +709,48 @@ function StreakChip() {
   );
 }
 
-function SolvedCard({ onMenu, onPlayAgain }: { onMenu: () => void; onPlayAgain: () => void }) {
+function SolvedCard({
+  onMenu,
+  onPlayAgain,
+  wrongCount,
+  puzzleDate,
+}: {
+  onMenu: () => void;
+  onPlayAgain: () => void;
+  wrongCount: number;
+  puzzleDate: string;
+}) {
   const { theme, t } = useSettings();
+  const [copied, setCopied] = useState(false);
+
+  // Share line. Picks a flavour based on wrongCount so a clean
+  // first-try solve reads differently from a hard-fought one. The
+  // shared URL points at /puzzle (today's puzzle) — the OG image at
+  // /puzzle/opengraph-image is generated server-side off the live
+  // puzzle position so the friend sees the actual board.
+  async function handleShare() {
+    const url = typeof window !== 'undefined' ? `${window.location.origin}/puzzle` : 'https://zaeer-imenet.vercel.app/puzzle';
+    const headline = wrongCount === 0
+      ? `🏆 Solved today's Zaeer Imenet puzzle on the first try!`
+      : `🏆 Solved today's Zaeer Imenet puzzle (${wrongCount + 1} tries).`;
+    const text = `${headline} Try it: ${url}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Daily Puzzle', text, url });
+        return;
+      }
+    } catch {
+      // User cancelled or share unavailable — fall through to copy.
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      /* clipboard blocked — silent */
+    }
+  }
+
   return (
     <motion.div
       initial={{ scale: 0.96, opacity: 0 }}
@@ -719,12 +764,18 @@ function SolvedCard({ onMenu, onPlayAgain }: { onMenu: () => void; onPlayAgain: 
       }}
     >
       <div style={{ fontSize: 32, marginBottom: 4 }}>🏆</div>
-      <div style={{ fontWeight: 800, fontSize: 18, color: theme.p1Color, marginBottom: 8 }}>
+      <div style={{ fontWeight: 800, fontSize: 18, color: theme.p1Color, marginBottom: 4 }}>
         {t('puzzle.solved')}
       </div>
-      <div className="flex gap-2 justify-center">
+      <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>
+        {puzzleDate}
+      </div>
+      <div className="flex gap-2 justify-center flex-wrap">
+        <button onClick={handleShare} style={smallBtnAccent(theme)}>
+          {copied ? `✓ ${t('puzzle.shareCopied')}` : `📤 ${t('puzzle.share')}`}
+        </button>
         <button onClick={onMenu} style={smallBtn(theme)}>{t('puzzle.backToMenu')}</button>
-        <button onClick={onPlayAgain} style={smallBtnAccent(theme)}>↻</button>
+        <button onClick={onPlayAgain} style={smallBtn(theme)}>↻</button>
       </div>
     </motion.div>
   );

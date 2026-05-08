@@ -38,6 +38,8 @@ const en: Record<string, string> = {
   'puzzle.showingSolution': 'Here’s the winning line:',
   'puzzle.signInToPlay': 'Sign in to play the daily puzzle.',
   'puzzle.signIn': 'Sign in',
+  'puzzle.share': 'Share',
+  'puzzle.shareCopied': 'Copied!',
 
   // Match-chat emoji reactions
   'reactions.muteHint': 'Mute reactions from others',
@@ -467,6 +469,8 @@ const ar: Record<string, string> = {
   'puzzle.showingSolution': 'هذا هو الحل:',
   'puzzle.signInToPlay': 'سجّل الدخول للعب أحجية اليوم.',
   'puzzle.signIn': 'تسجيل الدخول',
+  'puzzle.share': 'شارك',
+  'puzzle.shareCopied': 'تم النسخ!',
 
   // Match-chat emoji reactions
   'reactions.muteHint': 'كتم تفاعلات الآخرين',
