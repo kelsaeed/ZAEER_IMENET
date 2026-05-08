@@ -22,13 +22,26 @@
  * evergreen browsers (Chrome 94+, Firefox 97+, Safari 18.2+). */
 html {
   scrollbar-gutter: stable;
+  /* Belt and suspenders for the horizontal-pan lock below — html and
+   * body together cover Mobile Safari edge cases where scroll on one
+   * leaks into the other. */
+  overflow-x: clip;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  overflow-x: hidden;
+  /* `overflow-x: clip` is stronger than `hidden`: the user can't
+   * scroll/pan the X axis even if a child overflows. `pan-y` +
+   * `pinch-zoom` on touch-action lets vertical scroll and pinch
+   * zoom work while killing the sideways drag that was letting
+   * users push the whole page (and the board) left/right on
+   * mobile. `overscroll-behavior-x: none` also blocks the bounce
+   * that some browsers show on edge-pulls. */
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  touch-action: pan-y pinch-zoom;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -301,32 +314,6 @@ input, select, textarea {
   mix-blend-mode: screen;
 }
 
-/* Per-half placement modifiers — used by SplitBackground when the two
- * players have different themes so each player's premium decor is
- * scoped to their side of the board. The full-screen variant is
- * suppressed in that case (see body.zi-split-active rule below). */
-.zi-celestial-root.zi-celestial-half-top {
-  inset: 0 0 50% 0;
-}
-.zi-celestial-root.zi-celestial-half-bottom {
-  inset: 50% 0 0 0;
-}
-/* Inner elements use viewport units for height; in a half-height
- * layer they'd dominate. Compress them so each half feels balanced. */
-.zi-celestial-root.zi-celestial-half-top .zi-celestial-bloom,
-.zi-celestial-root.zi-celestial-half-bottom .zi-celestial-bloom {
-  height: 38vh;
-}
-.zi-celestial-root.zi-celestial-half-top .zi-celestial-curtain,
-.zi-celestial-root.zi-celestial-half-bottom .zi-celestial-curtain {
-  height: 26vh;
-}
-/* SplitBackground sets this class while showing two distinct themes.
- * The full-screen layout-level decor stays mounted but goes invisible
- * so the per-half decor can take over without doubling. */
-body.zi-split-active .zi-celestial-root.zi-celestial-full {
-  display: none;
-}
 
 .zi-celestial-bloom {
   position: absolute;
@@ -491,6 +478,96 @@ body.zi-split-active .zi-celestial-root.zi-celestial-full {
   .zi-celestial-ribbon,
   .zi-celestial-trail,
   .zi-celestial-diagonal { animation: none !important; }
+}
+
+/* ─── Board-scoped celestial decor ─────────────────────────────────────
+ * Smaller cousin of the full-screen .zi-celestial-* set, scoped to
+ * a half of the board (rendered by <BoardDecor/>). Sparkles, short
+ * trails, and bottom-left → top-right diagonals — but sized in
+ * percentages of the half-rectangle so the same effect works for a
+ * 28px cell on mobile and an 80px cell on a wide desktop.
+ *
+ * Both viewers see this overlay because it sits inside the shared
+ * board, so the celestial player's half looks magical from either
+ * side of the table. */
+.zi-board-decor-half {
+  position: absolute;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+  mix-blend-mode: screen;
+}
+
+.zi-board-sparkle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  filter: blur(0.3px);
+  box-shadow: 0 0 5px currentColor, 0 0 9px currentColor;
+  animation-name: zi-celestial-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: opacity, transform;
+}
+
+.zi-board-trail {
+  position: absolute;
+  height: 1px;
+  width: 35%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.95), transparent);
+  box-shadow: 0 0 6px rgba(253,224,71,0.6), 0 0 12px rgba(244,114,182,0.35);
+  transform-origin: left center;
+  opacity: 0;
+  animation-name: zi-board-trail;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes zi-board-trail {
+  0%   { transform: rotate(var(--zi-bt-angle, -22deg)) translateX(-30%); opacity: 0; }
+  10%  { opacity: 1; }
+  60%  { opacity: 0.9; }
+  100% { transform: rotate(var(--zi-bt-angle, -22deg)) translateX(140%); opacity: 0; }
+}
+
+.zi-board-diagonal {
+  position: absolute;
+  bottom: -10%;
+  left: -25%;
+  width: 130%;
+  height: 1.2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(253,224,71,0.0)  10%,
+    rgba(253,224,71,0.85) 28%,
+    rgba(244,114,182,0.95) 50%,
+    rgba(167,139,250,0.85) 72%,
+    rgba(110,231,183,0.0) 90%,
+    transparent 100%
+  );
+  box-shadow: 0 0 8px rgba(253,224,71,0.55), 0 0 14px rgba(244,114,182,0.35);
+  filter: blur(0.4px);
+  transform-origin: left center;
+  opacity: 0;
+  animation-name: zi-board-diagonal;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes zi-board-diagonal {
+  0%   { transform: rotate(var(--zi-bd-angle, -28deg)) translateX(-25%); opacity: 0; }
+  10%  { opacity: 0.85; }
+  90%  { opacity: 0.85; }
+  100% { transform: rotate(var(--zi-bd-angle, -28deg)) translateX(140%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zi-board-sparkle,
+  .zi-board-trail,
+  .zi-board-diagonal { animation: none !important; }
 }
 
 /* Decorative icons / emojis carry `aria-hidden="true"` by convention.

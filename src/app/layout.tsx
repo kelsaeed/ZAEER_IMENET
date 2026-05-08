@@ -27,11 +27,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <UserProvider>
             <ThemeProfileSync />
             {children}
-            {/* Premium-theme overlay. Mounted last so its position:
-                fixed layer paints above the page's bgGradient (which
-                lives on the page wrapper). Hidden by CSS while
-                SplitBackground is showing two distinct themes — see
-                body.zi-split-active. */}
+            {/* Page-wide premium decor for the local viewer's theme.
+                Per-player decor on the board itself lives in
+                <BoardDecor/> mounted inside <GameBoard/>. */}
             <ThemeDecor />
             {/* Floating banner that appears whenever the user is
                 previewing a theme from the store. */}

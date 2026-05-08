@@ -1,6 +1,7 @@
 'use client';
 import { GameState } from '@/game/types';
 import BoardCell from './BoardCell';
+import BoardDecor from './BoardDecor';
 import { BOARD_SIZE, colLabel, rowLabel } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -97,6 +98,14 @@ export default function GameBoard({ state, cellSize, onCellClick, tutorialHighli
             ))}
           </div>
         ))}
+
+        {/* Premium-theme decor (sparkles + diagonals) scoped to each
+            player's half. Sits inside the board container so both
+            viewers see the same animations on the same half — the
+            celestial player's territory looks magical from either
+            seat at the table. Pointer-events: none + screen blend so
+            it never intercepts taps and never washes out pieces. */}
+        <BoardDecor cellSize={cellSize} />
 
         {/* Tutorial pulse — soft glowing ring on the lesson cell. */}
         {tutorialHighlight && (

@@ -4,30 +4,14 @@ import { useSettings } from '@/hooks/useSettings';
 
 /** Layout-level theme decoration. Reads the local viewer's active
  *  theme + its decor_kind from the catalog. Renders nothing for
- *  themes whose decor_kind is 'none' (or unknown). When SplitBackground
- *  is showing two different themes it sets `body.zi-split-active`,
- *  which hides this full-screen layer (per-half decor takes over). */
+ *  themes whose decor_kind is 'none'. The per-half / per-player
+ *  decor lives on the board itself (see <BoardDecor/>) — this
+ *  layer covers everything *outside* the board so the viewer's
+ *  whole page feels like the celestial theme. */
 export default function ThemeDecor() {
   const { activeThemeId, getDecorKind } = useSettings();
   const decorKind = getDecorKind(activeThemeId);
 
-  if (decorKind === 'none') return null;
-  return <ThemeDecorLayer decorKind={decorKind} placement="full" />;
-}
-
-interface LayerProps {
-  decorKind: string;
-  /** 'full' = entire viewport (used at layout level outside matches).
-   *  'half-top' / 'half-bottom' = one half of the viewport (used by
-   *  SplitBackground when each player has a different theme). */
-  placement: 'full' | 'half-top' | 'half-bottom';
-}
-
-/** The actual rendering. Public so SplitBackground can mount instances
- *  per-player half. Each placement variant scopes the overlay to its
- *  region via different CSS rules; the contents (sparkles, ribbons,
- *  bloom, curtain, trails) are identical. */
-export function ThemeDecorLayer({ decorKind, placement }: LayerProps) {
   // Math.random() differs between SSR and the first client render;
   // defer the field generation to a mount effect to avoid a hydration
   // mismatch warning.
@@ -56,10 +40,9 @@ export function ThemeDecorLayer({ decorKind, placement }: LayerProps) {
     { top: '86%', delay: '12s', duration: '13s' },
   ], []);
 
-  // Short shooting trails. All angles negative + leftward `left` +
-  // rightward translateX in the keyframe → each trail walks
-  // bottom-left → top-right. Doubled in count from the original
-  // four for a denser feel.
+  // Bottom-left → top-right shooting trails. All angles negative + a
+  // leftward `left` and rightward translateX in the keyframe means
+  // each trail walks BL→TR.
   const trails = useMemo(() => [
     { top: '12%', left: '-25vw', angle: '-15deg', delay: '0.5s', duration: '6s'   },
     { top: '24%', left: '-25vw', angle: '-22deg', delay: '2s',   duration: '7s'   },
@@ -71,10 +54,6 @@ export function ThemeDecorLayer({ decorKind, placement }: LayerProps) {
     { top: '92%', left: '-25vw', angle: '-16deg', delay: '14s',  duration: '6.5s' },
   ], []);
 
-  // Long bottom-left → top-right ribbons. Different from the short
-  // trails: these stretch most of the screen width and read as
-  // continuous "lines" rather than streaks. Five at varied angles
-  // and delays so the diagonal cadence feels organic, not parallel.
   const diagonals = useMemo(() => [
     { angle: '-26deg', delay: '0s',  duration: '14s' },
     { angle: '-32deg', delay: '4s',  duration: '17s' },
@@ -86,13 +65,8 @@ export function ThemeDecorLayer({ decorKind, placement }: LayerProps) {
   if (decorKind !== 'celestial') return null;
   if (!mounted) return null;
 
-  const placementClass =
-    placement === 'half-top'    ? 'zi-celestial-half-top'    :
-    placement === 'half-bottom' ? 'zi-celestial-half-bottom' :
-    'zi-celestial-full';
-
   return (
-    <div className={`zi-celestial-root ${placementClass}`} aria-hidden>
+    <div className="zi-celestial-root zi-celestial-full" aria-hidden>
       <div className="zi-celestial-bloom" />
       <div className="zi-celestial-curtain" />
       {sparkles.map(s => (
