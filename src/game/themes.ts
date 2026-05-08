@@ -415,7 +415,14 @@ export const THEMES: Theme[] = [
     p2Glow: '0 0 22px 8px rgba(167,139,250,0.85), 0 0 8px 2px rgba(91,33,182,0.65)',
     p2AccentBg: 'linear-gradient(135deg, rgba(167,139,250,0.55), rgba(91,33,182,0.18))',
     p2AccentBorder: 'rgba(91,33,182,0.75)',
-    panelBg: 'linear-gradient(135deg, rgba(255,255,255,0.7), rgba(255,235,240,0.65))',
+    // Near-solid panel surface so colored label text (Player 1/2
+    // Pieces, hud.rotateTo etc.) doesn't have to fight the
+    // translucent compositing path. Lighthouse computes contrast
+    // against the rendered surface, which on a 0.7-alpha panel over
+    // a light page meant amber-800 / violet-800 was borderline AA.
+    // 0.95 alpha keeps a hint of the page bg showing through but
+    // gets us a deterministic light surface for contrast.
+    panelBg: 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,242,247,0.95))',
     panelBorder: 'rgba(146,64,14,0.4)',
     inputBg: '#fff8f3',
     inputText: '#2a0f3f',

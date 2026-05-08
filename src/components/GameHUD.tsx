@@ -348,12 +348,16 @@ export default function GameHUD({
       {[1, 2].map(player => {
         const playerPieces = player === 1 ? p1Pieces : p2Pieces;
         const color = player === 1 ? theme.p1Color : theme.p2Color;
-        const bcolor = player === 1
-          ? `color-mix(in srgb, ${theme.p1Color} 15%, transparent)`
-          : `color-mix(in srgb, ${theme.p2Color} 15%, transparent)`;
-        const border = player === 1
-          ? `1px solid color-mix(in srgb, ${theme.p1Color} 30%, transparent)`
-          : `1px solid color-mix(in srgb, ${theme.p2Color} 30%, transparent)`;
+        // Mix the per-player tint against `inputBg` (always a solid
+        // colour across every theme) rather than `transparent`. With
+        // a transparent base, the rendered bg is whatever the panel
+        // + page show through, which compounds translucency on the
+        // celestial light theme and tanked the WCAG contrast for the
+        // amber/violet label text. Mixing against a solid means the
+        // effective surface is deterministic and the label clears AA
+        // on every theme.
+        const bcolor = `color-mix(in srgb, ${color} 18%, ${theme.inputBg})`;
+        const border = `1px solid color-mix(in srgb, ${color} 40%, ${theme.inputBg})`;
         return (
           <div key={player} style={{ background: bcolor, border, padding: sp.padMed, borderRadius: sp.radius }}>
             <div className="font-semibold mb-2" style={{ color, fontSize: fs.base }}>
