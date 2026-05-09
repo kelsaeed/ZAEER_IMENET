@@ -8,6 +8,7 @@ import type { AiLevel, TimeControl } from '@/game/types';
 import AuthBadge from './AuthBadge';
 import NotificationBell from './NotificationBell';
 import OfflineGameModal from './OfflineGameModal';
+import StoryModal from './StoryModal';
 
 const AnimatedBackground = dynamic(() => import('./AnimatedBackground'), { ssr: false });
 
@@ -28,6 +29,9 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
   const { t, theme, isRTL } = useSettings();
   const [isMounted, setIsMounted] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
+  // Story video popup — opens when the user taps the "View Story"
+  // button below the tutorial / store row on the home page.
+  const [storyOpen, setStoryOpen] = useState(false);
   // First-load tutorial nudge — small dismissable toast for users who've
   // never opened the tour. Visiting /tutorial sets the flag, so anyone
   // who's already taken (or skipped) the tour stops seeing this.
@@ -221,6 +225,21 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           >
             {t('app.themeStore')}
           </Link>
+          {/* View Story — opens the StoryModal popup with the intro
+              video. The user can dismiss the video at any time using
+              the Skip button or the corner ✕. */}
+          <button
+            type="button"
+            onClick={() => setStoryOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
+            style={{
+              background: theme.panelBg,
+              border: `1px solid ${theme.p2AccentBorder}`,
+              color: theme.p2Color,
+            }}
+          >
+            🎬 View Story
+          </button>
         </motion.div>
 
         {/* Two hero buttons: Online (routes to /play) + Offline (opens
@@ -288,6 +307,9 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           onStart(aiLevel, tc);
         }}
       />
+
+      {/* Story video popup. Driven by the "View Story" pill above. */}
+      <StoryModal open={storyOpen} onClose={() => setStoryOpen(false)} />
 
       {/* First-load nudge toward the tutorial. Doesn't block anything —
           just floats at the bottom of the screen until the user opens
