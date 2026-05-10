@@ -29,8 +29,6 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
   const { t, theme, isRTL } = useSettings();
   const [isMounted, setIsMounted] = useState(false);
   const [offlineOpen, setOfflineOpen] = useState(false);
-  // Story video popup — opens when the user taps the "View Story"
-  // button below the tutorial / store row on the home page.
   const [storyOpen, setStoryOpen] = useState(false);
   // First-load tutorial nudge — small dismissable toast for users who've
   // never opened the tour. Visiting /tutorial sets the flag, so anyone
@@ -225,17 +223,18 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           >
             {t('app.themeStore')}
           </Link>
-          {/* View Story — opens the StoryModal popup with the intro
-              video. The user can dismiss the video at any time using
-              the Skip button or the corner ✕. */}
+          {/* View Story — opens a popup with the intro video. Uses the
+              same bright buttonRotate styling as Theme Store so it
+              reads as a sibling CTA, not a faded afterthought. */}
           <button
             type="button"
             onClick={() => setStoryOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
             style={{
-              background: theme.panelBg,
-              border: `1px solid ${theme.p2AccentBorder}`,
-              color: theme.p2Color,
+              background: theme.buttonRotateBg,
+              border: `1px solid ${theme.buttonRotateBorder}`,
+              color: theme.buttonRotateText,
+              boxShadow: `0 4px 14px ${theme.buttonRotateBorder}`,
             }}
           >
             🎬 View Story
@@ -308,7 +307,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
         }}
       />
 
-      {/* Story video popup. Driven by the "View Story" pill above. */}
+      {/* Story video popup, controlled by the View Story pill. */}
       <StoryModal open={storyOpen} onClose={() => setStoryOpen(false)} />
 
       {/* First-load nudge toward the tutorial. Doesn't block anything —
