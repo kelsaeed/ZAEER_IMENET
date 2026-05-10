@@ -84,11 +84,15 @@ export default function StoryModal({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
           className="fixed inset-0 z-[100] flex items-center justify-center px-3 py-4 sm:p-6"
-          // Soft vignette only — the home-page animations stay visible
-          // through the gap, which is exactly what the brief asked for.
+          // Frosted-glass backdrop — heavy blur on whatever is behind
+          // (the home page emojis + gradient) plus a soft tint, so it
+          // reads as glass instead of a flat overlay. The home-page
+          // motion still shimmers through the blur.
           style={{
             background:
-              'radial-gradient(circle at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.35) 80%, rgba(0,0,0,0.55) 100%)',
+              'radial-gradient(circle at center, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.25) 70%, rgba(0,0,0,0.45) 100%)',
+            backdropFilter: 'blur(18px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(18px) saturate(160%)',
             // Use dvh so iOS Safari's collapsing URL bar doesn't crop
             // the bottom of the popup.
             minHeight: '100dvh',
@@ -126,34 +130,77 @@ export default function StoryModal({
                 [isRTL ? 'left' : 'right']: -2,
                 width: 38,
                 height: 38,
-                background: 'rgba(0,0,0,0.85)',
+                // Frosted-glass orb — same vocabulary as the card so
+                // the close button feels like part of the same surface.
+                background: 'rgba(255,255,255,0.12)',
                 color: '#fff',
-                border: `1.5px solid ${theme.p1Color}`,
-                boxShadow: `0 4px 14px rgba(0,0,0,0.5)`,
-                backdropFilter: 'blur(6px)',
+                border: `1px solid rgba(255,255,255,0.35)`,
+                boxShadow: [
+                  `0 6px 18px rgba(0,0,0,0.5)`,
+                  `inset 0 1px 0 rgba(255,255,255,0.3)`,
+                  `0 0 0 2px ${theme.p1Color}33`,
+                ].join(', '),
+                backdropFilter: 'blur(12px) saturate(160%)',
+                WebkitBackdropFilter: 'blur(12px) saturate(160%)',
               } as React.CSSProperties}
             >
               ✕
             </button>
 
-            {/* Square video frame — pure iframe, nothing layered on top
-                so Drive's controls have the full surface to themselves. */}
+            {/* Square video frame — frosted-glass shell wrapping the
+                Drive iframe. The padding lets a thin glass border show
+                around the video, and the inner inset shadows + top
+                highlight sell the "real glass" look without obscuring
+                the player. */}
             <div
               className="relative rounded-2xl sm:rounded-3xl overflow-hidden"
               style={{
                 aspectRatio: '1 / 1',
-                background: '#000',
-                border: `2px solid ${theme.p1Color}`,
-                boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.08)`,
+                padding: 4,
+                // Translucent gradient instead of solid colour — the
+                // home-page glow shows through the edges so the card
+                // reads as glass rather than a black box with a border.
+                background: `linear-gradient(135deg, ${theme.p1Color}55 0%, rgba(255,255,255,0.08) 50%, ${theme.selectedRing}55 100%)`,
+                backdropFilter: 'blur(14px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(14px) saturate(180%)',
+                border: `1px solid rgba(255,255,255,0.22)`,
+                boxShadow: [
+                  // Outer soft shadow grounds the card
+                  `0 18px 40px rgba(0,0,0,0.45)`,
+                  // Inner top highlight — the "wet glass" sheen
+                  `inset 0 1px 0 rgba(255,255,255,0.35)`,
+                  // Inner bottom shadow — gives the glass depth
+                  `inset 0 -1px 0 rgba(0,0,0,0.25)`,
+                ].join(', '),
               }}
             >
-              <iframe
-                src={embedSrc}
-                title="Story video"
-                allow="autoplay; encrypted-media; fullscreen"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full"
-                style={{ border: 0, background: '#000' }}
+              {/* Inner clip wraps the iframe in a rounded rect so the
+                  glass padding around it is visible. */}
+              <div
+                className="relative w-full h-full rounded-xl sm:rounded-2xl overflow-hidden"
+                style={{ background: '#000' }}
+              >
+                <iframe
+                  src={embedSrc}
+                  title="Story video"
+                  allow="autoplay; encrypted-media; fullscreen"
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full"
+                  style={{ border: 0, background: '#000' }}
+                />
+              </div>
+
+              {/* Diagonal sheen across the top-left quarter — purely
+                  decorative, sells the glass effect. Pointer-events
+                  none so it never blocks Drive's controls. */}
+              <div
+                aria-hidden
+                className="absolute inset-0 rounded-2xl sm:rounded-3xl pointer-events-none"
+                style={{
+                  background:
+                    'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0) 70%, rgba(255,255,255,0.06) 100%)',
+                  mixBlendMode: 'screen',
+                }}
               />
             </div>
 
