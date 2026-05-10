@@ -18,14 +18,17 @@ interface Props {
  * around the edges so the story feels like part of the experience
  * instead of a heavy modal.
  *
- * - No loading screen: the iframe is rendered immediately and the
- *   surrounding glow is the only visible "wait" state.
- * - Autoplay is requested via the Drive URL (`?autoplay=1`). Some
- *   browsers may still require a single tap because of their autoplay
- *   policies; Drive falls back to its own play button in that case.
- * - Transparent backdrop: only a soft vignette dim — the home-page
- *   animations remain visible and animated behind the popup.
- * - Skip Story / corner ✕ / click-outside / Esc all dismiss.
+ * Layout decisions for mobile:
+ *  - The iframe sits on its own (square) so Drive's bottom control bar
+ *    has the full width to itself. The Skip Story CTA lives in a
+ *    separate strip BELOW the video so users can never tap it by
+ *    accident when reaching for Drive's volume / settings.
+ *  - The close ✕ is enlarged and positioned just outside the video so
+ *    it never overlaps the Drive player chrome.
+ *  - Card sizing uses a 92vw / 80vh / 560px clamp so it fills the
+ *    iPhone screen comfortably and tops out on desktop.
+ *
+ * Dismiss: Skip Story / corner ✕ / click-outside / Esc.
  */
 export default function StoryModal({
   open,
@@ -44,6 +47,16 @@ export default function StoryModal({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  // While the modal is open we lock body scroll so flicks inside the
+  // popup don't accidentally scroll the home page underneath. Restored
+  // on unmount and on close.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
 
   // Translation fallbacks — these keys may not exist yet, so we resolve
   // them and use sensible defaults if they come back as the raw key.
@@ -70,46 +83,70 @@ export default function StoryModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6"
+          className="fixed inset-0 z-[100] flex items-center justify-center px-3 py-4 sm:p-6"
           // Soft vignette only — the home-page animations stay visible
           // through the gap, which is exactly what the brief asked for.
           style={{
             background:
               'radial-gradient(circle at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.35) 80%, rgba(0,0,0,0.55) 100%)',
+            // Use dvh so iOS Safari's collapsing URL bar doesn't crop
+            // the bottom of the popup.
+            minHeight: '100dvh',
           }}
           onClick={onClose}
           dir={isRTL ? 'rtl' : 'ltr'}
         >
-          {/* Floating square card — outer wrapper carries the pulsing
-              colored glow so the card looks like it's lit from behind. */}
+          {/* Floating card. Two-row layout: square video on top, Skip
+              Story strip below — completely separate from the iframe so
+              Drive's control bar stays clean. */}
           <motion.div
             key="story-card"
-            initial={{ scale: 0.9, opacity: 0, y: 12 }}
+            initial={{ scale: 0.92, opacity: 0, y: 12 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 12 }}
+            exit={{ scale: 0.92, opacity: 0, y: 12 }}
             transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-            className="relative"
+            className="relative flex flex-col items-stretch"
             style={{
-              filter: `drop-shadow(0 0 30px ${theme.p1Color}99) drop-shadow(0 0 90px ${theme.selectedRing}55)`,
+              filter: `drop-shadow(0 0 26px ${theme.p1Color}99) drop-shadow(0 0 80px ${theme.selectedRing}55)`,
+              // Card width drives both the square video AND the Skip
+              // strip below. Clamp keeps it square-ish on portrait
+              // phones without overflowing on tiny screens.
+              width: 'min(92vw, 80vh, 520px)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="relative rounded-3xl overflow-hidden"
+            {/* Close (✕) — top-right, ABOVE the iframe so it never
+                covers Drive's own UI. Enlarged for thumb-friendly taps. */}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={closeAria}
+              className="absolute -top-2 z-20 rounded-full inline-flex items-center justify-center text-base font-bold transition-transform hover:scale-110 active:scale-95"
               style={{
-                // Square — capped to whichever of the viewport's
-                // dimensions is smaller, so the card always fits.
-                width: 'min(92vw, 80vh, 560px)',
-                height: 'min(92vw, 80vh, 560px)',
+                [isRTL ? 'left' : 'right']: -2,
+                width: 38,
+                height: 38,
+                background: 'rgba(0,0,0,0.85)',
+                color: '#fff',
+                border: `1.5px solid ${theme.p1Color}`,
+                boxShadow: `0 4px 14px rgba(0,0,0,0.5)`,
+                backdropFilter: 'blur(6px)',
+              } as React.CSSProperties}
+            >
+              ✕
+            </button>
+
+            {/* Square video frame — pure iframe, nothing layered on top
+                so Drive's controls have the full surface to themselves. */}
+            <div
+              className="relative rounded-2xl sm:rounded-3xl overflow-hidden"
+              style={{
+                aspectRatio: '1 / 1',
                 background: '#000',
                 border: `2px solid ${theme.p1Color}`,
                 boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.08)`,
               }}
             >
-              {/* The Drive embed — rendered immediately at full opacity
-                  so there's no visible loading screen swap. While it's
-                  fetching, the user just sees the dark card with the
-                  glowing border. */}
               <iframe
                 src={embedSrc}
                 title="Story video"
@@ -118,51 +155,31 @@ export default function StoryModal({
                 className="absolute inset-0 w-full h-full"
                 style={{ border: 0, background: '#000' }}
               />
+            </div>
 
-              {/* Close (✕) — top corner, floats above the iframe. */}
+            {/* Skip Story strip — its own row below the video, well
+                clear of Drive's bottom toolbar. Centered, full-width
+                tappable area on mobile. */}
+            <div className="mt-3 sm:mt-4 flex justify-center">
               <button
                 type="button"
                 onClick={onClose}
-                aria-label={closeAria}
-                className="absolute top-3 z-10 rounded-full w-9 h-9 inline-flex items-center justify-center text-sm font-bold transition-transform hover:scale-110 active:scale-95"
+                className="inline-flex items-center justify-center gap-2 rounded-full font-bold transition-transform hover:scale-105 active:scale-95"
                 style={{
-                  [isRTL ? 'left' : 'right']: 12,
-                  background: 'rgba(0,0,0,0.6)',
-                  color: '#fff',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  backdropFilter: 'blur(6px)',
+                  // Wide enough to be obvious, but not full width — a
+                  // pill feels more like an action than a footer.
+                  minWidth: 180,
+                  padding: '12px 22px',
+                  fontSize: 15,
+                  background: `linear-gradient(135deg, ${theme.p1Color}, ${theme.selectedRing})`,
+                  color: '#000',
+                  border: 'none',
+                  boxShadow: `0 6px 20px ${theme.p1Color}88, 0 0 0 1px rgba(255,255,255,0.15) inset`,
                 }}
               >
-                ✕
+                <span aria-hidden style={{ fontSize: 16 }}>⏭</span>
+                {skipLabel}
               </button>
-
-              {/* Skip Story — floats over the bottom of the iframe on a
-                  soft gradient so it's always reachable without taking
-                  space away from the video. */}
-              <div
-                className="absolute bottom-0 left-0 right-0 z-10 flex justify-center px-4 pb-4 pt-10"
-                style={{
-                  background:
-                    'linear-gradient(0deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%)',
-                  pointerEvents: 'none',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
-                  style={{
-                    background: `linear-gradient(135deg, ${theme.p1Color}, ${theme.selectedRing})`,
-                    color: '#000',
-                    border: 'none',
-                    boxShadow: `0 6px 20px ${theme.p1Color}88, 0 0 0 1px rgba(255,255,255,0.15) inset`,
-                    pointerEvents: 'auto',
-                  }}
-                >
-                  <span aria-hidden>⏭</span>
-                  {skipLabel}
-                </button>
-              </div>
             </div>
           </motion.div>
         </motion.div>
