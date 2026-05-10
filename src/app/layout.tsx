@@ -1,42 +1,48 @@
-import type { Metadata, Viewport } from 'next';
-import './globals.css';
-import { SettingsProvider } from '@/hooks/useSettings';
-import { UserProvider } from '@/hooks/useUser';
-import ThemeProfileSync from '@/components/ThemeProfileSync';
-import ThemeDecor from '@/components/ThemeDecor';
-import PreviewBanner from '@/components/PreviewBanner';
+import type React from "react"
+import type { Metadata } from "next"
+import { Geist, Geist_Mono } from "next/font/google"
+import { Analytics } from "@vercel/analytics/next"
+import OfferModal from "@/components/offer-modal"
+import "./globals.css"
+
+const _geist = Geist({ subsets: ["latin"] })
+const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: 'Zaeer Imenet — Ancient Strategy Game',
-  description: 'A 16×16 two-player strategy board game with 6 unique piece types, life cycle combat, and tactical gameplay.',
-};
+  title: "Hams - Luxe Skincare & Beauty",
+  description: "Discover premium skincare products with visible results. Premium cosmetics and beauty solutions.",
+  generator: "v0.app",
+  icons: {
+    icon: [
+      {
+        url: "/icon-light-32x32.png",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/icon-dark-32x32.png",
+        media: "(prefers-color-scheme: dark)",
+      },
+      {
+        url: "/icon.svg",
+        type: "image/svg+xml",
+      },
+    ],
+    apple: "/apple-icon.png",
+  },
+}
 
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 5,
-  themeColor: '#0a0a14',
-  viewportFit: 'cover',
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
   return (
     <html lang="en">
-      <body>
-        <SettingsProvider>
-          <UserProvider>
-            <ThemeProfileSync />
-            {children}
-            {/* Page-wide premium decor for the local viewer's theme.
-                Per-player decor on the board itself lives in
-                <BoardDecor/> mounted inside <GameBoard/>. */}
-            <ThemeDecor />
-            {/* Floating banner that appears whenever the user is
-                previewing a theme from the store. */}
-            <PreviewBanner />
-          </UserProvider>
-        </SettingsProvider>
+      <body className={`font-sans antialiased`}>
+        {children}
+        <OfferModal />
+        <Analytics />
       </body>
     </html>
-  );
+  )
 }
