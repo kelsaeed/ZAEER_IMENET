@@ -140,6 +140,16 @@ export default function StoryModal({
                     className="absolute inset-0 w-full h-full"
                     style={{ border: 0, background: '#000' }}
                   />
+
+                  <div
+                    aria-hidden
+                    className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
+                    style={{
+                      height: 56,
+                      background:
+                        'linear-gradient(180deg, #000 0%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0) 100%)',
+                    }}
+                  />
                 </div>
 
                 <div
