@@ -294,6 +294,28 @@ input, select, textarea {
   will-change: transform, opacity;
 }
 
+/* Valid-move indicator pulse. This used to be a framer-motion
+ * <AnimatePresence>+<motion.div> PER CELL — 256 motion subtrees mounting
+ * on every board open, which was a measurable hydration + interaction
+ * cost on every game / tutorial / puzzle screen. A pure-CSS keyframe is
+ * visually identical (a soft fade-in then a gentle breathing pulse) for
+ * a fraction of the cost and zero JS. */
+@keyframes zi-vm-pulse {
+  0%   { transform: scale(0.5);  opacity: 0; }
+  18%  { transform: scale(0.62); opacity: 1; }
+  100% { transform: scale(0.62); opacity: 1; }
+}
+@keyframes zi-vm-breathe {
+  0%, 100% { transform: scale(0.56); }
+  50%      { transform: scale(0.76); }
+}
+.zi-vm-dot {
+  animation:
+    zi-vm-pulse 0.22s ease-out both,
+    zi-vm-breathe 1.3s ease-in-out 0.22s infinite;
+  will-change: transform, opacity;
+}
+
 /* ─── Celestial Glow theme decor ──────────────────────────────────────
  * Animated overlay rendered by <ThemeDecor/> only when themeId
  * === 'celestial'. Five layers, all pointer-events: none so they

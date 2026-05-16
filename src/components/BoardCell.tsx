@@ -1,21 +1,11 @@
 'use client';
 import { memo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { GamePiece, Position, BounceEffect } from '@/game/types';
 import { isThrone, isBarrier } from '@/game/constants';
 import { getAntCells, getPiecesAtCell } from '@/game/logic';
 import { useSettings } from '@/hooks/useSettings';
 import { usePlayerThemes, themeForRow } from '@/hooks/usePlayerThemes';
 import PieceDisplay from './PieceDisplay';
-
-// Stable references for the valid-move pulse so framer-motion doesn't restart
-// the loop on every re-render (was a visible flicker during resize / zoom).
-// (Not using `as const` — framer-motion's prop types want mutable arrays.)
-const VALID_MOVE_INITIAL = { opacity: 0, scale: 0.5 };
-const VALID_MOVE_ANIMATE = { opacity: 1, scale: 1 };
-const VALID_MOVE_EXIT = { opacity: 0, scale: 0.5 };
-const VALID_MOVE_PULSE = { scale: [0.55, 0.75, 0.55] };
-const VALID_MOVE_PULSE_TRANSITION = { duration: 1.3, repeat: Infinity };
 
 interface Props {
   row: number;
@@ -146,30 +136,22 @@ function BoardCellImpl({
           highlights stay legible regardless of which half is themed
           which way (a target square in the opponent's half should
           read the same as one on your side). */}
-      <AnimatePresence>
-        {isValidMove && (
-          <motion.div
-            initial={VALID_MOVE_INITIAL}
-            animate={VALID_MOVE_ANIMATE}
-            exit={VALID_MOVE_EXIT}
-            className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
-          >
-            <motion.div
-              animate={VALID_MOVE_PULSE}
-              transition={VALID_MOVE_PULSE_TRANSITION}
-              style={{
-                width: piecesHere.length > 0 ? cellSize - 2 : cellSize * 0.36,
-                height: piecesHere.length > 0 ? cellSize - 2 : cellSize * 0.36,
-                background: piecesHere.length > 0 ? viewerTheme.attackFill : viewerTheme.validMoveFill,
-                border: piecesHere.length > 0
-                  ? `2px solid ${viewerTheme.attackBorder}`
-                  : `2px solid ${viewerTheme.validMoveBorder}`,
-                borderRadius: piecesHere.length > 0 ? '4px' : '50%',
-              }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isValidMove && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div
+            className="zi-vm-dot"
+            style={{
+              width: piecesHere.length > 0 ? cellSize - 2 : cellSize * 0.36,
+              height: piecesHere.length > 0 ? cellSize - 2 : cellSize * 0.36,
+              background: piecesHere.length > 0 ? viewerTheme.attackFill : viewerTheme.validMoveFill,
+              border: piecesHere.length > 0
+                ? `2px solid ${viewerTheme.attackBorder}`
+                : `2px solid ${viewerTheme.validMoveBorder}`,
+              borderRadius: piecesHere.length > 0 ? '4px' : '50%',
+            }}
+          />
+        </div>
+      )}
 
       {/* Piece — instant snap on a state change. We removed the framer-motion
           layoutId/animation entirely after the user reported pieces still
