@@ -28,11 +28,17 @@ interface Props {
    *  parent should smooth-scroll to the rotation section. */
   rotationHintAt?: { row: number; col: number } | null;
   onRotationHintClick?: () => void;
+  /** UI-tour only: numbered chips pinned to specific cells. Rendered
+   *  inside the grid (same offset math as the tutorial pulse) so they
+   *  track the cells exactly as the board resizes — far more reliable
+   *  than guessing percentages against the outer wrapper, which also
+   *  has to account for the column-label row's variable height. */
+  tourBadges?: { n: number; row: number; col: number }[];
 }
 
 export default function GameBoard({
   state, cellSize, onCellClick, tutorialHighlight, extraHighlights,
-  rotationHintAt, onRotationHintClick,
+  rotationHintAt, onRotationHintClick, tourBadges,
 }: Props) {
   const { pieces, selectedPieceId, validMoves, bounceEffect } = state;
   const { theme } = useSettings();
@@ -172,6 +178,35 @@ export default function GameBoard({
             }}
           />
         )}
+
+        {/* UI-tour numbered chips — centred on their cell, clamped so
+            they stay fully inside the grid even at the corners. The
+            legend that explains the numbers lives in tutorial.tour.body. */}
+        {tourBadges?.map(b => {
+          const gw = 0.5 * cellSize + BOARD_SIZE * cellSize;
+          const gh = BOARD_SIZE * cellSize;
+          const left = Math.max(2, Math.min(0.5 * cellSize + b.col * cellSize + cellSize / 2 - 11, gw - 24));
+          const top = Math.max(2, Math.min(b.row * cellSize + cellSize / 2 - 11, gh - 24));
+          return (
+            <div
+              key={`tb-${b.n}`}
+              aria-hidden
+              className="absolute z-20 rounded-full flex items-center justify-center font-extrabold pointer-events-none"
+              style={{
+                top,
+                left,
+                width: 22,
+                height: 22,
+                fontSize: 12,
+                background: theme.p1Color,
+                color: '#000',
+                boxShadow: `0 0 10px ${theme.p1Color}, 0 1px 3px rgba(0,0,0,0.5)`,
+              }}
+            >
+              {b.n}
+            </div>
+          );
+        })}
 
         {/* "Pick direction below" hint — large clickable down-arrow
             anchored on the ant's centre cell. Drawn in SVG so it

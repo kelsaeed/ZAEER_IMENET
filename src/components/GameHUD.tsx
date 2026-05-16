@@ -117,6 +117,7 @@ export default function GameHUD({
       {/* Turn indicator */}
       <motion.div
         key={currentPlayer}
+        data-tour-id="turn"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="text-center font-bold"
@@ -161,6 +162,7 @@ export default function GameHUD({
       {/* History review panel — Back / slider / Forward / Live */}
       {historyLength > 1 && (
         <div
+          data-tour-id="history"
           style={{
             background: reviewing ? theme.p1AccentBg : theme.panelBg,
             border: `1px solid ${reviewing ? theme.p1AccentBorder : theme.panelBorder}`,
@@ -380,7 +382,7 @@ export default function GameHUD({
       })}
 
       {/* Life cycle legend */}
-      <div style={{
+      <div data-tour-id="killcycle" style={{
         background: theme.panelBg,
         border: `1px solid ${theme.panelBorder}`,
         padding: sp.padMed,

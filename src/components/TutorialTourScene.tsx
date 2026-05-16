@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { GameState } from '@/game/types';
 import { getValidMoves } from '@/game/logic';
 import { useSettings } from '@/hooks/useSettings';
@@ -15,12 +15,23 @@ interface Props {
   cellSize: number;
 }
 
+/** Where each HUD badge measured out to, in pixels relative to the
+ *  side-panel wrapper. Empty until the first measure lands. */
+type HudPos = Partial<Record<'turn' | 'history' | 'killcycle', { top: number; left: number }>>;
+
 /** A non-interactive mock of the real in-game screen used by the opening
  *  UI tour. It renders the actual GameBoard and the actual GameHUD (so
  *  the tour can never drift from the real UI) with every callback
  *  no-op'd, then floats numbered badges over each region. The matching
  *  legend lives in `tutorial.tour.body` so the numbers are explained in
- *  the player's language. */
+ *  the player's language.
+ *
+ *  Badge placement is anchored to the real UI, never guessed:
+ *   - Board badges (①②③④) ride inside the grid on their exact cells
+ *     (passed to GameBoard, same offset math as the tutorial pulse).
+ *   - Side-panel badges (⑤⑥⑦) are measured off the real HUD sections
+ *     (tagged with data-tour-id) so they sit on the right card no
+ *     matter how the panel reflows. */
 export default function TutorialTourScene({ baseState, cellSize }: Props) {
   const { theme } = useSettings();
 
@@ -48,8 +59,65 @@ export default function TutorialTourScene({ baseState, cellSize }: Props) {
   const tourCell = Math.max(15, Math.min(cellSize, 40));
   const noop = () => {};
 
-  // Numbered badge — a small circular chip. Positioned by the caller via
-  // absolute coordinates inside each relatively-positioned column.
+  // ① the board itself (top-left cell), ② your lion (bottom-centre),
+  // ③ a south barrier cell, ④ the throne — all real cells, so the chip
+  // lands exactly on what the legend describes.
+  const boardBadges = [
+    { n: 1, row: 0, col: 0 },
+    { n: 2, row: 15, col: 7 },
+    { n: 3, row: 9, col: 6 },
+    { n: 4, row: 7, col: 8 },
+  ];
+
+  // Side-panel badges are measured off the live HUD after it renders.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [hud, setHud] = useState<HudPos>({});
+
+  useLayoutEffect(() => {
+    const wrap = panelRef.current;
+    if (!wrap) return;
+
+    function measure() {
+      const w = panelRef.current;
+      if (!w) return;
+      const base = w.getBoundingClientRect();
+      const at = (id: string): DOMRect | null => {
+        const el = w.querySelector<HTMLElement>(`[data-tour-id="${id}"]`);
+        return el ? el.getBoundingClientRect() : null;
+      };
+      const turn = at('turn');
+      const history = at('history');
+      const killcycle = at('killcycle');
+      setHud({
+        // Top-right corner of the turn / history cards (the chip hugs
+        // the corner, sticking slightly out like the side-panel ⑤).
+        ...(turn && { turn: { top: turn.top - base.top - 8, left: turn.right - base.left - 14 } }),
+        ...(history && { history: { top: history.top - base.top - 8, left: history.right - base.left - 14 } }),
+        // Top-left corner of the kill-cycle legend.
+        ...(killcycle && { killcycle: { top: killcycle.top - base.top - 8, left: killcycle.left - base.left - 8 } }),
+      });
+    }
+
+    // Measure now, again after the HUD's entrance animation settles, and
+    // on every reflow. ResizeObserver misses transform-only animations
+    // (the turn card slides in via translate), hence the timed retries.
+    measure();
+    const t1 = window.setTimeout(measure, 120);
+    const t2 = window.setTimeout(measure, 460);
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+    };
+  }, [tourState, cellSize]);
+
+  // Numbered badge — a small circular chip positioned by the caller.
   const Badge = ({ n, style }: { n: number; style: React.CSSProperties }) => (
     <div
       aria-hidden
@@ -75,21 +143,15 @@ export default function TutorialTourScene({ baseState, cellSize }: Props) {
       // is inert — it's a labelled screenshot, not a playable board.
       className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6 justify-center"
     >
-      {/* Board column */}
+      {/* Board column — badges ①②③④ ride inside the grid on their cells. */}
       <div className="relative shrink-0 mx-auto lg:mx-0" style={{ pointerEvents: 'none' }}>
-        <GameBoard state={tourState} cellSize={tourCell} onCellClick={noop} />
-        {/* ① the board itself */}
-        <Badge n={1} style={{ top: -4, left: -4 }} />
-        {/* ② pieces (player-1 lion sits near the bottom centre) */}
-        <Badge n={2} style={{ bottom: tourCell * 0.4, left: `calc(50% + ${tourCell * 0.6}px)` }} />
-        {/* ③ barriers (the 🌿 rows hug the throne) */}
-        <Badge n={3} style={{ top: '50%', left: tourCell * 1.8 }} />
-        {/* ④ throne (dead centre) */}
-        <Badge n={4} style={{ top: '47%', left: '50%' }} />
+        <GameBoard state={tourState} cellSize={tourCell} onCellClick={noop} tourBadges={boardBadges} />
       </div>
 
-      {/* Side-panel column — the real GameHUD, every action inert. */}
+      {/* Side-panel column — the real GameHUD, every action inert. The
+          badges are measured off the real cards so they never drift. */}
       <div
+        ref={panelRef}
         className="relative w-full max-w-md mx-auto lg:mx-0 lg:w-[clamp(13rem,16vw,20rem)]"
         style={{ pointerEvents: 'none' }}
       >
@@ -109,12 +171,12 @@ export default function TutorialTourScene({ baseState, cellSize }: Props) {
           onHistoryToLive={noop}
           onHistoryJumpTo={noop}
         />
-        {/* ⑤ side panel (turn / last action / selected piece + rotation) */}
-        <Badge n={5} style={{ top: -4, right: -4 }} />
-        {/* ⑦ history review sits just under the last-action card */}
-        <Badge n={7} style={{ top: '34%', right: -4 }} />
-        {/* ⑥ life cycle legend + ⑦ menu / restart live near the bottom */}
-        <Badge n={6} style={{ bottom: '20%', left: -4 }} />
+        {/* ⑤ side panel header: turn / last action / selected-piece controls */}
+        {hud.turn && <Badge n={5} style={{ top: hud.turn.top, left: hud.turn.left }} />}
+        {/* ⑦ history review (restart / main-menu sit just below it) */}
+        {hud.history && <Badge n={7} style={{ top: hud.history.top, left: hud.history.left }} />}
+        {/* ⑥ kill-cycle reminder legend */}
+        {hud.killcycle && <Badge n={6} style={{ top: hud.killcycle.top, left: hud.killcycle.left }} />}
       </div>
     </div>
   );

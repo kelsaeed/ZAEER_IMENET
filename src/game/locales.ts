@@ -135,6 +135,7 @@ const en: Record<string, string> = {
   'tutorial.skip': 'Skip',
   'tutorial.skipAll': 'Skip tour',
   'tutorial.next': 'Next →',
+  'tutorial.retry': '↺ Retry',
   'tutorial.tryAgain': 'Try the highlighted square',
   'tutorial.stepCounter': 'Step {n} of {total}',
 
@@ -583,6 +584,7 @@ const ar: Record<string, string> = {
   'tutorial.skip': 'تخطي',
   'tutorial.skipAll': 'تخطي الجولة',
   'tutorial.next': 'التالي →',
+  'tutorial.retry': '↺ إعادة المحاولة',
   'tutorial.tryAgain': 'جرّب المربع المحدّد',
   'tutorial.stepCounter': 'الخطوة {n} من {total}',
 

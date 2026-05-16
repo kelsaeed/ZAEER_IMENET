@@ -119,6 +119,21 @@ export default function TutorialPage() {
     setPhase({ kind: 'end' });
   }
 
+  // Reset the current step to its starting position — wipes any move /
+  // rotation the player made (and any wrong-move shake) so they can take
+  // the lesson again from scratch without leaving the tutorial.
+  function resetStep() {
+    if (phase.kind !== 'lesson') return;
+    const i = phase.index;
+    setShake(0);
+    setPhase({
+      kind: 'lesson',
+      index: i,
+      state: tutorialState(TUTORIAL_STEPS[i].pieces),
+      done: initialDone(i),
+    });
+  }
+
   // ── Locked click handler ─────────────────────────────────────────
   function handleCellClick(row: number, col: number) {
     if (phase.kind !== 'lesson' || phase.done) return;
@@ -320,6 +335,7 @@ export default function TutorialPage() {
               showNext
               onSkip={advance}
               onNext={advance}
+              onRetry={resetStep}
               theme={theme}
               t={t}
             />
@@ -411,6 +427,7 @@ export default function TutorialPage() {
                 showNext={phase.done || !!isCallout}
                 onSkip={advance}
                 onNext={advance}
+                onRetry={resetStep}
                 theme={theme}
                 t={t}
               />
@@ -455,13 +472,14 @@ export default function TutorialPage() {
 /** Step counter + Skip + (when ready) Next. Shared by the tour banner
  *  and the lesson side panel so the controls stay identical. */
 function NavRow({
-  index, total, showNext, onSkip, onNext, theme, t,
+  index, total, showNext, onSkip, onNext, onRetry, theme, t,
 }: {
   index: number;
   total: number;
   showNext: boolean;
   onSkip: () => void;
   onNext: () => void;
+  onRetry: () => void;
   theme: ReturnType<typeof useSettings>['theme'];
   t: ReturnType<typeof useSettings>['t'];
 }) {
@@ -472,6 +490,14 @@ function NavRow({
           .replace('{n}', String(index + 1))
           .replace('{total}', String(total))}
       </span>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="text-xs opacity-65 hover:opacity-100 px-3 py-2 rounded-lg"
+        style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, color: theme.textPrimary }}
+      >
+        {t('tutorial.retry')}
+      </button>
       <button
         type="button"
         onClick={onSkip}
