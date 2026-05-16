@@ -393,9 +393,9 @@ const STEP_BAT_BUTTERFLY: TutorialStep = {
 };
 
 /** Lesson 12 (finale): the Lion kills ANY piece in its path, and landing
- *  on the throne wins the game outright. The Lion is hemmed in by enemy
- *  pieces with an enemy guard sitting on the throne — one step kills the
- *  guard and claims the win. */
+ *  on the throne wins outright. No piece may ever STOP on the throne, so
+ *  the throne itself stays empty — the Lion is hemmed in by enemies and
+ *  the single winning move is one step onto the empty throne. */
 const STEP_LION_FINALE: TutorialStep = {
   id: 'lion-finale',
   titleKey: 'tutorial.lionFinale.title',
@@ -403,10 +403,10 @@ const STEP_LION_FINALE: TutorialStep = {
   doneKey: 'tutorial.lionFinale.done',
   pieces: [
     piece({ type: 'lion',      player: 1, row: 7,  col: 6,  id: 'lion_p1_tut' }),
-    piece({ type: 'monkey',    player: 2, row: 7,  col: 7,  id: 'guard_p2_tut' }),
     piece({ type: 'bat',       player: 2, row: 8,  col: 6,  id: 'bat_p2_tut' }),
     piece({ type: 'butterfly', player: 2, row: 7,  col: 5,  id: 'bf_p2_tut' }),
-    piece({ type: 'ant',       player: 2, row: 10, col: 4,  id: 'ant_p2_tut', orientation: 'horizontal' }),
+    piece({ type: 'monkey',    player: 2, row: 8,  col: 5,  id: 'monkey_p2_tut' }),
+    piece({ type: 'ant',       player: 2, row: 10, col: 3,  id: 'ant_p2_tut', orientation: 'horizontal' }),
   ],
   selectFrom: { row: 7, col: 6 },
   moveTo:     { row: 7, col: 7 },

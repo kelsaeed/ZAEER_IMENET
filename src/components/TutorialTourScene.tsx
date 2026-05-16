@@ -42,7 +42,10 @@ export default function TutorialTourScene({ baseState, cellSize }: Props) {
     };
   }, [baseState]);
 
-  const tourCell = Math.max(13, Math.min(cellSize, 19));
+  // The tour shows the board AND the full side panel together, so the
+  // board can't be as huge as a solo lesson — but it should still be
+  // big and readable (the old 19px cap made it a postage stamp).
+  const tourCell = Math.max(15, Math.min(cellSize, 40));
   const noop = () => {};
 
   // Numbered badge — a small circular chip. Positioned by the caller via
@@ -70,7 +73,7 @@ export default function TutorialTourScene({ baseState, cellSize }: Props) {
       // Faithful to the real game: board on one side, the full HUD on the
       // other (stacked on phones, side-by-side from lg). The whole thing
       // is inert — it's a labelled screenshot, not a playable board.
-      className="w-full max-w-5xl flex flex-col lg:flex-row lg:items-start gap-4 justify-center"
+      className="w-full max-w-6xl mx-auto flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6 justify-center"
     >
       {/* Board column */}
       <div className="relative shrink-0 mx-auto lg:mx-0" style={{ pointerEvents: 'none' }}>
@@ -87,7 +90,7 @@ export default function TutorialTourScene({ baseState, cellSize }: Props) {
 
       {/* Side-panel column — the real GameHUD, every action inert. */}
       <div
-        className="relative w-full max-w-md mx-auto lg:mx-0 lg:flex-1"
+        className="relative w-full max-w-md mx-auto lg:mx-0 lg:w-[clamp(13rem,16vw,20rem)]"
         style={{ pointerEvents: 'none' }}
       >
         <GameHUD
