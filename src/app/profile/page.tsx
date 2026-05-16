@@ -11,6 +11,7 @@ import { listFriendships, FriendProfile } from '@/lib/supabase/friends';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
 import NotificationBell from '@/components/NotificationBell';
+import SettingsButton from '@/components/SettingsButton';
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/i;
 // Hard cap so a hung request can never freeze the UI forever.
@@ -44,7 +45,7 @@ function ratingRank(rating: number): { emoji: string; label: string } {
 export default function ProfilePage() {
   const router = useRouter();
   const { user, profile, loading, reloadProfile } = useUser();
-  const { theme, t } = useSettings();
+  const { theme, t, isRTL } = useSettings();
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -246,7 +247,11 @@ export default function ProfilePage() {
       className="min-h-screen px-4 py-8 sm:py-12"
       style={{ background: theme.bgGradient, color: theme.textPrimary }}
     >
-      <div className="fixed top-3 right-3 z-30">
+      <div
+        className="fixed top-3 z-30 flex items-center gap-2"
+        style={{ [isRTL ? 'left' : 'right']: 12 } as React.CSSProperties}
+      >
+        <SettingsButton variant="inline" />
         <NotificationBell />
       </div>
 

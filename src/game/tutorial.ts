@@ -1,25 +1,56 @@
 import type { GameState, GamePiece, Player, Position, Orientation } from './types';
 
-/** A single board lesson. Each step ships with a preset list of pieces
- *  (sparse — just what the lesson needs), the cell the player should
- *  click first to select, and the destination cell. The tutorial page
- *  blocks every other click so a confused first-timer can't wander off. */
+/** A single lesson. There are two kinds:
+ *
+ *  - `move` (default): the classic guided lesson. Ships a sparse piece
+ *    set, the cell to click first, and the destination. The tutorial
+ *    page blocks every other click so a confused first-timer can't
+ *    wander off. Ant lessons additionally surface real rotation /
+ *    End-Turn controls (see `rotateTo` / `endTurnCompletes`).
+ *
+ *  - `callout`: a non-interactive teaching scene. No move is required;
+ *    a Next button is always available. Used for the opening UI tour
+ *    (`tour: true` renders the faux full-game layout) and any
+ *    "show, don't do" explanation. */
+export type TutorialStepKind = 'move' | 'callout';
+
 export interface TutorialStep {
   id: string;
+  /** Defaults to 'move' when omitted (keeps the original steps terse). */
+  kind?: TutorialStepKind;
   /** Locale keys for the title + body line shown above the board. */
   titleKey: string;
   bodyKey: string;
-  /** "Done!" message shown after the lesson move lands. */
+  /** "Done!" message shown after the lesson move lands. Callout steps
+   *  never flip to this — they keep showing `bodyKey`. */
   doneKey: string;
   /** Sparse piece set placed on the standard 16×16 board. */
   pieces: GamePiece[];
-  /** The cell holding the piece the player should pick up. */
-  selectFrom: Position;
-  /** Cell the player should move that piece to. */
-  moveTo: Position;
-  /** True once the player has performed the lesson move (post-applyMove
-   *  state). Cheap predicate over the resulting GameState. */
-  isComplete: (state: GameState) => boolean;
+  /** The cell holding the piece the player should pick up. Omitted on
+   *  pure callout steps. */
+  selectFrom?: Position;
+  /** Cell the player should move that piece to. Omitted when the lesson
+   *  is rotation-only (ant) or a callout. */
+  moveTo?: Position;
+  /** Extra cells to pulse besides the primary highlight — used to point
+   *  at "you can't stop here" squares (e.g. the throne) or callout
+   *  regions. */
+  highlights?: Position[];
+  /** Render the faux full-game layout (the opening UI tour) instead of
+   *  the bare practice board. Implies `kind: 'callout'`. */
+  tour?: boolean;
+  /** Ant lessons: the orientation the player must rotate the ant into
+   *  for the lesson to count as complete. The real HUD rotation buttons
+   *  are shown so this is a genuine interaction. */
+  rotateTo?: Orientation;
+  /** When true the lesson only completes once the player presses the
+   *  real End Turn button (after satisfying `isComplete`). Teaches the
+   *  ant's "rotation is free, End Turn commits it" timing. */
+  endTurnCompletes?: boolean;
+  /** True once the lesson goal is met. Evaluated on the live GameState
+   *  after every action (move / rotate / end-turn). Optional — callout
+   *  steps are always considered complete. */
+  isComplete?: (state: GameState) => boolean;
 }
 
 // ─── Helpers to build pieces ────────────────────────────────────────────
@@ -99,6 +130,33 @@ export function tutorialState(pieces: GamePiece[], currentPlayer: Player = 1): G
 // ─── Step definitions ───────────────────────────────────────────────────
 // All board coordinates are zero-indexed (row 0 = top, row 15 = bottom)
 // to match the rest of the code. Player-1 pieces start near the bottom.
+// Throne is the 2×2 centre (rows 7-8, cols 7-8); barriers sit at row 9
+// (and row 6) cols 6-9.
+
+/** Lesson 0: the opening UI tour. A non-interactive callout that renders
+ *  the faux full-game screen (board + real side panel) so the player can
+ *  see every element — board, pieces, barriers, throne, side panel, life
+ *  cycle, and the menu / restart / history controls — before any move. */
+const STEP_TOUR: TutorialStep = {
+  id: 'tour',
+  kind: 'callout',
+  tour: true,
+  titleKey: 'tutorial.tour.title',
+  bodyKey: 'tutorial.tour.body',
+  doneKey: 'tutorial.tour.body',
+  // A representative position so the faux screen looks like a real game:
+  // both lions, the throne guarded by barriers, and an ant so the side
+  // panel shows the rotation controls.
+  pieces: [
+    piece({ type: 'lion',      player: 1, row: 15, col: 7,  id: 'tour_lion1' }),
+    piece({ type: 'ant',       player: 1, row: 13, col: 5,  id: 'tour_ant1', orientation: 'horizontal' }),
+    piece({ type: 'butterfly', player: 1, row: 14, col: 10, id: 'tour_bf1' }),
+    piece({ type: 'elephant',  player: 1, row: 12, col: 8,  id: 'tour_ele1' }),
+    piece({ type: 'lion',      player: 2, row: 0,  col: 8,  id: 'tour_lion2' }),
+    piece({ type: 'bat',       player: 2, row: 2,  col: 6,  id: 'tour_bat2' }),
+    piece({ type: 'monkey',    player: 2, row: 1,  col: 10, id: 'tour_monkey2' }),
+  ],
+};
 
 /** Lesson 1: just move a Lion one step up. The simplest possible lesson;
  *  teaches the click-piece-then-click-destination pattern. */
@@ -158,10 +216,7 @@ const STEP_PARALYZE: TutorialStep = {
 
 /** Lesson 4: kill a lone enemy Bat by sliding the Monkey across two
  *  squares. Teaches the kill cycle in its simplest form AND the rule
- *  that the killer takes the spot where its target was standing. We
- *  put the Monkey two squares away on purpose so the player sees a
- *  real travel distance and the takeover lands somewhere distant from
- *  where the Monkey started. */
+ *  that the killer takes the spot where its target was standing. */
 const STEP_MONKEY_BAT: TutorialStep = {
   id: 'monkey-bat',
   titleKey: 'tutorial.monkeyBat.title',
@@ -181,9 +236,7 @@ const STEP_MONKEY_BAT: TutorialStep = {
 };
 
 /** Lesson 5: rescue your paralyzed Lion by killing the enemy Bat sitting
- *  on it. Same kill-cycle rule as STEP_MONKEY_BAT, dropped into a
- *  scenario where the Monkey is two squares away — the player gets to
- *  see the sweep across the board AND the freed Lion. */
+ *  on it. Same kill-cycle rule as STEP_MONKEY_BAT in a richer scenario. */
 const STEP_RESCUE: TutorialStep = {
   id: 'rescue',
   titleKey: 'tutorial.rescue.title',
@@ -210,11 +263,8 @@ const STEP_RESCUE: TutorialStep = {
 };
 
 /** Lesson 6: the Elephant has two lives. Preset state has an enemy
- *  Elephant already at 1 HP (the 💔 broken-heart marker). The player
- *  finishes it off with their Lion to see the kill, and the body text
- *  before/after explains why the icon was there. We don't try to
- *  demonstrate two consecutive hits in-tutorial — that needs Ant
- *  rotation gymnastics that would derail a first-timer. */
+ *  Elephant already at 1 HP (the 💔 marker). The player finishes it off
+ *  with their Lion. */
 const STEP_ELEPHANT: TutorialStep = {
   id: 'elephant',
   titleKey: 'tutorial.elephant.title',
@@ -222,8 +272,6 @@ const STEP_ELEPHANT: TutorialStep = {
   doneKey: 'tutorial.elephant.done',
   pieces: [
     piece({ type: 'lion', player: 1, row: 13, col: 7, id: 'lion_p1_tut' }),
-    // Damaged elephant: hp=1 + isDamaged=true so the broken-heart icon
-    // is visible from the start. Game logic kills it on the next hit.
     piece({
       type: 'elephant', player: 2, row: 12, col: 7, id: 'elephant_p2_tut',
       hp: 1,
@@ -238,11 +286,146 @@ const STEP_ELEPHANT: TutorialStep = {
   },
 };
 
+/** Lesson 7: the Ant moves AND rotates in one turn. Move it one step up,
+ *  rotate it to Vertical, then commit with End Turn. Teaches the ant's
+ *  signature "one move + one free rotation per turn" rule. */
+const STEP_ANT: TutorialStep = {
+  id: 'ant',
+  titleKey: 'tutorial.ant.title',
+  bodyKey: 'tutorial.ant.body',
+  doneKey: 'tutorial.ant.done',
+  pieces: [
+    piece({ type: 'ant', player: 1, row: 13, col: 7, id: 'ant_p1_tut', orientation: 'horizontal' }),
+  ],
+  selectFrom: { row: 13, col: 7 },
+  moveTo:     { row: 12, col: 7 },
+  rotateTo:   'vertical',
+  endTurnCompletes: true,
+  isComplete: (s) => {
+    const a = s.pieces.find(p => p.id === 'ant_p1_tut');
+    return !!a && a.row === 12 && a.col === 7 && a.orientation === 'vertical';
+  },
+};
+
+/** Lesson 8: rotation alone is free — you don't have to move. Rotate the
+ *  Ant to Diagonal and End Turn without ever moving it. Contrasts the
+ *  rotate-only timing with the move+rotate lesson before it. */
+const STEP_ANT_ROTATE: TutorialStep = {
+  id: 'ant-rotate',
+  titleKey: 'tutorial.antRotate.title',
+  bodyKey: 'tutorial.antRotate.body',
+  doneKey: 'tutorial.antRotate.done',
+  pieces: [
+    piece({ type: 'ant', player: 1, row: 12, col: 7, id: 'ant_p1_tut', orientation: 'horizontal' }),
+  ],
+  selectFrom: { row: 12, col: 7 },
+  // No moveTo — the board offers no destination, so the only path
+  // forward is the rotation buttons in the side panel.
+  rotateTo:   'diagonal',
+  endTurnCompletes: true,
+  isComplete: (s) => {
+    const a = s.pieces.find(p => p.id === 'ant_p1_tut');
+    return !!a && a.row === 12 && a.col === 7 && a.orientation === 'diagonal';
+  },
+};
+
+/** Lesson 9: defend with a rotation. An enemy Butterfly is lined up on
+ *  the diagonal that runs straight into the Ant's centre (Butterfly
+ *  kills Ant). Rotate the Ant to Antidiagonal so a wing drops onto that
+ *  diagonal and blocks the Butterfly's path — wings are impassable. */
+const STEP_ANT_DEFEND: TutorialStep = {
+  id: 'ant-defend',
+  titleKey: 'tutorial.antDefend.title',
+  bodyKey: 'tutorial.antDefend.body',
+  doneKey: 'tutorial.antDefend.done',
+  pieces: [
+    piece({ type: 'ant',       player: 1, row: 12, col: 7,  id: 'ant_p1_tut', orientation: 'horizontal' }),
+    piece({ type: 'butterfly', player: 2, row: 9,  col: 10, id: 'butterfly_p2_tut' }),
+  ],
+  selectFrom: { row: 12, col: 7 },
+  highlights: [{ row: 9, col: 10 }, { row: 11, col: 8 }],
+  rotateTo:   'antidiagonal',
+  endTurnCompletes: true,
+  isComplete: (s) => {
+    const a = s.pieces.find(p => p.id === 'ant_p1_tut');
+    return !!a && a.orientation === 'antidiagonal';
+  },
+};
+
+/** Lesson 10: no piece may STOP on the throne — but the Elephant glides
+ *  straight THROUGH it. Slide the Elephant along row 8 across the throne
+ *  to the far side; the throne squares are never offered as a stop. */
+const STEP_ELEPHANT_THRONE: TutorialStep = {
+  id: 'elephant-throne',
+  titleKey: 'tutorial.elephantThrone.title',
+  bodyKey: 'tutorial.elephantThrone.body',
+  doneKey: 'tutorial.elephantThrone.done',
+  pieces: [
+    piece({ type: 'elephant', player: 1, row: 8, col: 4, id: 'elephant_p1_tut' }),
+  ],
+  selectFrom: { row: 8, col: 4 },
+  moveTo:     { row: 8, col: 10 },
+  highlights: [{ row: 8, col: 7 }, { row: 8, col: 8 }],
+  isComplete: (s) => {
+    const e = s.pieces.find(p => p.id === 'elephant_p1_tut');
+    return !!e && e.row === 8 && e.col === 10;
+  },
+};
+
+/** Lesson 11: the Bat hunts the Butterfly — and a Butterfly can never
+ *  shield a Bat, so your Bat is a safe Butterfly-killer. Slide the Bat
+ *  diagonally onto the enemy Butterfly. */
+const STEP_BAT_BUTTERFLY: TutorialStep = {
+  id: 'bat-butterfly',
+  titleKey: 'tutorial.batButterfly.title',
+  bodyKey: 'tutorial.batButterfly.body',
+  doneKey: 'tutorial.batButterfly.done',
+  pieces: [
+    piece({ type: 'bat',       player: 1, row: 13, col: 4,  id: 'bat_p1_tut' }),
+    piece({ type: 'butterfly', player: 2, row: 10, col: 7,  id: 'butterfly_p2_tut' }),
+  ],
+  selectFrom: { row: 13, col: 4 },
+  moveTo:     { row: 10, col: 7 },
+  isComplete: (s) => {
+    const b = s.pieces.find(p => p.id === 'butterfly_p2_tut');
+    return !b;
+  },
+};
+
+/** Lesson 12 (finale): the Lion kills ANY piece in its path, and landing
+ *  on the throne wins the game outright. The Lion is hemmed in by enemy
+ *  pieces with an enemy guard sitting on the throne — one step kills the
+ *  guard and claims the win. */
+const STEP_LION_FINALE: TutorialStep = {
+  id: 'lion-finale',
+  titleKey: 'tutorial.lionFinale.title',
+  bodyKey: 'tutorial.lionFinale.body',
+  doneKey: 'tutorial.lionFinale.done',
+  pieces: [
+    piece({ type: 'lion',      player: 1, row: 7,  col: 6,  id: 'lion_p1_tut' }),
+    piece({ type: 'monkey',    player: 2, row: 7,  col: 7,  id: 'guard_p2_tut' }),
+    piece({ type: 'bat',       player: 2, row: 8,  col: 6,  id: 'bat_p2_tut' }),
+    piece({ type: 'butterfly', player: 2, row: 7,  col: 5,  id: 'bf_p2_tut' }),
+    piece({ type: 'ant',       player: 2, row: 10, col: 4,  id: 'ant_p2_tut', orientation: 'horizontal' }),
+  ],
+  selectFrom: { row: 7, col: 6 },
+  moveTo:     { row: 7, col: 7 },
+  highlights: [{ row: 7, col: 8 }, { row: 8, col: 7 }, { row: 8, col: 8 }],
+  isComplete: (s) => s.phase === 'won' && s.winner === 1,
+};
+
 export const TUTORIAL_STEPS: TutorialStep[] = [
+  STEP_TOUR,
   STEP_MOVE,
   STEP_SHIELD,
   STEP_PARALYZE,
   STEP_MONKEY_BAT,
   STEP_RESCUE,
   STEP_ELEPHANT,
+  STEP_ANT,
+  STEP_ANT_ROTATE,
+  STEP_ANT_DEFEND,
+  STEP_ELEPHANT_THRONE,
+  STEP_BAT_BUTTERFLY,
+  STEP_LION_FINALE,
 ];

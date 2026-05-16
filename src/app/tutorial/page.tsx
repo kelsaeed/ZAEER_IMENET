@@ -4,21 +4,31 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useSettings } from '@/hooks/useSettings';
-import { applyMove, getValidMoves } from '@/game/logic';
-import type { GameState } from '@/game/types';
+import { applyMove, applyEndTurn, getValidMoves } from '@/game/logic';
+import type { GameState, Orientation } from '@/game/types';
 import { TUTORIAL_STEPS, tutorialState } from '@/game/tutorial';
 import KillCycleWheel from '@/components/KillCycleWheel';
 import GameBoard from '@/components/GameBoard';
+import TutorialTourScene from '@/components/TutorialTourScene';
+import SettingsButton from '@/components/SettingsButton';
 
 type Phase =
   | { kind: 'wheel' }
   | { kind: 'lesson'; index: number; state: GameState; done: boolean }
   | { kind: 'end' };
 
-/** Interactive tutorial. First step is the kill-cycle wheel; the rest
- *  are guided board moves with the click logic locked to the lesson.
- *  The end screen funnels the player into a real game vs the easy AI
- *  so they can practise everything they just learned. */
+/** Callout steps (the opening UI tour) have nothing to "complete" — the
+ *  Next button is available immediately and the body keeps showing the
+ *  legend rather than flipping to a done message. */
+function initialDone(index: number): boolean {
+  return TUTORIAL_STEPS[index].kind === 'callout';
+}
+
+/** Interactive tutorial. First step is the kill-cycle wheel, then a
+ *  non-interactive UI tour, then guided board lessons with the click
+ *  logic locked to each lesson (ant lessons additionally surface the
+ *  real rotation / End-Turn controls). The end screen funnels the
+ *  player into a real game vs the easy AI. */
 export default function TutorialPage() {
   const router = useRouter();
   const { theme, isRTL, t } = useSettings();
@@ -64,7 +74,7 @@ export default function TutorialPage() {
   }, []);
 
   function startLessons() {
-    setPhase({ kind: 'lesson', index: 0, state: tutorialState(TUTORIAL_STEPS[0].pieces), done: false });
+    setPhase({ kind: 'lesson', index: 0, state: tutorialState(TUTORIAL_STEPS[0].pieces), done: initialDone(0) });
   }
 
   function advance() {
@@ -78,7 +88,7 @@ export default function TutorialPage() {
       kind: 'lesson',
       index: next,
       state: tutorialState(TUTORIAL_STEPS[next].pieces),
-      done: false,
+      done: initialDone(next),
     });
   }
 
@@ -87,16 +97,18 @@ export default function TutorialPage() {
   }
 
   // ── Locked click handler ─────────────────────────────────────────
-  // Each lesson defines exactly two clicks: select-from then move-to.
-  // Anything else triggers a soft horizontal shake on the body card so
-  // the player feels the bounce without the page going haywire.
+  // Move lessons define a select-from then a move-to (the move-to is
+  // omitted for rotation-only ant lessons — there the only path forward
+  // is the side-panel rotation buttons). Callout/tour steps ignore
+  // clicks entirely. Anything off-script triggers a soft shake.
   function handleCellClick(row: number, col: number) {
     if (phase.kind !== 'lesson' || phase.done) return;
     const step = TUTORIAL_STEPS[phase.index];
+    if (step.kind === 'callout') return;
     const s = phase.state;
 
     if (!s.selectedPieceId) {
-      if (row !== step.selectFrom.row || col !== step.selectFrom.col) {
+      if (!step.selectFrom || row !== step.selectFrom.row || col !== step.selectFrom.col) {
         setShake(n => n + 1);
         return;
       }
@@ -104,8 +116,11 @@ export default function TutorialPage() {
       if (!myPiece) { setShake(n => n + 1); return; }
       const { moves, canRotate, validRotations } = getValidMoves(myPiece, s.pieces);
       // Limit visible "valid moves" to JUST the lesson destination so the
-      // board doesn't light up with off-script options.
-      const limited = moves.filter(m => m.row === step.moveTo.row && m.col === step.moveTo.col);
+      // board doesn't light up with off-script options. Rotation-only
+      // lessons (no moveTo) show no destinations at all.
+      const limited = step.moveTo
+        ? moves.filter(m => m.row === step.moveTo!.row && m.col === step.moveTo!.col)
+        : [];
       setPhase({
         ...phase,
         state: {
@@ -119,18 +134,84 @@ export default function TutorialPage() {
       return;
     }
 
-    if (row !== step.moveTo.row || col !== step.moveTo.col) {
+    if (!step.moveTo || row !== step.moveTo.row || col !== step.moveTo.col) {
       // Re-tapping the lesson piece is fine (it stays selected); shake
       // any other click.
-      if (row === step.selectFrom.row && col === step.selectFrom.col) return;
+      if (step.selectFrom && row === step.selectFrom.row && col === step.selectFrom.col) return;
       setShake(n => n + 1);
       return;
     }
 
     const next = applyMove(s, s.selectedPieceId, row, col);
-    const done = step.isComplete(next);
+    // Ant lessons that teach the "End Turn commits it" rule don't count
+    // as done until the player actually presses End Turn — keep going.
+    const done = step.endTurnCompletes ? false : !!step.isComplete?.(next);
     setPhase({ ...phase, state: next, done });
   }
+
+  // Rotate the selected ant — mirrors useGame.rotateAntTo so the lesson
+  // behaves exactly like the real game's HUD rotation buttons.
+  function handleRotate(ori: Orientation) {
+    if (phase.kind !== 'lesson' || phase.done) return;
+    const step = TUTORIAL_STEPS[phase.index];
+    const s = phase.state;
+    if (!s.selectedPieceId) return;
+    const p = s.pieces.find(x => x.id === s.selectedPieceId);
+    if (!p || p.type !== 'ant' || !s.validRotations.includes(ori)) return;
+
+    const newPieces = s.pieces.map(x => (x.id === p.id ? { ...x, orientation: ori } : x));
+    const updated = { ...p, orientation: ori };
+    const { moves, canRotate, validRotations } = getValidMoves(updated, newPieces);
+    const limited = (!s.antMovedThisTurn && step.moveTo)
+      ? moves.filter(m => m.row === step.moveTo!.row && m.col === step.moveTo!.col)
+      : [];
+    const ns: GameState = {
+      ...s,
+      pieces: newPieces,
+      validMoves: s.antMovedThisTurn ? [] : limited,
+      canRotate,
+      validRotations,
+      antHasRotated: true,
+      antOriginalOrientation: s.antOriginalOrientation ?? p.orientation,
+    };
+    const done = step.endTurnCompletes ? false : !!step.isComplete?.(ns);
+    setPhase({ ...phase, state: ns, done });
+  }
+
+  function handleEndTurn() {
+    if (phase.kind !== 'lesson' || phase.done) return;
+    const step = TUTORIAL_STEPS[phase.index];
+    const s = phase.state;
+    if (!s.selectedPieceId) return;
+    const p = s.pieces.find(x => x.id === s.selectedPieceId);
+    if (!p || p.type !== 'ant') return;
+    if (!s.antMovedThisTurn && !s.antHasRotated) return;
+    const next = applyEndTurn(s);
+    const done = step.isComplete ? step.isComplete(next) : true;
+    setPhase({ ...phase, state: next, done });
+  }
+
+  // ── Derived lesson view-model ─────────────────────────────────────
+  const step = phase.kind === 'lesson' ? TUTORIAL_STEPS[phase.index] : null;
+  const isCallout = step?.kind === 'callout';
+  const selectedPiece = step && phase.kind === 'lesson' && phase.state.selectedPieceId
+    ? phase.state.pieces.find(p => p.id === phase.state.selectedPieceId)
+    : null;
+  const antSelected = selectedPiece?.type === 'ant';
+  const lessonState = phase.kind === 'lesson' ? phase.state : null;
+  const canRotateNow = !!(
+    phase.kind === 'lesson' && !phase.done && antSelected &&
+    lessonState && lessonState.validRotations.length > 0
+  );
+  // End Turn is only offered once the lesson goal is already met, so a
+  // premature press can never soft-lock the (turn-flipping) lesson.
+  const preconditionMet = !!(
+    step && lessonState && (step.isComplete ? step.isComplete(lessonState) : true)
+  );
+  const canEndTurn = !!(
+    phase.kind === 'lesson' && !phase.done && antSelected && lessonState &&
+    (lessonState.antMovedThisTurn || lessonState.antHasRotated) && preconditionMet
+  );
 
   // ── Render ───────────────────────────────────────────────────────
   return (
@@ -144,14 +225,17 @@ export default function TutorialPage() {
         <>
           <div className="w-full max-w-3xl flex items-center justify-between mb-3">
             <Link href="/" className="text-sm opacity-70 hover:opacity-100">← {t('win.mainMenu')}</Link>
-            <button
-              type="button"
-              onClick={skipAll}
-              className="text-xs opacity-60 hover:opacity-100 px-3 py-1.5 rounded-lg"
-              style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, color: theme.textPrimary }}
-            >
-              {t('tutorial.skipAll')}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={skipAll}
+                className="text-xs opacity-60 hover:opacity-100 px-3 py-1.5 rounded-lg"
+                style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, color: theme.textPrimary }}
+              >
+                {t('tutorial.skipAll')}
+              </button>
+              <SettingsButton variant="inline" />
+            </div>
           </div>
           <motion.div
             initial={{ opacity: 0, y: 6 }}
@@ -182,7 +266,7 @@ export default function TutorialPage() {
       {/* LESSON phase: 3-column header (back / body / skip) so the body
           card lives at the top with the navigation rather than below
           the board. Keeps everything above the fold on common laptops. */}
-      {phase.kind === 'lesson' && (
+      {phase.kind === 'lesson' && step && (
         <div className="w-full max-w-5xl flex flex-col items-center gap-3">
           <div className="w-full grid grid-cols-[auto_1fr_auto] items-start gap-3">
             <Link
@@ -201,35 +285,91 @@ export default function TutorialPage() {
               style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
             >
               <div className="text-sm sm:text-base font-extrabold" style={{ color: theme.p1Color }}>
-                {t(TUTORIAL_STEPS[phase.index].titleKey)}
+                {t(step.titleKey)}
               </div>
-              <div className="text-xs sm:text-sm opacity-85 mt-0.5">
-                {phase.done
-                  ? t(TUTORIAL_STEPS[phase.index].doneKey)
-                  : t(TUTORIAL_STEPS[phase.index].bodyKey)}
+              <div className="text-xs sm:text-sm opacity-85 mt-0.5 whitespace-pre-line">
+                {phase.done && !isCallout
+                  ? t(step.doneKey)
+                  : t(step.bodyKey)}
               </div>
             </motion.div>
 
-            <button
-              type="button"
-              onClick={skipAll}
-              className="text-xs opacity-60 hover:opacity-100 px-3 py-1.5 rounded-lg whitespace-nowrap mt-1"
-              style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, color: theme.textPrimary }}
-            >
-              {t('tutorial.skipAll')}
-            </button>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={skipAll}
+                className="text-xs opacity-60 hover:opacity-100 px-3 py-1.5 rounded-lg whitespace-nowrap"
+                style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}`, color: theme.textPrimary }}
+              >
+                {t('tutorial.skipAll')}
+              </button>
+              <SettingsButton variant="inline" />
+            </div>
           </div>
 
-          <GameBoard
-            state={phase.state}
-            cellSize={cellSize}
-            onCellClick={handleCellClick}
-            tutorialHighlight={
-              phase.done || phase.state.selectedPieceId
-                ? null
-                : TUTORIAL_STEPS[phase.index].selectFrom
-            }
-          />
+          {step.tour ? (
+            <TutorialTourScene baseState={phase.state} cellSize={cellSize} />
+          ) : (
+            <GameBoard
+              state={phase.state}
+              cellSize={cellSize}
+              onCellClick={handleCellClick}
+              tutorialHighlight={
+                phase.done || phase.state.selectedPieceId
+                  ? null
+                  : step.selectFrom ?? null
+              }
+              extraHighlights={step.highlights}
+            />
+          )}
+
+          {/* Ant lesson controls — the REAL rotation + End-Turn buttons,
+              styled like the in-game HUD so the lesson matches the game. */}
+          {(canRotateNow || canEndTurn) && (
+            <div
+              className="w-full max-w-md rounded-xl px-3 py-2 flex flex-col gap-2"
+              style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+            >
+              {canRotateNow && (
+                <>
+                  <div className="text-xs opacity-80">{t('hud.rotateTo')}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {lessonState!.validRotations.map(ori => (
+                      <button
+                        key={ori}
+                        type="button"
+                        onClick={() => handleRotate(ori)}
+                        className="font-semibold text-xs px-3 py-1.5 rounded-lg transition-transform hover:scale-105"
+                        style={{
+                          background: theme.buttonRotateBg,
+                          border: `1px solid ${theme.buttonRotateBorder}`,
+                          color: theme.buttonRotateText,
+                        }}
+                      >
+                        {t(`orientation.${ori}`)}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {canEndTurn && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={handleEndTurn}
+                  className="font-semibold text-sm px-4 py-2 rounded-lg self-start transition-transform hover:scale-105"
+                  style={{
+                    background: theme.buttonEndTurnBg,
+                    border: `1px solid ${theme.buttonEndTurnBorder}`,
+                    color: theme.buttonEndTurnText,
+                  }}
+                >
+                  {t('hud.endTurn')}
+                </motion.button>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-3 mt-1">
             <span className="text-xs opacity-60">
@@ -245,7 +385,7 @@ export default function TutorialPage() {
             >
               {t('tutorial.skip')}
             </button>
-            {phase.done && (
+            {(phase.done || isCallout) && (
               <motion.button
                 initial={{ scale: 0.92, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -270,6 +410,7 @@ export default function TutorialPage() {
         <>
           <div className="w-full max-w-md flex items-center justify-between mb-4">
             <Link href="/" className="text-sm opacity-70 hover:opacity-100">← {t('win.mainMenu')}</Link>
+            <SettingsButton variant="inline" />
           </div>
           <motion.div
             initial={{ opacity: 0, y: 6 }}

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useSettings } from '@/hooks/useSettings';
 import { useUser } from '@/hooks/useUser';
+import SettingsButton from '@/components/SettingsButton';
 import {
   listThemeCatalog,
   acquireFreeTheme,
@@ -119,19 +120,22 @@ export default function ThemeStorePage() {
           >
             {isRTL ? '→' : '←'} {t('store.back')}
           </Link>
-          {isAdmin && (
-            <Link
-              href="/admin/themes"
-              className="rounded-full px-3 py-1.5 text-xs font-bold"
-              style={{
-                background: theme.p2AccentBg,
-                border: `1px solid ${theme.p2AccentBorder}`,
-                color: theme.p2Color,
-              }}
-            >
-              🛡️ {t('admin.themes.openCta')}
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Link
+                href="/admin/themes"
+                className="rounded-full px-3 py-1.5 text-xs font-bold"
+                style={{
+                  background: theme.p2AccentBg,
+                  border: `1px solid ${theme.p2AccentBorder}`,
+                  color: theme.p2Color,
+                }}
+              >
+                🛡️ {t('admin.themes.openCta')}
+              </Link>
+            )}
+            <SettingsButton variant="inline" />
+          </div>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold mb-1" style={{ color: theme.p1Color }}>
           🎨 {t('store.title')}

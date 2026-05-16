@@ -31,6 +31,7 @@ import {
 import LoadingEmojis from '@/components/LoadingEmojis';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
+import SettingsButton from '@/components/SettingsButton';
 import Avatar from '@/components/Avatar';
 import FriendDm from '@/components/FriendDm';
 
@@ -106,6 +107,7 @@ export default function LobbyPage() {
         className="fixed top-3 z-30 flex items-center gap-2"
         style={{ [isRTL ? 'left' : 'right']: 12 } as React.CSSProperties}
       >
+        <SettingsButton variant="inline" />
         <NotificationBell />
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>

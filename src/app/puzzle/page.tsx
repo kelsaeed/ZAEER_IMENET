@@ -19,6 +19,7 @@ import type { GameState, Orientation, Player, Position } from '@/game/types';
 import { ORIENTATION_LABEL } from '@/game/constants';
 import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
+import SettingsButton from '@/components/SettingsButton';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import { markNewPuzzleNotificationsRead } from '@/lib/supabase/notifications';
 
@@ -137,6 +138,7 @@ export default function PuzzlePage() {
         className="fixed top-3 z-30 flex items-center gap-2"
         style={{ [isRTL ? 'left' : 'right']: 12 } as React.CSSProperties}
       >
+        <SettingsButton variant="inline" />
         <NotificationBell />
         <AuthBadge side={isRTL ? 'left' : 'right'} />
       </div>

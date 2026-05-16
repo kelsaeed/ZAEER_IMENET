@@ -16,6 +16,12 @@ interface Props {
    *  cell size resizes — much simpler than positioning an external
    *  overlay against a fragile column-label height. */
   tutorialHighlight?: { row: number; col: number } | null;
+  /** Secondary, calmer pulses used by callout lessons to point at
+   *  "notice this" squares (e.g. the throne you can't stop on, or the
+   *  cell a rotated ant wing will block). Rendered in the opponent
+   *  accent so they read as "observe", distinct from the bright
+   *  "tap here" primary highlight. */
+  extraHighlights?: { row: number; col: number }[];
   /** When set, paints a large clickable down-arrow over the given
    *  cell as a hint that rotation / end-turn buttons live in the HUD
    *  below the board. Tapping it fires onRotationHintClick — the
@@ -25,7 +31,7 @@ interface Props {
 }
 
 export default function GameBoard({
-  state, cellSize, onCellClick, tutorialHighlight,
+  state, cellSize, onCellClick, tutorialHighlight, extraHighlights,
   rotationHintAt, onRotationHintClick,
 }: Props) {
   const { pieces, selectedPieceId, validMoves, bounceEffect } = state;
@@ -33,7 +39,18 @@ export default function GameBoard({
   const labelColor = `color-mix(in srgb, ${theme.textPrimary} 30%, transparent)`;
 
   return (
-    <div className="flex flex-col items-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    // The board is a coordinate grid (chess-style A..P / 16..1). It must
+    // NOT mirror in Arabic/RTL — column A always sits on the left for
+    // everyone, otherwise the absolutely-positioned overlays (tutorial
+    // pulse, rotation hint) and the flex-laid cells disagree and the
+    // highlights land on the wrong squares. Forcing dir="ltr" on the
+    // board container keeps the grid identical in both layouts; only the
+    // surrounding page text follows the locale direction.
+    <div
+      dir="ltr"
+      className="flex flex-col items-center"
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+    >
       {/* Column labels — chess-style A..P */}
       <div className="flex" style={{ display: 'flex', paddingLeft: cellSize * 0.5 }}>
         {Array.from({ length: BOARD_SIZE }).map((_, c) => (
@@ -116,6 +133,27 @@ export default function GameBoard({
             seat at the table. Pointer-events: none + screen blend so
             it never intercepts taps and never washes out pieces. */}
         <BoardDecor cellSize={cellSize} />
+
+        {/* Secondary "notice this" pulses (callout lessons). Calmer than
+            the primary highlight and tinted with the opponent accent so
+            they read as observe-don't-tap. */}
+        {extraHighlights?.map(h => (
+          <div
+            key={`xh-${h.row}-${h.col}`}
+            aria-hidden
+            className="absolute pointer-events-none rounded-md zi-tutorial-pulse"
+            style={{
+              top: h.row * cellSize,
+              left: 0.5 * cellSize + h.col * cellSize,
+              width: cellSize,
+              height: cellSize,
+              boxSizing: 'border-box',
+              border: `3px dashed ${theme.p2Color}`,
+              boxShadow: `0 0 12px ${theme.p2Color}99, inset 0 0 10px ${theme.p2Color}40`,
+              zIndex: 4,
+            }}
+          />
+        ))}
 
         {/* Tutorial pulse — soft glowing ring on the lesson cell. */}
         {tutorialHighlight && (
