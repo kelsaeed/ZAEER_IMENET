@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUser } from './useUser';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { listFriendships, FriendProfile } from '@/lib/supabase/friends';
@@ -8,7 +8,25 @@ import {
   YourTurnNotification,
   listNewPuzzleNotifications,
   NewPuzzleNotification,
+  markAllBellNotificationsRead,
 } from '@/lib/supabase/notifications';
+
+/** localStorage key holding the ISO timestamp of the last time this user
+ *  opened the notification bell. Anything older than this is "seen" and
+ *  must not light the red badge again. Per-user so two accounts on the
+ *  same browser don't clobber each other's seen-state. */
+function seenKey(userId: string) {
+  return `zaeer.notifSeenAt:${userId}`;
+}
+function readSeenAt(userId: string): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = window.localStorage.getItem(seenKey(userId));
+    return raw ? new Date(raw).getTime() : 0;
+  } catch {
+    return 0;
+  }
+}
 
 export interface UnreadDmThread {
   /** The other user. */
@@ -38,8 +56,18 @@ interface NotificationsState {
    *  At most one is meaningful at a time (today's puzzle), but we list
    *  the array in case the trigger fires on multiple days unread. */
   newPuzzles: NewPuzzleNotification[];
-  /** Sum of all individual notifications — used for the badge. */
+  /** Sum of all individual pending notifications — used for the dropdown's
+   *  "N new" pill and the section counts. */
   totalUnread: number;
+  /** How many notifications arrived AFTER the user last opened the bell.
+   *  This — not totalUnread — drives the red dot, so glancing at the bell
+   *  clears it even though actionable items (friend requests) remain in
+   *  the list. */
+  unseenCount: number;
+  /** Mark everything currently visible as seen: clears the red badge and
+   *  (server-side) the passive your-turn / new-puzzle pings. Call this
+   *  when the bell dropdown opens. */
+  markSeen: () => Promise<void>;
   /** Manual refresh — exposed so child UIs can re-pull after acting on a notif. */
   refresh: () => Promise<void>;
 }
@@ -68,6 +96,11 @@ export function useNotifications(): NotificationsState {
   const [yourTurnGames, setYourTurnGames] = useState<YourTurnNotification[]>([]);
   const [newPuzzles, setNewPuzzles] = useState<NewPuzzleNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  // ms epoch of the last bell-open. Re-read whenever the user changes.
+  const [seenAt, setSeenAt] = useState(0);
+  useEffect(() => {
+    setSeenAt(user ? readSeenAt(user.id) : 0);
+  }, [user]);
 
   const refresh = useCallback(async () => {
     if (!user) {
@@ -218,5 +251,38 @@ export function useNotifications(): NotificationsState {
     + yourTurnGames.length
     + newPuzzles.length;
 
-  return { loading, friendRequests, unreadDms, yourTurnGames, newPuzzles, totalUnread, refresh };
+  // Count only notifications newer than the last bell-open. Each type
+  // carries its own timestamp; anything at-or-before `seenAt` has already
+  // been looked at and must not relight the dot.
+  const unseenCount = useMemo(() => {
+    const after = (iso: string | null | undefined) =>
+      !!iso && new Date(iso).getTime() > seenAt;
+    let n = 0;
+    for (const f of friendRequests) if (after(f.createdAt)) n++;
+    for (const d of unreadDms) if (after(d.lastAt)) n += d.unreadCount;
+    for (const g of yourTurnGames) if (after(g.createdAt)) n++;
+    for (const p of newPuzzles) if (after(p.createdAt)) n++;
+    return n;
+  }, [friendRequests, unreadDms, yourTurnGames, newPuzzles, seenAt]);
+
+  const markSeen = useCallback(async () => {
+    if (!user) return;
+    const now = new Date();
+    try {
+      window.localStorage.setItem(seenKey(user.id), now.toISOString());
+    } catch { /* private mode — badge will just re-clear next open */ }
+    setSeenAt(now.getTime());
+    // Passive pings (your-turn, new-puzzle) are "consumed" by being seen —
+    // drop them server-side so they don't pile up across sessions. Friend
+    // requests / DMs stay actionable; they simply stop counting as unseen.
+    try {
+      await markAllBellNotificationsRead(user.id);
+    } catch { /* offline / table missing — local seenAt still clears the dot */ }
+    await refresh();
+  }, [user, refresh]);
+
+  return {
+    loading, friendRequests, unreadDms, yourTurnGames, newPuzzles,
+    totalUnread, unseenCount, markSeen, refresh,
+  };
 }

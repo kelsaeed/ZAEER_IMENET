@@ -14,6 +14,10 @@ export interface FriendProfile {
   status: FriendshipStatus;
   /** Did *I* send the request? */
   outgoing: boolean;
+  /** When the friendship row was created — used by the notification bell
+   *  to decide whether an incoming request is "new" (unseen) since the
+   *  last time the user opened the bell. */
+  createdAt: string;
 }
 
 interface RawRow {
@@ -21,6 +25,7 @@ interface RawRow {
   requester_id: string;
   addressee_id: string;
   status: FriendshipStatus;
+  created_at: string;
   // Joined profiles (one of these is "me", the other is "them").
   requester: { id: string; username: string; display_name: string; avatar_url: string | null; rating: number };
   addressee: { id: string; username: string; display_name: string; avatar_url: string | null; rating: number };
@@ -99,7 +104,7 @@ export async function listFriendships(myId: string): Promise<FriendProfile[]> {
   const { data, error } = await supabase
     .from('friendships')
     .select(`
-      id, status, requester_id, addressee_id,
+      id, status, requester_id, addressee_id, created_at,
       requester:profiles!friendships_requester_id_fkey ( id, username, display_name, avatar_url, rating ),
       addressee:profiles!friendships_addressee_id_fkey ( id, username, display_name, avatar_url, rating )
     `)
@@ -119,6 +124,7 @@ export async function listFriendships(myId: string): Promise<FriendProfile[]> {
       friendshipId: r.id,
       status: r.status,
       outgoing,
+      createdAt: r.created_at,
     };
   });
 }

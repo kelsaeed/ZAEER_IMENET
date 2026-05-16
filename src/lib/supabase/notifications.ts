@@ -143,3 +143,19 @@ export async function markNewPuzzleNotificationsRead(userId: string): Promise<vo
     .eq('kind', 'new_puzzle')
     .is('read_at', null);
 }
+
+/** Mark EVERY unread per-user notification row read, regardless of kind.
+ *  Called when the user opens the notification bell: once they've seen
+ *  the list, the passive pings (your-turn, new-puzzle) shouldn't keep
+ *  re-lighting the red badge. Actionable items (friend requests, unread
+ *  DMs) live in their own tables and are unaffected — they stay in the
+ *  list until accepted / opened, they just stop counting toward the
+ *  unseen badge (handled client-side in useNotifications). */
+export async function markAllBellNotificationsRead(userId: string): Promise<void> {
+  const supabase = getSupabaseBrowser();
+  await supabase
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .is('read_at', null);
+}

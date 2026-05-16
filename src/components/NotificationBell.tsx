@@ -32,9 +32,18 @@ function relTime(iso: string): string {
 export default function NotificationBell() {
   const { user } = useUser();
   const { theme, t, localeId } = useSettings();
-  const { loading, friendRequests, unreadDms, yourTurnGames, newPuzzles, totalUnread, refresh } = useNotifications();
+  const {
+    loading, friendRequests, unreadDms, yourTurnGames, newPuzzles,
+    totalUnread, unseenCount, markSeen, refresh,
+  } = useNotifications();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+
+  // Opening the bell = "I've seen what's here". Clears the red badge and
+  // consumes the passive pings; actionable items stay in the list.
+  useEffect(() => {
+    if (open) void markSeen();
+  }, [open, markSeen]);
   const [busy, setBusy] = useState<string | null>(null);
   const [dmTarget, setDmTarget] = useState<UnreadDmThread['friend'] | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -82,14 +91,14 @@ export default function NotificationBell() {
           className="rounded-full h-10 w-10 inline-flex items-center justify-center text-lg relative transition-transform hover:scale-105"
           style={{
             background: theme.panelBg,
-            border: `1px solid ${totalUnread > 0 ? theme.p1Color : theme.panelBorder}`,
+            border: `1px solid ${unseenCount > 0 ? theme.p1Color : theme.panelBorder}`,
             color: theme.textPrimary,
           }}
         >
-          <span className={totalUnread > 0 ? 'animate-bell' : ''} aria-hidden>
+          <span className={unseenCount > 0 ? 'animate-bell' : ''} aria-hidden>
             🔔
           </span>
-          {totalUnread > 0 && (
+          {unseenCount > 0 && (
             <motion.span
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -101,7 +110,7 @@ export default function NotificationBell() {
                 lineHeight: 1,
               }}
             >
-              {totalUnread > 99 ? '99+' : totalUnread}
+              {unseenCount > 99 ? '99+' : unseenCount}
             </motion.span>
           )}
         </button>
