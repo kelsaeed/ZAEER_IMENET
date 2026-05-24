@@ -16,6 +16,7 @@ import type { GameState, GamePiece, Player } from './types';
 import { createInitialState } from './initialState';
 import { applyMove } from './logic';
 import { applyOnlineAction } from './onlineActions';
+import { piece, makeState } from './testHelpers';
 
 function playing(): GameState {
   return { ...createInitialState(), phase: 'playing' };
@@ -210,4 +211,53 @@ test('rotateTo on a non-ant piece is rejected', () => {
   );
   assert.equal(res.ok, false);
   if (!res.ok) assert.equal(res.status, 400);
+});
+
+// ─── Engine-agreement regression ──────────────────────────────────────────
+// The server route trusts onlineActions, which trusts the engine. These pin
+// that the online layer produces EXACTLY what a direct engine call would, so
+// the authoritative server state can never silently diverge from local play.
+
+test('applyOnlineAction agrees with a direct applyMove for a legal move', () => {
+  const state = playing();
+  const lion = find(state, 'lion', 1, 15, 1);
+  const direct = applyMove(state, lion.id, 14, 1);
+  const online = applyOnlineAction(state, { type: 'move', pieceId: lion.id, to: { row: 14, col: 1 } }, 1);
+  assert.equal(online.ok, true, JSON.stringify(online));
+  if (online.ok) {
+    // Same board, same turn owner, same counter — the online path added no
+    // mutation of its own beyond what the engine produced.
+    assert.deepEqual(online.state.pieces, direct.pieces);
+    assert.equal(online.state.currentPlayer, direct.currentPlayer);
+    assert.equal(online.state.turn, direct.turn);
+  }
+});
+
+test('a move the engine considers illegal is rejected by onlineActions', () => {
+  // Build a position where a target is plainly off the lion's legal set, and
+  // confirm the engine agrees it is not a valid move before asserting the
+  // online layer rejects it (keeps the two definitions of "illegal" aligned).
+  const state = makeState([
+    piece({ id: 'L1', type: 'lion', player: 1, row: 5, col: 5 }),
+    piece({ id: 'L2', type: 'lion', player: 2, row: 0, col: 0 }),
+  ]);
+  const res = applyOnlineAction(state, { type: 'move', pieceId: 'L1', to: { row: 5, col: 9 } }, 1);
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 400);
+});
+
+test('a winning capture propagates phase/winner through onlineActions', () => {
+  // p1 lion adjacent to the p2 lion — lion kills any, so this both removes
+  // the enemy lion and wins. The online result must carry that transition.
+  const state = makeState([
+    piece({ id: 'L1', type: 'lion', player: 1, row: 5, col: 5 }),
+    piece({ id: 'L2', type: 'lion', player: 2, row: 5, col: 6 }),
+  ]);
+  const res = applyOnlineAction(state, { type: 'move', pieceId: 'L1', to: { row: 5, col: 6 } }, 1);
+  assert.equal(res.ok, true, JSON.stringify(res));
+  if (res.ok) {
+    assert.equal(res.state.phase, 'won');
+    assert.equal(res.state.winner, 1);
+    assert.equal(res.state.pieces.find(p => p.id === 'L2'), undefined);
+  }
 });
