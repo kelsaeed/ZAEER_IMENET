@@ -1056,8 +1056,9 @@ export function applyEndTurn(state: GameState): GameState {
 
 // ─── Force-timeout (called from the HUD tick when the active player's
 // clock visibly hits 0 without them having made a move). Returns a
-// candidate next state with phase='won' for the OTHER player. The hook
-// passes this through saveGameState for online games.
+// candidate next state with phase='won' for the OTHER player. Online games
+// submit a `timeout` intent to the server route, which re-runs this and
+// persists the result (see src/game/onlineActions.ts).
 export function applyTimeout(state: GameState, losingPlayer: Player): GameState {
   if (state.phase !== 'playing') return state;
   const winner: Player = losingPlayer === 1 ? 2 : 1;

@@ -112,35 +112,135 @@ technically open.
   authed user could spam *legal* requests. Tracked separately.
 - **Service role key** must be present in the deployment env
   (`SUPABASE_SERVICE_ROLE_KEY`), already required by the puzzle move route.
+- **Timeout is self-reported by the player on the clock.** Only the *active*
+  player's client fires the `timeout` intent (and the server confirms their
+  clock truly expired). If that player closes/freezes their browser, nobody
+  submits the flag-fall and the game hangs until they return — the opponent
+  cannot force a timeout win. This is a liveness gap, not a security hole
+  (no one can claim a win they didn't earn), and it predates this change.
 
-## How to test manually
+## Audit findings (post-implementation)
 
-Prereq: apply migration `0018` to your Supabase project.
+A full audit of the trust boundary was performed after the change shipped.
+Result: **no unsafe client write path remains** and **no code changes were
+required for correctness/security.** Detail:
 
-1. **Happy path:** start an online match in two browsers; play moves, ant
-   move+rotate+End-Turn, revert an un-attacked ant move, resign, rematch,
-   and a clock timeout. All should behave exactly as before, syncing via
-   Realtime.
-2. **Cheat attempt (the fix):** in player A's devtools console, try the old
-   path directly:
-   ```js
-   const { getSupabaseBrowser } = await import('/_next/.../client.js'); // or use the app's client
-   await sb.from('games').update({ winner_id: MY_ID, status:'finished',
-       state: { /* any board */ } }).eq('id', GAME_ID);
-   ```
-   → should fail with **permission denied for column** (after 0018). Without
-   0018 it would succeed — that's the hole this closes.
-3. **Illegal intent:** POST `/api/games/<id>/move` with an out-of-range `to`
-   → `400`. With someone else's `pieceId` or when it's not your turn → `403`.
-4. **Stale write:** POST a `move` with an `expectedTurn` behind the current
-   `current_turn` → `409`.
-5. **Finished game:** POST any gameplay action to a finished game → `409`.
+- **Only one direct client write to `games` survives** —
+  `useOnlineGame.toggleReady` writes `{ p1_ready | p2_ready }`, exactly the
+  columns 0018 re-grants. Every other gameplay write goes through the route
+  (service role). Verified by grepping `.from('games').update`, `saveGameState`,
+  and the sensitive column names — the only hits are the route (service role)
+  and the ready toggle.
+- **`current_turn` is a sound optimistic-concurrency token.** `applyMove`
+  advances `state.turn` on *every* persisted transition — including an ant's
+  positional move (it does not flip the player but it does bump `turn`). So
+  back-to-back writes always change `current_turn`, and a stale/duplicated
+  request fails the `.eq('current_turn', expectedTurn)` guard → `409`. The
+  only window where `current_turn` is stable is between an ant's move and its
+  `revertAnt` (revert keeps `turn`); within that window the engine's
+  `antMovedThisTurn` / `antAttackedThisTurn` flags reject any illegal
+  duplicate, so no double-apply is possible.
+- **Migration is non-destructive to every other flow.** Game creation is an
+  `INSERT` (untouched by the UPDATE revoke); joining and invite lookup run
+  through the `SECURITY DEFINER` RPCs `join_open_game` / `find_game_by_invite_code`
+  (0004), which run as the table owner and bypass the column grant; the ELO
+  (0005) and `awaiting_player_id`/`last_move_at` (0008) triggers fire on the
+  service-role write; the `games_touch` trigger setting `updated_at` needs no
+  caller column privilege (BEFORE-trigger NEW writes are exempt). The 0001
+  row-level UPDATE policy still applies on top of the column grant, so the
+  ready toggle still requires participation.
+- The new unit tests (`onlineActions.test.ts`) cover the engine boundary:
+  legal/illegal move, out-of-turn, opponent's piece, unknown piece, finished
+  game, timeout-before-expiry, the ant move→end-turn→revert sequence, the
+  mid-ant-turn move lock, and illegal/non-ant rotation. Participant and
+  optimistic-concurrency rejection live in the route/DB layer and are covered
+  by the manual SQL + smoke checks below (they can't be unit-tested without
+  mocking Supabase).
+
+## Post-deploy verification in Supabase (after applying 0018)
+
+Run these in the Supabase SQL editor once the migration is applied. Each has
+the expected result inline.
+
+```sql
+-- 1) authenticated must have NO table-wide UPDATE, only the two ready columns.
+--    Expect exactly two rows: p1_ready and p2_ready.
+select grantee, privilege_type, column_name
+from information_schema.column_privileges
+where table_schema = 'public' and table_name = 'games'
+  and grantee = 'authenticated' and privilege_type = 'UPDATE'
+order by column_name;
+
+-- 2) Confirm there is no remaining *table-level* UPDATE grant for anon/auth.
+--    Expect 0 rows.
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'games'
+  and grantee in ('anon', 'authenticated') and privilege_type = 'UPDATE';
+
+-- 3) RLS policies still present (read participants/public, insert as p1,
+--    update participants). Expect the four games_* policies to be listed.
+select policyname, cmd from pg_policies
+where schemaname = 'public' and tablename = 'games'
+order by policyname;
+
+-- 4) The join/lookup helpers must still be SECURITY DEFINER (prosecdef = t),
+--    or joining a room breaks under the lockdown. Expect both rows true.
+select proname, prosecdef
+from pg_proc
+where proname in ('join_open_game', 'find_game_by_invite_code');
+
+-- 5) service_role keeps full UPDATE (the route relies on it). Expect a row.
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'games'
+  and grantee = 'service_role' and privilege_type = 'UPDATE';
+```
+
+Then prove the lockdown end-to-end from a signed-in player's devtools console:
+
+```js
+// Should fail with "permission denied for column \"state\"" after 0018:
+await sb.from('games').update({ state: {}, status: 'finished', winner_id: MY_ID })
+        .eq('id', GAME_ID);
+// Should succeed (allowed column):
+await sb.from('games').update({ p1_ready: true }).eq('id', GAME_ID);
+```
+
+## Browser smoke checklist
+
+Two browsers / two accounts, after 0018 is applied:
+
+- [ ] **Create public room** — host sees "waiting for opponent".
+- [ ] **Join from the second account** — both flip to the live board; host's
+      waiting screen clears (Realtime, with the 3 s polling safety net).
+- [ ] **Normal legal move** — lands on both boards within ~0.5 s.
+- [ ] **Illegal move rejection** — a refused intent snaps the board back
+      (client resync on `400`/`403`/`409`); no drift.
+- [ ] **Ant move + rotation + End Turn** — move the ant one step, rotate it,
+      End Turn; the committed orientation shows on the opponent's board.
+- [ ] **Revert an un-attacked ant move** — move the ant, click empty space; it
+      snaps back on *both* boards and you can move again.
+- [ ] **Timeout** — on a clocked match, let the active player's clock hit 0;
+      the opponent gets the win via Realtime. (Confirm it can't be claimed
+      with time left — the server rejects it `409`.)
+- [ ] **Resign** — winner/abandoned status shows on both sides.
+- [ ] **Rematch** — both click Ready; the board resets, series score
+      increments for the previous winner, and a double-click race is a no-op.
+- [ ] **Ready toggle still works** — toggling Ready on/off persists (this is
+      the one allowed direct client write).
+- [ ] **Realtime sync** — moves, resign, timeout, and rematch all fan to the
+      other browser without a manual refresh.
 
 ## Validation commands
 
 - `npm run typecheck` — **passes** (`tsc --noEmit`, strict).
-- `npm test` — **passes** (8/8 in `onlineActions.test.ts`; runs all
-  `src/game/*.test.ts`).
-- `npm run lint` — **not configured** (no ESLint setup in this repo; `next
-  lint` prompts for first-time config).
-- `npm run build` — see the run log accompanying this change.
+- `npm test` (`tsx --test src/game/*.test.ts`) — **passes**, 23/23
+  (17 in `onlineActions.test.ts` + 6 in the existing puzzle-validator suite).
+  Note: `tsx` resolves via `npm`/`npx`; calling the bare `tsx` binary on a
+  shell without `node_modules/.bin` on PATH won't find it.
+- `npm run build` — **passes** (`next build`; `/api/games/[gameId]/move`
+  compiles as a dynamic route).
+- `npm run lint` — **not configured.** There is no `lint` script in
+  `package.json` and no ESLint config in the repo; `next lint` would prompt
+  for first-time setup. Nothing to run.

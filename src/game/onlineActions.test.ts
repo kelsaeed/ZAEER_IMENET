@@ -14,6 +14,7 @@ import { strict as assert } from 'node:assert';
 
 import type { GameState, GamePiece, Player } from './types';
 import { createInitialState } from './initialState';
+import { applyMove } from './logic';
 import { applyOnlineAction } from './onlineActions';
 
 function playing(): GameState {
@@ -113,4 +114,100 @@ test('timeout is accepted once the clock has run out (opponent wins)', () => {
     assert.equal(res.state.phase, 'won');
     assert.equal(res.state.winner, 2); // the active player (1) flagged → 2 wins
   }
+});
+
+// ─── Ant multi-step turn (move → end-turn) flow ───────────────────────────
+// An ant's positional move keeps the turn with the same player; it must then
+// commit with End Turn. The server validates the whole sequence.
+
+/** Apply a one-step ant move via the engine, then return the post-move state
+ *  exactly as the route would have persisted it (selectedPieceId, the
+ *  antMovedThisTurn flag, and antOriginalPosition all set). */
+function afterAntMove(): { state: GameState; antId: string } {
+  const state = playing();
+  const ant = find(state, 'ant', 1, 15, 5); // p1 ant, one step up the column is legal
+  const moved = applyMove(state, ant.id, 14, 5);
+  return { state: moved, antId: ant.id };
+}
+
+test('ant move keeps the turn with the same player (no flip yet)', () => {
+  const { state } = afterAntMove();
+  assert.equal(state.currentPlayer, 1);
+  assert.equal(state.antMovedThisTurn, true);
+});
+
+test('a second board move mid-ant-turn is rejected', () => {
+  const { state, antId } = afterAntMove();
+  const res = applyOnlineAction(state, { type: 'move', pieceId: antId, to: { row: 13, col: 5 } }, 1);
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 400);
+});
+
+test('end turn after an ant move commits and flips the player', () => {
+  const { state, antId } = afterAntMove();
+  const res = applyOnlineAction(state, { type: 'endTurn', pieceId: antId }, 1);
+  assert.equal(res.ok, true, JSON.stringify(res));
+  if (res.ok) assert.equal(res.state.currentPlayer, 2);
+});
+
+test('end turn with nothing committed this turn is rejected', () => {
+  const state = playing();
+  const ant = find(state, 'ant', 1, 15, 5);
+  const res = applyOnlineAction(state, { type: 'endTurn', pieceId: ant.id }, 1);
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 400);
+});
+
+test('end turn is rejected for a non-ant piece', () => {
+  const state = playing();
+  const lion = find(state, 'lion', 1, 15, 1);
+  const res = applyOnlineAction(state, { type: 'endTurn', pieceId: lion.id }, 1);
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 400);
+});
+
+// ─── Revert an un-attacked ant move ───────────────────────────────────────
+test('revertAnt snaps a moved-but-not-attacked ant back to its origin', () => {
+  const { state, antId } = afterAntMove();
+  const res = applyOnlineAction(state, { type: 'revertAnt' }, 1);
+  assert.equal(res.ok, true, JSON.stringify(res));
+  if (res.ok) {
+    const ant = res.state.pieces.find(p => p.id === antId)!;
+    assert.equal(ant.row, 15); // back where it started
+    assert.equal(ant.col, 5);
+    assert.equal(res.state.antMovedThisTurn, false);
+    assert.equal(res.state.currentPlayer, 1); // still my turn
+  }
+});
+
+test('revertAnt is rejected when the ant has not moved this turn', () => {
+  const state = playing(); // no ant move yet
+  const res = applyOnlineAction(state, { type: 'revertAnt' }, 1);
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 400);
+});
+
+// ─── Rotation validation ──────────────────────────────────────────────────
+test('a move with an illegal rotateTo is rejected', () => {
+  const state = playing();
+  const ant = find(state, 'ant', 1, 15, 5); // no valid rotations from the opening
+  const res = applyOnlineAction(
+    state,
+    { type: 'move', pieceId: ant.id, to: { row: 14, col: 5 }, rotateTo: 'vertical' },
+    1,
+  );
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 400);
+});
+
+test('rotateTo on a non-ant piece is rejected', () => {
+  const state = playing();
+  const lion = find(state, 'lion', 1, 15, 1);
+  const res = applyOnlineAction(
+    state,
+    { type: 'move', pieceId: lion.id, to: { row: 14, col: 1 }, rotateTo: 'vertical' },
+    1,
+  );
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 400);
 });
