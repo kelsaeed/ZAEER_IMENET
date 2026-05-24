@@ -1,8 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
-import { saveGameState, GameRow } from '@/lib/supabase/games';
-import { createInitialState } from '@/game/initialState';
+import { submitGameAction, type GameActionBody, GameRow } from '@/lib/supabase/games';
 import { useUser } from '@/hooks/useUser';
 import { applyMove, applyEndTurn, applyTimeout, getValidMoves } from '@/game/logic';
 import type { GameState, Player, Orientation } from '@/game/types';
@@ -64,14 +63,18 @@ export interface OnlineGameView {
  * currently-selected piece and valid-move highlights lives client-side and
  * is wiped on every server update so opponent's selections don't leak.
  *
- * Move flow:
+ * Move flow (server-authoritative):
  *   1. Player taps a cell.
- *   2. Locally compute the new state (applyMove / getValidMoves).
- *   3. Optimistically render the new state.
- *   4. Persist to DB. Realtime then fans the same state to the opponent.
+ *   2. Locally compute the new state (applyMove / getValidMoves) and render
+ *      it optimistically so the board feels instant.
+ *   3. Submit only the move *intent* to /api/games/[id]/move. The server
+ *      re-validates against the canonical state and persists the result.
+ *   4. Adopt the server's authoritative state from the response; Realtime
+ *      then fans the same state to the opponent. On rejection we resync
+ *      from the DB row so a refused move can't leave the board out of sync.
  *
- * Echo handling: when our own write comes back via Realtime we just adopt
- * the canonical version — usually a no-op visual change. */
+ * Selection / in-progress ant rotation stay local (updateLocal) — they're
+ * never persisted, so the opponent can't act on them anyway. */
 export function useOnlineGame(gameId: string | null): OnlineGameView {
   const { user } = useUser();
   const [game, setGame] = useState<GameRow | null>(null);
@@ -274,21 +277,19 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       const perMoveExpired = cur.clocks!.perMoveSeconds > 0
         && elapsed > cur.clocks!.perMoveSeconds;
       if (remaining > 0 && !perMoveExpired) return;
-      // Active player's flag fell — write the timeout to the DB so the
-      // opponent gets the win via Realtime. saveGameState bakes phase='won'
-      // and winner_id from state.winner, which applyTimeout sets to the
-      // OTHER player.
+      // Active player's flag fell — ask the server to record the timeout so
+      // the opponent gets the win via Realtime. The server re-verifies the
+      // clock actually expired (so nobody can claim a timeout with time
+      // left) and bakes phase='won' / winner_id from applyTimeout, which
+      // sets the OTHER player as the winner.
       const losing = cur.currentPlayer;
       const next = applyTimeout(cur, losing);
-      saveGameState({
-        gameId: game.id,
-        state: next,
-        player1Id: game.player1_id,
-        player2Id: game.player2_id,
-      }).catch(err => console.error('[online] timeout write failed', err));
       // Reflect locally so the HUD flips immediately, even before Realtime
       // echoes it back.
       setGame(prev => prev ? { ...prev, state: next } : prev);
+      submitGameAction(game.id, { action: 'timeout', expectedTurn: cur.turn })
+        .then(res => { if (!res.ok) console.error('[online] timeout rejected', res.status, res.error); })
+        .catch(err => console.error('[online] timeout write failed', err));
     }, 250);
     return () => clearInterval(id);
   }, [isPlaying, isMyTurn, state, game]);
@@ -309,24 +310,36 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     setGame(prev => prev ? { ...prev, state: newState, current_turn: newState.turn } : prev);
   }, []);
 
-  /** Optimistic local update + DB write. Use for state changes that
-   *  *commit* — moves, end turn, ant move-undos, anything the opponent
-   *  must see. The Realtime echo of our own write replays the same
-   *  state we already set locally, so it's effectively a no-op. */
-  const persistRemote = useCallback(async (newState: GameState) => {
-    if (!game || !user) return;
-    setGame(prev => prev ? { ...prev, state: newState, current_turn: newState.turn } : prev);
-    try {
-      await saveGameState({
-        gameId: game.id,
-        state: newState,
-        player1Id: game.player1_id,
-        player2Id: game.player2_id,
-      });
-    } catch (e) {
-      console.error('[online] saveGameState failed', e);
+  /** Re-fetch the canonical row. Used when a submitted action is rejected
+   *  (illegal/stale) so the optimistic board snaps back to the truth. */
+  const resyncFromServer = useCallback(async () => {
+    if (!gameId) return;
+    const supabase = getSupabaseBrowser();
+    const { data } = await supabase.from('games').select('*').eq('id', gameId).single();
+    if (data) {
+      setGame(data as GameRow);
+      setViewingHistoryIndex(null);
     }
-  }, [game, user]);
+  }, [gameId]);
+
+  /** Optimistic local update + server-authoritative submit. Use for state
+   *  changes that *commit* — moves, end turn, ant move-undos, timeout —
+   *  anything the opponent must see. We render `optimistic` immediately for
+   *  snappiness, then send only the intent; the server re-derives the state
+   *  with the real engine and returns the canonical version, which we adopt
+   *  (the Realtime echo replays the same state, so it's a no-op). A rejected
+   *  action triggers a resync so the board can't drift from the server. */
+  const commit = useCallback(async (optimistic: GameState, body: GameActionBody) => {
+    if (!game || !user) return;
+    setGame(prev => prev ? { ...prev, state: optimistic, current_turn: optimistic.turn } : prev);
+    const res = await submitGameAction(game.id, body);
+    if (!res.ok) {
+      console.error('[online] action rejected', res.status, res.error);
+      await resyncFromServer();
+      return;
+    }
+    setGame(prev => prev ? { ...prev, state: res.state, current_turn: res.state.turn } : prev);
+  }, [game, user, resyncFromServer]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
   // These mirror the local useGame actions but their results go through the
@@ -344,11 +357,21 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     if (state.antAttackedThisTurn) return;
 
     // 1. Selected piece + valid move target → execute move. This commits
-    //    the move (board changes the opponent must see) so it goes to DB.
+    //    the move (board changes the opponent must see), so it goes through
+    //    the server. If the ant was rotated locally before this move, send
+    //    that rotation along so the server re-derives the same result.
     if (state.selectedPieceId) {
       const isValid = state.validMoves.some(m => m.row === row && m.col === col);
       if (isValid) {
-        persistRemote(applyMove(state, state.selectedPieceId, row, col));
+        const sel = state.pieces.find(p => p.id === state.selectedPieceId);
+        const rotateTo = (sel?.type === 'ant' && state.antHasRotated) ? sel.orientation : undefined;
+        commit(applyMove(state, state.selectedPieceId, row, col), {
+          action: 'move',
+          pieceId: state.selectedPieceId,
+          to: { row, col },
+          rotateTo,
+          expectedTurn: state.turn,
+        });
         return;
       }
     }
@@ -398,9 +421,10 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
         return p;
       });
       // Reverting an ant move *moves piece positions back* — the opponent
-      // had already seen the move land (we persisted it on commit), so
-      // they must also see it un-land. DB write required.
-      persistRemote({
+      // had already seen the move land (we committed it), so they must also
+      // see it un-land. The server reproduces this from the persisted
+      // antOriginalPosition/Orientation, so we send just the intent.
+      commit({
         ...state,
         pieces: reverted,
         selectedPieceId: null,
@@ -411,7 +435,7 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
         antMovedThisTurn: false,
         antOriginalOrientation: undefined,
         antOriginalPosition: undefined,
-      });
+      }, { action: 'revertAnt', expectedTurn: state.turn });
       return;
     }
 
@@ -467,7 +491,7 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
         ? state.antOriginalPosition
         : (isAnt ? { row: freshPiece.row, col: freshPiece.col } : undefined),
     });
-  }, [state, isMyTurn, persistRemote, updateLocal]);
+  }, [state, isMyTurn, commit, updateLocal]);
 
   const rotateAntTo = useCallback((orientation: Orientation) => {
     if (!state || !isMyTurn || !state.selectedPieceId) return;
@@ -489,9 +513,9 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       antHasRotated: true,
       antOriginalOrientation: state.antOriginalOrientation ?? piece.orientation,
     };
-    // Rotation is part of the in-progress ant turn — local only. The
-    // final orientation is committed to DB when End Turn fires (or when
-    // the ant moves, which goes through persistRemote).
+    // Rotation is part of the in-progress ant turn — local only. The final
+    // orientation is sent to the server when End Turn fires (rotateTo), or
+    // when the ant moves (the move intent carries rotateTo via commit).
     updateLocal(newState);
   }, [state, isMyTurn, updateLocal]);
 
@@ -500,8 +524,16 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     const piece = state.pieces.find(p => p.id === state.selectedPieceId);
     if (!piece || piece.type !== 'ant') return;
     if (!state.antMovedThisTurn && !state.antHasRotated) return;
-    persistRemote(applyEndTurn(state));
-  }, [state, isMyTurn, persistRemote]);
+    // Send the committed orientation if the ant rotated this turn (the
+    // rotation itself was local-only); the server validates + applies it.
+    const rotateTo = state.antHasRotated ? piece.orientation : undefined;
+    commit(applyEndTurn(state), {
+      action: 'endTurn',
+      pieceId: state.selectedPieceId,
+      rotateTo,
+      expectedTurn: state.turn,
+    });
+  }, [state, isMyTurn, commit]);
 
   const switchToShieldedPiece = useCallback(() => {
     if (!state || !isMyTurn || !state.selectedPieceId) return;
@@ -539,30 +571,20 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
   const resign = useCallback(async () => {
     if (!game || !user || myPlayerNumber === null || !state) return;
     if (!confirm('Resign this match?')) return;
-    const supabase = getSupabaseBrowser();
-    const winnerId = myPlayerNumber === 1 ? game.player2_id : game.player1_id;
     const winnerNumber: Player = myPlayerNumber === 1 ? 2 : 1;
-    // Update state.phase too so the in-game UI stops accepting clicks
-    // and the win screen has a winner to display.
-    const finalState: GameState = {
-      ...state,
-      phase: 'won',
-      winner: winnerNumber,
-      selectedPieceId: null,
-      validMoves: [],
-      canRotate: false,
-      validRotations: [],
-    };
-    await supabase
-      .from('games')
-      .update({
-        state: finalState,
-        status: 'abandoned',
-        winner_id: winnerId,
-        finished_at: new Date().toISOString(),
-      })
-      .eq('id', game.id);
-  }, [game, user, myPlayerNumber, state]);
+    // Optimistically flip the local state to 'won' so the win screen shows
+    // and clicks stop immediately; the server is the authority on the write.
+    setGame(prev => prev ? {
+      ...prev,
+      state: { ...prev.state, phase: 'won', winner: winnerNumber, selectedPieceId: null, validMoves: [], canRotate: false, validRotations: [] },
+      status: 'abandoned',
+    } : prev);
+    const res = await submitGameAction(game.id, { action: 'resign' });
+    if (!res.ok) {
+      console.error('[online] resign rejected', res.status, res.error);
+      await resyncFromServer();
+    }
+  }, [game, user, myPlayerNumber, state, resyncFromServer]);
 
   // ── Rematch in same room ────────────────────────────────────────────────
   // Each player toggles their own ready flag. When both are true, the host
@@ -584,38 +606,24 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
     const newReady = !iAmReady;
     const otherReady = myPlayerNumber === 1 ? game.p2_ready : game.p1_ready;
 
-    // Either player triggers the rematch reset once both are ready. The
-    // updates are idempotent so a race between both clients just produces
-    // two identical writes — the second is a no-op.
-    if (newReady && otherReady) {
-      const won = game.winner_id;
-      const p1Wins = won === game.player1_id ? game.series_p1_wins + 1 : game.series_p1_wins;
-      const p2Wins = won === game.player2_id ? game.series_p2_wins + 1 : game.series_p2_wins;
-      const fresh = {
-        ...createInitialState(),
-        phase: 'playing' as const,
-        lastAction: { key: 'action.player1Turn' },
-      };
-      await supabase
-        .from('games')
-        .update({
-          state: fresh,
-          status: 'playing',
-          winner_id: null,
-          finished_at: null,
-          current_turn: 0,
-          p1_ready: false,
-          p2_ready: false,
-          series_p1_wins: p1Wins,
-          series_p2_wins: p2Wins,
-          match_number: game.match_number + 1,
-        })
-        .eq('id', game.id);
-      return;
-    }
-
-    // Otherwise: just flip my own ready flag and wait for the opponent.
+    // Flip my own ready flag directly — p1_ready/p2_ready are the only
+    // columns a client may still write after the 0018 lockdown, and they
+    // can't affect the board or result.
     await supabase.from('games').update({ [field]: newReady }).eq('id', game.id);
+
+    // Once both players are ready, the actual match reset (fresh board,
+    // series increment, winner/status clear) is an authoritative write, so
+    // it goes through the server. The match_number guard makes a race
+    // between both clients a no-op for the second caller.
+    if (newReady && otherReady) {
+      const res = await submitGameAction(game.id, {
+        action: 'rematch',
+        expectedMatchNumber: game.match_number,
+      });
+      if (!res.ok && res.status !== 409) {
+        console.error('[online] rematch failed', res.status, res.error);
+      }
+    }
   }, [game, user, myPlayerNumber, iAmReady]);
 
   // ── History review (local only) ─────────────────────────────────────────

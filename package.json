@@ -9,6 +9,7 @@
     "start": "next start",
     "seed:admin": "node --env-file=.env.local scripts/seed-admin.mjs",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/game/*.test.ts",
     "test:puzzles": "tsx --test src/game/puzzleValidator.test.ts"
   },
   "dependencies": {

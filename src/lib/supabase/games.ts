@@ -1,5 +1,5 @@
 'use client';
-import type { GameState, Player, TimeControl } from '@/game/types';
+import type { GameState, Player, TimeControl, Orientation, Position } from '@/game/types';
 import { createInitialState } from '@/game/initialState';
 import { timeControlsMatch } from '@/game/timeControl';
 import { getSupabaseBrowser } from './client';
@@ -113,30 +113,43 @@ export async function findGameByInviteCode(code: string): Promise<GameRow | null
   return Array.isArray(data) && data.length > 0 ? (data[0] as GameRow) : null;
 }
 
-/** Persist a move/state change. The caller pre-computes the new GameState
- *  via applyMove() locally; this just writes the result back. */
-export async function saveGameState(opts: {
-  gameId: string;
-  state: GameState;
-  player1Id: string | null;
-  player2Id: string | null;
-}): Promise<void> {
-  const supabase = getSupabaseBrowser();
-  const isWon = opts.state.phase === 'won' && opts.state.winner;
-  const winnerId = isWon
-    ? (opts.state.winner === 1 ? opts.player1Id : opts.player2Id)
-    : null;
-  const { error } = await supabase
-    .from('games')
-    .update({
-      state: opts.state,
-      current_turn: opts.state.turn,
-      status: isWon ? 'finished' : 'playing',
-      winner_id: winnerId,
-      finished_at: isWon ? new Date().toISOString() : null,
-    })
-    .eq('id', opts.gameId);
-  if (error) throw new Error(error.message);
+/** A move *intent* submitted to the server-authoritative endpoint. The
+ *  client never sends a full board — only what it wants to do. The server
+ *  re-runs the engine and persists the result (see
+ *  src/app/api/games/[gameId]/move/route.ts). This is what replaced the old
+ *  client-trusted `saveGameState` write, closing the cheat path where any
+ *  participant could PUT an arbitrary winning state. */
+export type GameActionBody =
+  | { action: 'move'; pieceId: string; to: Position; rotateTo?: Orientation; expectedTurn: number }
+  | { action: 'endTurn'; pieceId: string; rotateTo?: Orientation; expectedTurn: number }
+  | { action: 'revertAnt'; expectedTurn: number }
+  | { action: 'timeout'; expectedTurn: number }
+  | { action: 'resign' }
+  | { action: 'rematch'; expectedMatchNumber: number };
+
+export type GameActionResult =
+  | { ok: true; state: GameState }
+  | { ok: false; status: number; error: string };
+
+/** POST a game action to the server route. Auth travels via the session
+ *  cookie (same-origin fetch). On success the server returns the canonical
+ *  next state; Realtime will also fan that same state to both players. */
+export async function submitGameAction(gameId: string, body: GameActionBody): Promise<GameActionResult> {
+  try {
+    const res = await fetch(`/api/games/${gameId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    let json: { state?: GameState; error?: string } = {};
+    try { json = await res.json(); } catch { /* empty body */ }
+    if (!res.ok || !json.state) {
+      return { ok: false, status: res.status, error: json.error ?? `request failed (${res.status})` };
+    }
+    return { ok: true, state: json.state };
+  } catch (e) {
+    return { ok: false, status: 0, error: e instanceof Error ? e.message : 'network error' };
+  }
 }
 
 /** Quick Match: try to join the oldest open public game with the SAME
@@ -306,22 +319,7 @@ export async function listMyActiveGames(userId: string): Promise<ActiveGame[]> {
   });
 }
 
-/** Player gives up — game ends with the other player as winner. */
-export async function resignGame(opts: {
-  gameId: string;
-  losingPlayer: Player;
-  player1Id: string | null;
-  player2Id: string | null;
-}): Promise<void> {
-  const supabase = getSupabaseBrowser();
-  const winnerId = opts.losingPlayer === 1 ? opts.player2Id : opts.player1Id;
-  const { error } = await supabase
-    .from('games')
-    .update({
-      status: 'abandoned',
-      winner_id: winnerId,
-      finished_at: new Date().toISOString(),
-    })
-    .eq('id', opts.gameId);
-  if (error) throw new Error(error.message);
-}
+// (resignGame removed: resignation is now an authoritative server action —
+//  see submitGameAction({ action: 'resign' }). A direct client write to
+//  status/winner_id would also be rejected by the column lockdown in
+//  migration 0018.)
