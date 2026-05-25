@@ -1,9 +1,12 @@
 'use client';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { GameState } from '@/game/types';
 import BoardCell from './BoardCell';
 import BoardDecor from './BoardDecor';
 import RotationHint from './RotationHint';
 import { BOARD_SIZE, colLabel, rowLabel } from '@/game/constants';
+import { cellKey, buildCellPieceMap, buildValidMoveSet, pickMainPiece, NO_PIECES } from '@/game/boardLayout';
+import { PERF_ENABLED, readCellRenderCount } from './boardRenderCount';
 import { useSettings } from '@/hooks/useSettings';
 
 interface Props {
@@ -43,6 +46,36 @@ export default function GameBoard({
   const { pieces, selectedPieceId, validMoves, bounceEffect } = state;
   const { theme } = useSettings();
   const labelColor = `color-mix(in srgb, ${theme.textPrimary} 30%, transparent)`;
+
+  // ── Per-render lookups, built once instead of inside all 256 cells ──────
+  // cellPieceMap only rebuilds when `pieces` changes (i.e. on a move), so a
+  // selection — which changes selectedPieceId/validMoves but NOT pieces —
+  // leaves every cell's `piecesHere` reference stable and lets React.memo
+  // skip the cells that didn't actually change.
+  const cellPieceMap = useMemo(() => buildCellPieceMap(pieces), [pieces]);
+  const validMoveSet = useMemo(() => buildValidMoveSet(validMoves), [validMoves]);
+
+  // Stable click identity for every cell, regardless of whether the caller's
+  // handler is memoized. useOnlineGame's clickCell, for one, changes every
+  // render (its deps include `state`); without this wrapper that alone would
+  // re-render all 256 cells on every online state change.
+  const clickRef = useRef(onCellClick);
+  clickRef.current = onCellClick;
+  const stableClick = useCallback((r: number, c: number) => clickRef.current(r, c), []);
+
+  // Dev-only: log how many BoardCells actually re-rendered this commit, so the
+  // fan-out reduction is observable. No-op unless localStorage zaeer.perf is set.
+  const renderNo = useRef(0);
+  renderNo.current += 1;
+  const prevCellRenders = useRef(0);
+  useEffect(() => {
+    if (!PERF_ENABLED) return;
+    const total = readCellRenderCount();
+    const delta = total - prevCellRenders.current;
+    prevCellRenders.current = total;
+    // eslint-disable-next-line no-console
+    console.debug(`[board] commit #${renderNo.current}: ${delta} / ${BOARD_SIZE * BOARD_SIZE} cells rendered`);
+  });
 
   return (
     // The board is a coordinate grid (chess-style A..P / 16..1). It must
@@ -116,19 +149,24 @@ export default function GameBoard({
               {rowLabel(row)}
             </div>
 
-            {Array.from({ length: BOARD_SIZE }).map((_, col) => (
-              <BoardCell
-                key={`${row}-${col}`}
-                row={row}
-                col={col}
-                allPieces={pieces}
-                selectedPieceId={selectedPieceId}
-                validMoves={validMoves}
-                bounceEffect={bounceEffect}
-                onClick={onCellClick}
-                cellSize={cellSize}
-              />
-            ))}
+            {Array.from({ length: BOARD_SIZE }).map((_, col) => {
+              const key = cellKey(row, col);
+              const piecesHere = cellPieceMap.get(key) ?? NO_PIECES;
+              const mainPiece = pickMainPiece(piecesHere);
+              return (
+                <BoardCell
+                  key={`${row}-${col}`}
+                  row={row}
+                  col={col}
+                  piecesHere={piecesHere}
+                  isSelected={mainPiece != null && mainPiece.id === selectedPieceId}
+                  isValidMove={validMoveSet.has(key)}
+                  bounceEffect={bounceEffect}
+                  onClick={stableClick}
+                  cellSize={cellSize}
+                />
+              );
+            })}
           </div>
         ))}
 

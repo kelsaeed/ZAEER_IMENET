@@ -1,26 +1,36 @@
 'use client';
 import { memo } from 'react';
-import { GamePiece, Position, BounceEffect } from '@/game/types';
+import { GamePiece, BounceEffect } from '@/game/types';
 import { isThrone, isBarrier } from '@/game/constants';
-import { getAntCells, getPiecesAtCell } from '@/game/logic';
+import { getAntCells } from '@/game/logic';
+import { pickMainPiece, pickOverlayPiece } from '@/game/boardLayout';
 import { useSettings } from '@/hooks/useSettings';
 import { usePlayerThemes, themeForRow } from '@/hooks/usePlayerThemes';
+import { bumpCellRender } from './boardRenderCount';
 import PieceDisplay from './PieceDisplay';
 
 interface Props {
   row: number;
   col: number;
-  allPieces: GamePiece[];
-  selectedPieceId: string | null;
-  validMoves: Position[];
+  /** Pieces occupying THIS cell (centre for non-ants; centre + wings for
+   *  ants), precomputed and memoized by GameBoard. A stable reference across
+   *  unrelated state changes is what lets React.memo skip this cell. */
+  piecesHere: readonly GamePiece[];
+  /** Whether this cell's main piece is the selected one. Computed in
+   *  GameBoard from the same `pickMainPiece` rule used here, so the value is
+   *  identical to the old `selectedPieceId === mainPiece.id` check. */
+  isSelected: boolean;
+  /** Whether this cell is a legal move/attack target this turn. */
+  isValidMove: boolean;
   bounceEffect?: BounceEffect;
   onClick: (row: number, col: number) => void;
   cellSize: number;
 }
 
 function BoardCellImpl({
-  row, col, allPieces, selectedPieceId, validMoves, bounceEffect, onClick, cellSize
+  row, col, piecesHere, isSelected, isValidMove, bounceEffect, onClick, cellSize
 }: Props) {
+  bumpCellRender(); // dev-only render tally (no-op unless zaeer.perf is set)
   const handleClick = () => onClick(row, col);
   const { theme: viewerTheme } = useSettings();
   const playerThemes = usePlayerThemes();
@@ -37,18 +47,14 @@ function BoardCellImpl({
     player === 1 ? playerThemes.p1 : playerThemes.p2;
   const throne = isThrone(row, col);
   const barrier = isBarrier(row, col);
-  const isValidMove = validMoves.some(m => m.row === row && m.col === col);
   const isEven = (row + col) % 2 === 0;
 
-  const piecesHere = getPiecesAtCell(allPieces, row, col);
-
-  // Determine main piece and overlay
-  // Main piece: not the butterfly/bat overlay; overlay piece: shielding or paralyzing
-  const mainPiece = piecesHere.find(p => !p.shielding && !p.paralyzing) ?? piecesHere[0];
-  const overlayPiece = piecesHere.find(p => p.shielding !== undefined || p.paralyzing !== undefined);
+  // Determine main piece and overlay (same selection rule as before, now a
+  // shared pure helper so GameBoard's isSelected computation can't drift).
+  const mainPiece = pickMainPiece(piecesHere);
+  const overlayPiece = pickOverlayPiece(piecesHere);
 
   const isAntCenter = mainPiece?.type === 'ant' && mainPiece.row === row && mainPiece.col === col;
-  const isSelected = !!(mainPiece && selectedPieceId === mainPiece.id);
 
   // Check if this cell is an ant WING (not center)
   const isAntWing = !isAntCenter && mainPiece?.type === 'ant' &&
@@ -178,9 +184,13 @@ function BoardCellImpl({
   );
 }
 
-// allPieces is recomputed each render in the parent (state.pieces); React.memo's
-// shallow compare is enough — when the array reference is the same (no state
-// change), all 256 cells skip re-render. The piecesAtCell computation inside
-// is cheap (filter over ~24 pieces), but skipping reconciliation is the win.
+// Every prop is now either a primitive (row/col/cellSize/isSelected/
+// isValidMove), a stable callback (GameBoard wraps onClick in a ref so its
+// identity never changes), or a stable reference (`piecesHere` comes from a
+// map memoized on `pieces`, and empty cells share the frozen NO_PIECES array;
+// `bounceEffect` is undefined except during the ~0.5s after an attack). So
+// React.memo's default shallow compare is exactly right: on a selection only
+// the cells whose `isSelected`/`isValidMove` flipped re-render, and on a move
+// only the cells whose `piecesHere` changed do. No custom comparator needed.
 const BoardCell = memo(BoardCellImpl);
 export default BoardCell;
