@@ -4,7 +4,8 @@ import { GameState, Orientation, AiLevel, TimeControl } from '@/game/types';
 import { createInitialState } from '@/game/initialState';
 import { getValidMoves, applyMove, applyEndTurn, applyTimeout, getAntCells, getInteractiveAtCell } from '@/game/logic';
 import { isInBounds, isBarrier } from '@/game/constants';
-import { chooseAiMove } from '@/game/ai';
+import { isAiTurn, aiResultStillApplies } from '@/game/aiTurn';
+import { requestAiMove } from '@/lib/ai/aiWorkerClient';
 
 // Bumped to v3 with the history / review feature: GameState now contains a
 // history array, viewingHistoryIndex, and winScreenDismissed. Older saved
@@ -118,48 +119,63 @@ export function useGame() {
   // ── AI scheduler ──────────────────────────────────────────────────────────
   // When the local game is in vs-AI mode and it's player 2's turn, queue an
   // AI move on a short delay so the user perceives the bot "thinking" rather
-  // than slamming a move down the same frame they finished theirs. The
-  // re-checks inside setState guard against state changes that happen
-  // between scheduling and firing (resign, restart, mode flip mid-turn).
+  // than slamming a move down the same frame they finished theirs.
+  //
+  // The search itself runs on a Web Worker (see aiWorkerClient) so the Hard
+  // bot's up-to-1.8s minimax never freezes the UI. Because the result is now
+  // asynchronous, we stamp the turn we asked about (`thinkAtTurn`) and apply
+  // the move only if the live state is still that same bot turn — guarding
+  // against reset / menu / history-review / clock-flag happening mid-think.
+  // The effect cleanup cancels the request, terminating any in-flight search.
   useEffect(() => {
     if (!isHydrated) return;
-    const level = state.aiLevel;
-    if (!level) return;
-    if (state.phase !== 'playing') return;
-    if (state.currentPlayer !== 2) return;
-    if (state.viewingHistoryIndex !== null) return;
+    if (!isAiTurn(state)) return;
+    const level = state.aiLevel!;
+    const snapshot = state;
+    const thinkAtTurn = state.turn;
 
-    const t = setTimeout(() => {
-      setState(prev => {
-        if (!prev.aiLevel) return prev;
-        if (prev.phase !== 'playing') return prev;
-        if (prev.currentPlayer !== 2) return prev;
-        if (prev.viewingHistoryIndex !== null) return prev;
-        const move = chooseAiMove(prev, 2, prev.aiLevel);
-        if (!move) return prev;
+    let cancelled = false;
+    let cancelRequest: (() => void) | null = null;
 
-        let next = applyMove(prev, move.pieceId, move.target.row, move.target.col);
-        // Ant moves don't end the turn on their own — applyMove keeps the
-        // ant selected, expecting rotate-then-EndTurn from the human HUD.
-        // For the AI, commit the optional rotation and end the turn.
-        const moved = next.pieces.find(p => p.id === move.pieceId);
-        if (
-          moved?.type === 'ant'
-          && next.phase === 'playing'
-          && next.currentPlayer === 2
-        ) {
-          if (move.rotateTo && (next.validRotations ?? []).includes(move.rotateTo)) {
-            const rotated = next.pieces.map(p =>
-              p.id === move.pieceId ? { ...p, orientation: move.rotateTo } : p
-            );
-            next = { ...next, pieces: rotated, antHasRotated: true };
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      const handle = requestAiMove(snapshot, 2, level);
+      cancelRequest = handle.cancel;
+      handle.promise.then(move => {
+        if (cancelled || !move) return;
+        setState(prev => {
+          // Re-validate against the live state: the worker result is stale if
+          // the turn advanced or it's no longer the bot's move.
+          if (!aiResultStillApplies(prev, thinkAtTurn)) return prev;
+
+          let next = applyMove(prev, move.pieceId, move.target.row, move.target.col);
+          // Ant moves don't end the turn on their own — applyMove keeps the
+          // ant selected, expecting rotate-then-EndTurn from the human HUD.
+          // For the AI, commit the optional rotation and end the turn.
+          const moved = next.pieces.find(p => p.id === move.pieceId);
+          if (
+            moved?.type === 'ant'
+            && next.phase === 'playing'
+            && next.currentPlayer === 2
+          ) {
+            if (move.rotateTo && (next.validRotations ?? []).includes(move.rotateTo)) {
+              const rotated = next.pieces.map(p =>
+                p.id === move.pieceId ? { ...p, orientation: move.rotateTo } : p
+              );
+              next = { ...next, pieces: rotated, antHasRotated: true };
+            }
+            next = applyEndTurn(next);
           }
-          next = applyEndTurn(next);
-        }
-        return next;
+          return next;
+        });
       });
     }, 600);
-    return () => clearTimeout(t);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      if (cancelRequest) cancelRequest();
+    };
   }, [
     isHydrated,
     state.aiLevel,
@@ -172,12 +188,7 @@ export function useGame() {
   /** True while the AI is "thinking" — i.e. it's player 2's turn and the
    *  game is in vs-AI mode. Used by the HUD to show a thinking indicator
    *  and by the click handlers to refuse user input on the AI's behalf. */
-  const aiThinking = !!(
-    state.aiLevel
-    && state.phase === 'playing'
-    && state.currentPlayer === 2
-    && state.viewingHistoryIndex === null
-  );
+  const aiThinking = isAiTurn(state);
 
   // ─── History review ─────────────────────────────────────────────────────
   // While viewingHistoryIndex !== null the board renders a frozen snapshot
