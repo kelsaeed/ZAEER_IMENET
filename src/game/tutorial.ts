@@ -414,18 +414,132 @@ const STEP_LION_FINALE: TutorialStep = {
   isComplete: (s) => s.phase === 'won' && s.winner === 1,
 };
 
+/** Lesson 0.5: what winning actually means. A non-interactive callout right
+ *  after the screen tour — before any piece moves, the player learns the two
+ *  win conditions (throne or capture the enemy Lion) and that turns alternate
+ *  one piece at a time. The throne squares pulse so "the centre" is concrete. */
+const STEP_OBJECTIVE: TutorialStep = {
+  id: 'objective',
+  kind: 'callout',
+  titleKey: 'tutorial.objective.title',
+  bodyKey: 'tutorial.objective.body',
+  doneKey: 'tutorial.objective.body',
+  pieces: [
+    piece({ type: 'lion', player: 1, row: 12, col: 7, id: 'obj_lion1' }),
+    piece({ type: 'lion', player: 2, row: 3,  col: 8, id: 'obj_lion2' }),
+  ],
+  highlights: [{ row: 7, col: 7 }, { row: 7, col: 8 }, { row: 8, col: 7 }, { row: 8, col: 8 }],
+};
+
+/** Lesson: the Elephant slides any distance in a straight line. Teaches
+ *  ranged orthogonal movement (contrast the Lion's single step). Slide it
+ *  clear across an empty row. */
+const STEP_ELEPHANT_MOVE: TutorialStep = {
+  id: 'elephant-move',
+  titleKey: 'tutorial.elephantMove.title',
+  bodyKey: 'tutorial.elephantMove.body',
+  doneKey: 'tutorial.elephantMove.done',
+  pieces: [
+    piece({ type: 'elephant', player: 1, row: 13, col: 4, id: 'elephant_p1_tut' }),
+  ],
+  selectFrom: { row: 13, col: 4 },
+  moveTo:     { row: 13, col: 9 },
+  isComplete: (s) => {
+    const e = s.pieces.find(p => p.id === 'elephant_p1_tut');
+    return !!e && e.row === 13 && e.col === 9;
+  },
+};
+
+/** Lesson: the Butterfly travels any distance on the diagonals (and so does
+ *  the Bat — called out in the copy). Glide it up a long diagonal. */
+const STEP_BUTTERFLY_MOVE: TutorialStep = {
+  id: 'butterfly-move',
+  titleKey: 'tutorial.butterflyMove.title',
+  bodyKey: 'tutorial.butterflyMove.body',
+  doneKey: 'tutorial.butterflyMove.done',
+  pieces: [
+    piece({ type: 'butterfly', player: 1, row: 14, col: 4, id: 'butterfly_p1_tut' }),
+  ],
+  selectFrom: { row: 14, col: 4 },
+  moveTo:     { row: 10, col: 8 },
+  isComplete: (s) => {
+    const b = s.pieces.find(p => p.id === 'butterfly_p1_tut');
+    return !!b && b.row === 10 && b.col === 8;
+  },
+};
+
+/** Lesson: the Monkey is the only piece that can leap OVER another. A
+ *  friendly Butterfly sits directly in its path; the Monkey hops past it to
+ *  land beyond. The leapt-over cell pulses so the jump is obvious. */
+const STEP_MONKEY_LEAP: TutorialStep = {
+  id: 'monkey-leap',
+  titleKey: 'tutorial.monkeyLeap.title',
+  bodyKey: 'tutorial.monkeyLeap.body',
+  doneKey: 'tutorial.monkeyLeap.done',
+  pieces: [
+    piece({ type: 'monkey',    player: 1, row: 15, col: 5, id: 'monkey_p1_tut' }),
+    piece({ type: 'butterfly', player: 1, row: 14, col: 5, id: 'leap_friend_tut' }),
+  ],
+  selectFrom: { row: 15, col: 5 },
+  moveTo:     { row: 13, col: 5 },
+  highlights: [{ row: 14, col: 5 }],
+  isComplete: (s) => {
+    const m = s.pieces.find(p => p.id === 'monkey_p1_tut');
+    return !!m && m.row === 13 && m.col === 5;
+  },
+};
+
+/** Lesson: the Elephant's cooldown. A non-interactive callout — cooldown
+ *  plays out across turns, so it's explained rather than drilled. Shows your
+ *  Elephant beside an already-damaged enemy to anchor "it just hit something". */
+const STEP_COOLDOWN: TutorialStep = {
+  id: 'cooldown',
+  kind: 'callout',
+  titleKey: 'tutorial.cooldown.title',
+  bodyKey: 'tutorial.cooldown.body',
+  doneKey: 'tutorial.cooldown.body',
+  pieces: [
+    piece({ type: 'elephant', player: 1, row: 13, col: 7, id: 'cd_ele' }),
+    piece({ type: 'elephant', player: 2, row: 11, col: 7, id: 'cd_enemy', hp: 1, isDamaged: true }),
+  ],
+};
+
+/** Lesson: the second way to win. You don't always need the throne —
+ *  capturing the enemy Lion ends the game outright. Your Elephant (which
+ *  beats the Lion) sits one step below the enemy Lion; take it. */
+const STEP_CAPTURE_LION: TutorialStep = {
+  id: 'capture-lion',
+  titleKey: 'tutorial.captureLion.title',
+  bodyKey: 'tutorial.captureLion.body',
+  doneKey: 'tutorial.captureLion.done',
+  pieces: [
+    piece({ type: 'elephant', player: 1, row: 13, col: 7, id: 'elephant_p1_tut' }),
+    piece({ type: 'lion',     player: 2, row: 12, col: 7, id: 'lion_p2_tut' }),
+    piece({ type: 'lion',     player: 1, row: 15, col: 0, id: 'lion_p1_tut' }),
+  ],
+  selectFrom: { row: 13, col: 7 },
+  moveTo:     { row: 12, col: 7 },
+  isComplete: (s) => s.phase === 'won' && s.winner === 1,
+};
+
 export const TUTORIAL_STEPS: TutorialStep[] = [
   STEP_TOUR,
+  STEP_OBJECTIVE,
   STEP_MOVE,
+  STEP_ELEPHANT_MOVE,
+  STEP_BUTTERFLY_MOVE,
+  STEP_MONKEY_LEAP,
   STEP_SHIELD,
   STEP_PARALYZE,
   STEP_MONKEY_BAT,
   STEP_RESCUE,
   STEP_ELEPHANT,
+  STEP_COOLDOWN,
   STEP_ANT,
   STEP_ANT_ROTATE,
   STEP_ANT_DEFEND,
   STEP_ELEPHANT_THRONE,
   STEP_BAT_BUTTERFLY,
+  STEP_CAPTURE_LION,
   STEP_LION_FINALE,
 ];
