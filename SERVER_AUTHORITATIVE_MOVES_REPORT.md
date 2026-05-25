@@ -108,8 +108,10 @@ technically open.
 - **Ready flags** are still client-writable (intentionally harmless). The
   worst a client can do is toggle its own ready flag; it cannot alter the
   board or result, and the actual reset is server-side.
-- **No rate limiting** on the endpoint yet (out of scope) — a determined
-  authed user could spam *legal* requests. Tracked separately.
+- **Rate limiting** is now in place — a per-user+game fixed-window limiter
+  (in-memory pre-filter + authoritative `rate_limit_hit` RPC, migration 0019)
+  returns 429 on spam without touching validation. See `RATE_LIMITING_REPORT.md`.
+  Remaining gap: no global/multi-account or network-edge limiting yet.
 - **Service role key** must be present in the deployment env
   (`SUPABASE_SERVICE_ROLE_KEY`), already required by the puzzle move route.
 - **Timeout is self-reported by the player on the clock.** Only the *active*

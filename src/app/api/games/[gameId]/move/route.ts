@@ -3,6 +3,9 @@ import { getSupabaseServer } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
 import { applyOnlineAction, type OnlineAction } from '@/game/onlineActions';
 import { createInitialState } from '@/game/initialState';
+import {
+  checkRateLimit, classifyAction, type RateLimitConfig, type RateLimitResult,
+} from '@/lib/server/rateLimit';
 import type { GameState, Player, Orientation, Position } from '@/game/types';
 
 // POST /api/games/[gameId]/move
@@ -47,6 +50,34 @@ function err(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
+/** 429 with the contract the client/spec expect: a clear code, the seconds to
+ *  wait, and a standard Retry-After header. Leaks nothing else. */
+function rateLimited(retryAfter: number) {
+  return NextResponse.json(
+    { ok: false, error: 'rate_limited', retryAfter },
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+  );
+}
+
+/** Authoritative DB limiter hop. Fails open (returns null) on any error so a
+ *  limiter/infra problem — or running before migration 0019 is applied —
+ *  can never break a live game. */
+async function dbRateLimit(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  key: string,
+  cfg: RateLimitConfig,
+): Promise<RateLimitResult | null> {
+  const { data, error } = await supabase.rpc('rate_limit_hit', {
+    p_key: key,
+    p_limit: cfg.limit,
+    p_window_seconds: Math.round(cfg.windowMs / 1000),
+  });
+  if (error || !data) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return { allowed: !!row.allowed, retryAfter: typeof row.retry_after === 'number' ? row.retry_after : 0 };
+}
+
 export async function POST(req: Request, { params }: { params: { gameId: string } }) {
   const { gameId } = params;
 
@@ -61,6 +92,18 @@ export async function POST(req: Request, { params }: { params: { gameId: string 
     return err(400, 'invalid JSON body');
   }
   const action = typeof body.action === 'string' ? body.action : null;
+
+  // Rate limit before any DB load / engine work. Keyed by user + game + the
+  // action's class so a busy match never throttles another, and malformed
+  // payloads (classified 'bad') are throttled even though they 400 below.
+  const rl = await checkRateLimit({
+    userId: user.id,
+    gameId,
+    actionClass: classifyAction(action),
+    dbHit: (key, cfg) => dbRateLimit(supabase, key, cfg),
+  });
+  if (!rl.allowed) return rateLimited(rl.retryAfter);
+
   if (!action) return err(400, 'missing action');
 
   // Load the canonical row (RLS lets a participant read it).
