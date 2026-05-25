@@ -176,6 +176,7 @@ export function classifyAction(action: string | null | undefined): RateLimitClas
     case 'revertAnt':
       return 'gameplay';
     case 'timeout':
+    case 'claimTimeout':
     case 'resign':
     case 'rematch':
       return 'control';

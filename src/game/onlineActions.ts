@@ -201,21 +201,60 @@ function revertAction(state: GameState): ActionOutcome {
   };
 }
 
+/** Server-side clock readout for the player whose clock is running (the
+ *  active player). Pure — `now` is injected so it's testable. Returns null
+ *  when the game has no chess clock. `remainingSeconds` may be negative once
+ *  the flag has fallen. */
+export interface ActiveClock {
+  activePlayer: Player;
+  remainingSeconds: number;
+  perMoveExpired: boolean;
+}
+export function evaluateClock(state: GameState, now: number): ActiveClock | null {
+  if (state.timeControl?.kind !== 'clock' || !state.clocks) return null;
+  const activePlayer = state.currentPlayer;
+  const elapsed = (now - new Date(state.clocks.startedAt).getTime()) / 1000;
+  const matchKey = activePlayer === 1 ? 'p1Seconds' : 'p2Seconds';
+  const remainingSeconds = state.clocks[matchKey] - elapsed;
+  const perMoveExpired =
+    state.clocks.perMoveSeconds > 0 && elapsed > state.clocks.perMoveSeconds;
+  return { activePlayer, remainingSeconds, perMoveExpired };
+}
+
 function timeoutAction(state: GameState, actingPlayer: Player, now: number): ActionOutcome {
-  if (state.timeControl?.kind !== 'clock' || !state.clocks) {
-    return bad('this game has no clock');
-  }
+  const clock = evaluateClock(state, now);
+  if (!clock) return bad('this game has no clock');
   // Only the player whose clock is running may flag their own fall — the
   // turn check above already guarantees actingPlayer === currentPlayer, so
   // the loser is always the caller. We still verify the clock truly expired
-  // server-side so nobody can claim a timeout with real time remaining.
-  const elapsed = (now - new Date(state.clocks.startedAt).getTime()) / 1000;
-  const matchKey = state.currentPlayer === 1 ? 'p1Seconds' : 'p2Seconds';
-  const remaining = state.clocks[matchKey] - elapsed;
-  const perMoveExpired =
-    state.clocks.perMoveSeconds > 0 && elapsed > state.clocks.perMoveSeconds;
-  if (remaining > TIMEOUT_GRACE_SECONDS && !perMoveExpired) {
+  // server-side so nobody can claim a timeout with real time remaining. The
+  // grace band ACCEPTS a self-flag slightly early (the flagging client fires
+  // at 0 but the server processes a beat later; clocks can disagree a little).
+  if (clock.remainingSeconds > TIMEOUT_GRACE_SECONDS && !clock.perMoveExpired) {
     return { ok: false, status: 409, error: 'clock has not expired' };
   }
   return { ok: true, state: applyTimeout(state, actingPlayer) };
+}
+
+/** Opponent-claimed timeout (flag fall). Unlike self-report `timeout`, this is
+ *  NOT gated to the acting player — either participant may invoke it, and the
+ *  loser is ALWAYS the active player (the one whose clock is running). That's
+ *  what lets the waiting player win when the active player disconnects and
+ *  never sends their own timeout.
+ *
+ *  Strict expiry (no grace): the clock must have genuinely run out
+ *  (remainingSeconds <= 0, or the per-move cap blown). Grace here would let an
+ *  opponent steal the win with real time left, so we don't allow it — the
+ *  client only fires a claim once it's comfortably past zero anyway. Pure;
+ *  participant + race-guard checks live in the route. */
+export function evaluateTimeoutClaim(state: GameState, now: number): ActionOutcome {
+  if (state.phase !== 'playing') {
+    return { ok: false, status: 409, error: 'game is not in progress' };
+  }
+  const clock = evaluateClock(state, now);
+  if (!clock) return bad('this game has no clock');
+  if (clock.remainingSeconds > 0 && !clock.perMoveExpired) {
+    return { ok: false, status: 409, error: 'clock has not expired' };
+  }
+  return { ok: true, state: applyTimeout(state, clock.activePlayer) };
 }

@@ -114,12 +114,12 @@ technically open.
   Remaining gap: no global/multi-account or network-edge limiting yet.
 - **Service role key** must be present in the deployment env
   (`SUPABASE_SERVICE_ROLE_KEY`), already required by the puzzle move route.
-- **Timeout is self-reported by the player on the clock.** Only the *active*
-  player's client fires the `timeout` intent (and the server confirms their
-  clock truly expired). If that player closes/freezes their browser, nobody
-  submits the flag-fall and the game hangs until they return — the opponent
-  cannot force a timeout win. This is a liveness gap, not a security hole
-  (no one can claim a win they didn't earn), and it predates this change.
+- **Timeout liveness — RESOLVED.** The active player still self-reports their
+  own flag (`timeout`), but the waiting player can now also `claimTimeout` once
+  the active player's clock has truly expired, so a disconnected/frozen player
+  no longer hangs the game. The claim is server-authoritative (expiry computed
+  from the canonical stored clock against server time, strict no-grace) and
+  race-guarded on `current_turn`. See `TIMEOUT_LIVENESS_REPORT.md`.
 
 ## Audit findings (post-implementation)
 

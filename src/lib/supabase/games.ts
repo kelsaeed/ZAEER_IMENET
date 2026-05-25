@@ -124,6 +124,7 @@ export type GameActionBody =
   | { action: 'endTurn'; pieceId: string; rotateTo?: Orientation; expectedTurn: number }
   | { action: 'revertAnt'; expectedTurn: number }
   | { action: 'timeout'; expectedTurn: number }
+  | { action: 'claimTimeout' }
   | { action: 'resign' }
   | { action: 'rematch'; expectedMatchNumber: number };
 

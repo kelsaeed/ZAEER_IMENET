@@ -15,7 +15,7 @@ import { strict as assert } from 'node:assert';
 import type { GameState, GamePiece, Player } from './types';
 import { createInitialState } from './initialState';
 import { applyMove } from './logic';
-import { applyOnlineAction } from './onlineActions';
+import { applyOnlineAction, evaluateTimeoutClaim, evaluateClock } from './onlineActions';
 import { piece, makeState } from './testHelpers';
 
 function playing(): GameState {
@@ -244,6 +244,96 @@ test('a move the engine considers illegal is rejected by onlineActions', () => {
   const res = applyOnlineAction(state, { type: 'move', pieceId: 'L1', to: { row: 5, col: 9 } }, 1);
   assert.equal(res.ok, false);
   if (!res.ok) assert.equal(res.status, 400);
+});
+
+// ─── Opponent timeout claim (liveness) ────────────────────────────────────
+// The waiting player can end a clocked game when the active player's clock has
+// truly expired — but never early, and never on an unclocked/finished game.
+
+function clockedState(opts: {
+  current: Player;
+  p1: number;
+  p2: number;
+  perMove?: number;
+  startedAtMsAgo: number;
+  now: number;
+}): GameState {
+  return {
+    ...createInitialState(),
+    phase: 'playing',
+    currentPlayer: opts.current,
+    timeControl: { kind: 'clock', matchSeconds: 60, increment: 0, perMoveSeconds: opts.perMove ?? 0 },
+    clocks: {
+      p1Seconds: opts.p1,
+      p2Seconds: opts.p2,
+      perMoveSeconds: opts.perMove ?? 0,
+      startedAt: new Date(opts.now - opts.startedAtMsAgo).toISOString(),
+    },
+  };
+}
+
+test('evaluateClock reads the ACTIVE player\'s remaining time', () => {
+  const now = 1_000_000_000_000;
+  // Player 2 to move, 10s on their clock, 4s elapsed → 6s left.
+  const state = clockedState({ current: 2, p1: 30, p2: 10, startedAtMsAgo: 4000, now });
+  const c = evaluateClock(state, now);
+  assert.ok(c);
+  assert.equal(c!.activePlayer, 2);
+  assert.equal(Math.round(c!.remainingSeconds), 6);
+  assert.equal(evaluateClock({ ...state, timeControl: { kind: 'none' }, clocks: undefined }, now), null);
+});
+
+test('opponent claim succeeds once the active player\'s clock has expired', () => {
+  const now = 1_000_000_000_000;
+  // Player 1 active, 2s left, 10s elapsed → expired. Claim → player 2 wins.
+  const state = clockedState({ current: 1, p1: 2, p2: 60, startedAtMsAgo: 10_000, now });
+  const res = evaluateTimeoutClaim(state, now);
+  assert.equal(res.ok, true, JSON.stringify(res));
+  if (res.ok) {
+    assert.equal(res.state.phase, 'won');
+    assert.equal(res.state.winner, 2); // active player (1) flagged → opponent (2) wins
+  }
+});
+
+test('opponent claim is rejected before expiry (strict, no grace)', () => {
+  const now = 1_000_000_000_000;
+  // Player 1 active, 60s, only 2s elapsed → 58s left. Way too early.
+  const state = clockedState({ current: 1, p1: 60, p2: 60, startedAtMsAgo: 2000, now });
+  const res = evaluateTimeoutClaim(state, now);
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 409);
+});
+
+test('opponent claim is rejected just before zero (no self-report grace)', () => {
+  const now = 1_000_000_000_000;
+  // 2s left — within the self-report grace band, but a claim must be strict.
+  const state = clockedState({ current: 1, p1: 12, p2: 60, startedAtMsAgo: 10_000, now });
+  const res = evaluateTimeoutClaim(state, now);
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 409);
+});
+
+test('opponent claim honors the per-move cap', () => {
+  const now = 1_000_000_000_000;
+  // Plenty of match time, but the per-move cap (5s) was blown (8s elapsed).
+  const state = clockedState({ current: 2, p1: 60, p2: 60, perMove: 5, startedAtMsAgo: 8000, now });
+  const res = evaluateTimeoutClaim(state, now);
+  assert.equal(res.ok, true, JSON.stringify(res));
+  if (res.ok) assert.equal(res.state.winner, 1);
+});
+
+test('claim on an unclocked game is rejected', () => {
+  const res = evaluateTimeoutClaim(playing(), Date.now());
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 400);
+});
+
+test('claim on a finished game is rejected', () => {
+  const now = 1_000_000_000_000;
+  const state: GameState = { ...clockedState({ current: 1, p1: 0, p2: 60, startedAtMsAgo: 10_000, now }), phase: 'won', winner: 2 };
+  const res = evaluateTimeoutClaim(state, now);
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 409);
 });
 
 test('a winning capture propagates phase/winner through onlineActions', () => {

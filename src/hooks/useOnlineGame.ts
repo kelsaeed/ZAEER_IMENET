@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import { submitGameAction, type GameActionBody, GameRow } from '@/lib/supabase/games';
 import { useUser } from '@/hooks/useUser';
@@ -321,6 +321,52 @@ export function useOnlineGame(gameId: string | null): OnlineGameView {
       setViewingHistoryIndex(null);
     }
   }, [gameId]);
+
+  // ── Opponent timeout claim (liveness) ───────────────────────────────────
+  // The self-report tick above only runs for the ACTIVE player. If that
+  // player disconnects/freezes, they never send their own timeout and the
+  // game would hang forever. So the WAITING player watches the opponent's
+  // clock and, once it's safely past zero, asks the server to end the game on
+  // time. The server recomputes expiry from the canonical clock (strict, no
+  // grace) and ignores our clock entirely — a wrongful early claim is just
+  // rejected. We fire at most once per opponent turn, comfortably past zero so
+  // skew can't trigger a premature claim and the active player's own
+  // self-report (which fires at 0) normally ends it first when they're online.
+  const claimedTurnRef = useRef<number>(-1);
+  useEffect(() => {
+    if (!isPlaying || isMyTurn || !state || myPlayerNumber === null) return;
+    if (state.timeControl?.kind !== 'clock' || !state.clocks) return;
+    const id = setInterval(() => {
+      const cur = game?.state;
+      if (!cur || cur.phase !== 'playing' || !cur.clocks) return;
+      // Only when it's genuinely the OPPONENT's turn (their clock is running).
+      if (cur.currentPlayer === myPlayerNumber) return;
+      const elapsed = (Date.now() - new Date(cur.clocks.startedAt).getTime()) / 1000;
+      const matchKey = cur.currentPlayer === 1 ? 'p1Seconds' : 'p2Seconds';
+      const remaining = cur.clocks[matchKey] - elapsed;
+      const perMoveExpired = cur.clocks.perMoveSeconds > 0
+        && elapsed > cur.clocks.perMoveSeconds;
+      // ~2s skew buffer past zero before claiming; the server's check is strict.
+      if (remaining > -2 && !perMoveExpired) return;
+      if (claimedTurnRef.current === cur.turn) return; // one claim per turn
+      claimedTurnRef.current = cur.turn;
+      submitGameAction(game!.id, { action: 'claimTimeout' })
+        .then(res => {
+          if (res.ok) {
+            setGame(prev => prev ? { ...prev, state: res.state } : prev);
+          } else if (res.status === 409) {
+            // The opponent moved (or it already ended) — not a real timeout.
+            // Resync so our board matches the server, and allow a future claim.
+            claimedTurnRef.current = -1;
+            void resyncFromServer();
+          } else {
+            console.error('[online] claimTimeout rejected', res.status, res.error);
+          }
+        })
+        .catch(err => console.error('[online] claimTimeout failed', err));
+    }, 250);
+    return () => clearInterval(id);
+  }, [isPlaying, isMyTurn, state, game, myPlayerNumber, resyncFromServer]);
 
   /** Optimistic local update + server-authoritative submit. Use for state
    *  changes that *commit* — moves, end turn, ant move-undos, timeout —

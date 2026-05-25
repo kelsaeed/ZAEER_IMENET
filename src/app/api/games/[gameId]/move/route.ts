@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabase/admin';
-import { applyOnlineAction, type OnlineAction } from '@/game/onlineActions';
+import { applyOnlineAction, evaluateTimeoutClaim, type OnlineAction } from '@/game/onlineActions';
 import { createInitialState } from '@/game/initialState';
 import {
   checkRateLimit, classifyAction, type RateLimitConfig, type RateLimitResult,
@@ -153,6 +153,39 @@ export async function POST(req: Request, { params }: { params: { gameId: string 
       .maybeSingle();
     if (error) return err(500, 'failed to persist resignation');
     if (!data) return err(409, 'game already finished');
+    return NextResponse.json({ ok: true, state: (data as { state: GameState }).state });
+  }
+
+  // ── claimTimeout (opponent claims the win when the active player's clock
+  //    has run out — the liveness path for a disconnected/frozen player) ────
+  if (action === 'claimTimeout') {
+    if (game.status !== 'playing') return err(409, 'game is not in progress');
+    // Server-authoritative: the loser is always the active player
+    // (state.currentPlayer) and expiry is computed from the canonical stored
+    // clock against the server's own time — the claimant's clock is never
+    // trusted. Either participant may claim; the outcome is identical.
+    const outcome = evaluateTimeoutClaim(game.state, Date.now());
+    if (!outcome.ok) return err(outcome.status, outcome.error);
+    const finalState = outcome.state;
+    const winnerId = finalState.winner === 1 ? game.player1_id : game.player2_id;
+    const { data, error } = await admin
+      .from('games')
+      .update({
+        state: finalState,
+        current_turn: finalState.turn,
+        status: 'finished',
+        winner_id: winnerId,
+        finished_at: new Date().toISOString(),
+      })
+      .eq('id', gameId)
+      .eq('status', 'playing')
+      .eq('current_turn', game.state.turn) // race guard: reject if a move landed first
+      .select('state')
+      .maybeSingle();
+    if (error) return err(500, 'failed to persist timeout');
+    // 0 rows → the active player moved (or the game ended) between our load
+    // and write; their clock claim is moot. Tell the client to resync.
+    if (!data) return err(409, 'game has advanced — please resync');
     return NextResponse.json({ ok: true, state: (data as { state: GameState }).state });
   }
 
