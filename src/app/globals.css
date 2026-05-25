@@ -316,6 +316,49 @@ input, select, textarea {
   will-change: transform, opacity;
 }
 
+/* ─── Board piece animations (pure CSS) ───────────────────────────────
+ * Every board piece used to be a framer-motion <motion.div> — 24+ motion
+ * components per board, each subscribed to framer's animation loop and
+ * re-diffed on every board re-render (the board re-renders all 256 cells
+ * on every selection). Moving the three piece animations to CSS keyframes
+ * takes framer off the hot board path entirely: idle pieces are plain
+ * divs and the GPU runs the loops. Visually identical to the old motion
+ * targets (scale 1→1.08 pulse, ±10° overlay wiggle, attack lunge bounce).
+ *
+ * The bounce travels toward the attack target; the vector is handed in via
+ * the --zi-bx / --zi-by custom properties on the element's style. */
+@keyframes zi-piece-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
+}
+.zi-piece-pulse {
+  animation: zi-piece-pulse 0.8s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes zi-piece-bounce {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(var(--zi-bx, 0), var(--zi-by, 0)); }
+  100% { transform: translate(0, 0); }
+}
+.zi-piece-bounce {
+  animation: zi-piece-bounce 0.45s ease-in-out;
+  will-change: transform;
+}
+@keyframes zi-overlay-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  33%      { transform: rotate(10deg); }
+  66%      { transform: rotate(-10deg); }
+}
+.zi-overlay-wiggle {
+  animation: zi-overlay-wiggle 2s ease-in-out infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .zi-piece-pulse,
+  .zi-piece-bounce,
+  .zi-overlay-wiggle { animation: none !important; }
+}
+
 /* ─── Celestial Glow theme decor ──────────────────────────────────────
  * Animated overlay rendered by <ThemeDecor/> only when themeId
  * === 'celestial'. Five layers, all pointer-events: none so they

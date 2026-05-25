@@ -1,24 +1,19 @@
 'use client';
-import { motion } from 'framer-motion';
 import { GamePiece, BounceEffect } from '@/game/types';
-import { PIECE_EMOJI, PIECE_NAME } from '@/game/constants';
+import { PIECE_EMOJI } from '@/game/constants';
 import { useSettings } from '@/hooks/useSettings';
 import { usePlayerThemes } from '@/hooks/usePlayerThemes';
 
-// Module-level constants for framer-motion targets and transitions.
-// Inline literals like `animate={{ scale: [1,1.08,1] }}` are a fresh object
-// reference each render, which framer-motion treats as a value change and
-// restarts the animation — visible as a flicker on resize / zoom. Stable
-// references let the same loop run continuously across re-renders.
-// (Not using `as const` — framer-motion's prop types want mutable arrays.)
-const PULSE_SELECTED = { scale: [1, 1.08, 1] };
-const PULSE_SELECTED_TRANSITION = { duration: 0.8, repeat: Infinity };
-const RESET_POSITION = { scale: 1, x: 0, y: 0 };
-const RESET_TRANSITION = { duration: 0.8, repeat: 0 };
-const WING_RESET = { x: 0, y: 0 };
-const WING_RESET_TRANSITION = {};
-const OVERLAY_WIGGLE = { rotate: [0, 10, -10, 0] };
-const OVERLAY_WIGGLE_TRANSITION = { duration: 2, repeat: Infinity };
+// This component used to wrap every piece in a framer-motion <motion.div>.
+// With ~24 pieces on a board (plus overlay + ant-wing motion nodes), and the
+// board re-rendering all 256 cells on every selection, that was the dominant
+// board-interaction cost — each motion node subscribes to framer's animation
+// loop and is re-diffed on every render. The three animations are now pure
+// CSS keyframes (see globals.css: zi-piece-pulse / zi-piece-bounce /
+// zi-overlay-wiggle), so idle pieces are plain divs and the GPU drives the
+// motion. The look is unchanged; CSS animations also never restart on a React
+// re-render (the old framer inline-object targets used to, which is the
+// flicker the module-constant workaround below the imports was fighting).
 
 interface Props {
   piece: GamePiece;
@@ -42,7 +37,9 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
   const hasBounce = bounceEffect?.pieceId === piece.id;
   const onCooldown = piece.type === 'elephant' && (piece.cooldown ?? 0) > 0;
 
-  // Bounce animation: piece lunges toward target then settles at current (adjacent) position
+  // Bounce animation: piece lunges toward target then settles at current
+  // (adjacent) position. The vector is passed to the CSS keyframe via custom
+  // properties so the same .zi-piece-bounce class works for every direction.
   const bounceX = hasBounce ? bounceEffect!.dc * size * 0.9 : 0;
   const bounceY = hasBounce ? bounceEffect!.dr * size * 0.9 : 0;
 
@@ -96,39 +93,28 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
     opacity: piece.isParalyzed ? 0.7 : onCooldown ? 0.85 : 1,
   };
 
+  // Hand the bounce vector to the CSS keyframe (only when bouncing).
+  const bounceVars = hasBounce
+    ? ({ ['--zi-bx' as string]: `${bounceX}px`, ['--zi-by' as string]: `${bounceY}px` } as React.CSSProperties)
+    : null;
+
   if (piece.type === 'ant' && !isCenter) {
     return (
-      <motion.div
-        style={{ ...baseStyle, opacity: 0.6, fontSize: Math.floor(size * 0.18) }}
-        animate={hasBounce ? {
-          x: [0, bounceX, 0],
-          y: [0, bounceY, 0],
-        } : WING_RESET}
-        transition={hasBounce ? { duration: 0.45, ease: 'easeInOut' } : WING_RESET_TRANSITION}
+      <div
+        className={hasBounce ? 'zi-piece-bounce' : undefined}
+        style={{ ...baseStyle, ...bounceVars, opacity: 0.6, fontSize: Math.floor(size * 0.18) }}
       >
         <span style={{ opacity: 0.7 }}>━</span>
-      </motion.div>
+      </div>
     );
   }
 
+  // Bounce takes precedence over the idle selected-pulse, mirroring the old
+  // framer animate-prop precedence.
+  const animClass = hasBounce ? 'zi-piece-bounce' : isSelected ? 'zi-piece-pulse' : undefined;
+
   return (
-    <motion.div
-      style={baseStyle}
-      animate={
-        hasBounce
-          ? { x: [0, bounceX, 0], y: [0, bounceY, 0], scale: 1 }
-          : isSelected
-          ? PULSE_SELECTED
-          : RESET_POSITION
-      }
-      transition={
-        hasBounce
-          ? { duration: 0.45, ease: 'easeInOut' }
-          : isSelected
-          ? PULSE_SELECTED_TRANSITION
-          : RESET_TRANSITION
-      }
-    >
+    <div className={animClass} style={{ ...baseStyle, ...bounceVars }}>
       <span style={{ lineHeight: 1, filter: piece.isParalyzed ? 'grayscale(0.6)' : 'none' }}>
         {PIECE_EMOJI[piece.type]}
       </span>
@@ -168,18 +154,18 @@ export default function PieceDisplay({ piece, isCenter, isSelected, size, overla
 
       {/* Overlay piece (butterfly shield or bat on top) */}
       {overlay && (
-        <motion.span
+        <span
+          className="zi-overlay-wiggle"
           style={{
             position: 'absolute', top: -6, left: -2,
             fontSize: Math.floor(size * 0.32), lineHeight: 1,
             filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.8))',
+            display: 'inline-block',
           }}
-          animate={OVERLAY_WIGGLE}
-          transition={OVERLAY_WIGGLE_TRANSITION}
         >
           {PIECE_EMOJI[overlay.type]}
-        </motion.span>
+        </span>
       )}
-    </motion.div>
+    </div>
   );
 }

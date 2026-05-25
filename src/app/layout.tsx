@@ -5,6 +5,7 @@ import { UserProvider } from '@/hooks/useUser';
 import ThemeProfileSync from '@/components/ThemeProfileSync';
 import ThemeDecor from '@/components/ThemeDecor';
 import PreviewBanner from '@/components/PreviewBanner';
+import PerfOverlay from '@/components/PerfOverlay';
 
 export const metadata: Metadata = {
   title: 'Zaeer Imenet — Ancient Strategy Game',
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
             <ThemeDecor />
             <PreviewBanner />
+            <PerfOverlay />
           </UserProvider>
         </SettingsProvider>
       </body>
