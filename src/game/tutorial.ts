@@ -522,6 +522,103 @@ const STEP_CAPTURE_LION: TutorialStep = {
   isComplete: (s) => s.phase === 'won' && s.winner === 1,
 };
 
+/** Lesson: barriers are impassable walls. Slide the Elephant up the column;
+ *  it stops one square short of the 🌿 barrier (which guards the throne) —
+ *  no piece may move onto or through a barrier. A distant enemy Lion keeps
+ *  the engine's "all enemy lions eliminated" win from firing on the move. */
+const STEP_BARRIER: TutorialStep = {
+  id: 'barrier',
+  titleKey: 'tutorial.barrier.title',
+  bodyKey: 'tutorial.barrier.body',
+  doneKey: 'tutorial.barrier.done',
+  pieces: [
+    piece({ type: 'elephant', player: 1, row: 11, col: 7, id: 'elephant_p1_tut' }),
+    piece({ type: 'lion',     player: 2, row: 0,  col: 0, id: 'lion_p2_far' }),
+  ],
+  selectFrom: { row: 11, col: 7 },
+  moveTo:     { row: 10, col: 7 },
+  highlights: [{ row: 9, col: 6 }, { row: 9, col: 7 }, { row: 9, col: 8 }, { row: 9, col: 9 }],
+  isComplete: (s) => {
+    const e = s.pieces.find(p => p.id === 'elephant_p1_tut');
+    return !!e && e.row === 10 && e.col === 7;
+  },
+};
+
+/** Lesson: breaking a shield. The enemy Monkey is shielded by a Butterfly;
+ *  attacking the stack kills the Butterfly (which takes the hit) while the
+ *  Monkey behind it survives — so a shield buys the protected piece one hit.
+ *  The distant enemy Lion prevents an accidental elimination win. */
+const STEP_SHIELD_ATTACK: TutorialStep = {
+  id: 'shield-attack',
+  titleKey: 'tutorial.shieldAttack.title',
+  bodyKey: 'tutorial.shieldAttack.body',
+  doneKey: 'tutorial.shieldAttack.done',
+  pieces: [
+    piece({ type: 'butterfly', player: 2, row: 4, col: 4, id: 'shield_bf_p2', shielding: 'shield_mk_p2' }),
+    piece({ type: 'monkey',    player: 2, row: 4, col: 4, id: 'shield_mk_p2', shieldedBy: 'shield_bf_p2' }),
+    piece({ type: 'lion',      player: 1, row: 5, col: 4, id: 'lion_p1_tut' }),
+    piece({ type: 'lion',      player: 2, row: 0, col: 0, id: 'lion_p2_far' }),
+  ],
+  selectFrom: { row: 5, col: 4 },
+  moveTo:     { row: 4, col: 4 },
+  isComplete: (s) => {
+    const bf = s.pieces.find(p => p.id === 'shield_bf_p2');
+    const mk = s.pieces.find(p => p.id === 'shield_mk_p2');
+    return !bf && !!mk; // butterfly broken, protected monkey survives
+  },
+};
+
+/** Lesson (callout): each side has TWO Lions, so capturing only one isn't a
+ *  win — you must eliminate BOTH (or reach the throne). Corrects the natural
+ *  assumption from the single-Lion capture lesson. The four Lions are shown
+ *  and the two enemy Lions pulse. */
+const STEP_ELIMINATE_LIONS: TutorialStep = {
+  id: 'eliminate-lions',
+  kind: 'callout',
+  titleKey: 'tutorial.eliminateLions.title',
+  bodyKey: 'tutorial.eliminateLions.body',
+  doneKey: 'tutorial.eliminateLions.body',
+  pieces: [
+    piece({ type: 'lion', player: 1, row: 15, col: 1,  id: 'el_lion_p1a' }),
+    piece({ type: 'lion', player: 1, row: 15, col: 14, id: 'el_lion_p1b' }),
+    piece({ type: 'lion', player: 2, row: 0,  col: 1,  id: 'el_lion_p2a' }),
+    piece({ type: 'lion', player: 2, row: 0,  col: 14, id: 'el_lion_p2b' }),
+  ],
+  highlights: [{ row: 0, col: 1 }, { row: 0, col: 14 }],
+};
+
+/** Lesson (callout): clocked online games. Your clock ticks only on your turn,
+ *  finishing a move can add time back, and running out loses on time — the
+ *  opponent can claim the win even if you've disconnected. Ties into the
+ *  server-side timeout claim. */
+const STEP_CLOCK: TutorialStep = {
+  id: 'clock',
+  kind: 'callout',
+  titleKey: 'tutorial.clock.title',
+  bodyKey: 'tutorial.clock.body',
+  doneKey: 'tutorial.clock.body',
+  pieces: [
+    piece({ type: 'lion', player: 1, row: 12, col: 7, id: 'clk_lion_p1' }),
+    piece({ type: 'lion', player: 2, row: 3,  col: 8, id: 'clk_lion_p2' }),
+  ],
+};
+
+/** Lesson (callout): fair play online. Every move is validated on the server,
+ *  so illegal moves are rejected and the board can't be edited — both players
+ *  always see the same position. */
+const STEP_FAIR_PLAY: TutorialStep = {
+  id: 'fair-play',
+  kind: 'callout',
+  titleKey: 'tutorial.fairPlay.title',
+  bodyKey: 'tutorial.fairPlay.body',
+  doneKey: 'tutorial.fairPlay.body',
+  pieces: [
+    piece({ type: 'lion',     player: 1, row: 12, col: 7, id: 'fp_lion_p1' }),
+    piece({ type: 'elephant', player: 1, row: 13, col: 9, id: 'fp_ele_p1' }),
+    piece({ type: 'lion',     player: 2, row: 3,  col: 8, id: 'fp_lion_p2' }),
+  ],
+};
+
 export const TUTORIAL_STEPS: TutorialStep[] = [
   STEP_TOUR,
   STEP_OBJECTIVE,
@@ -529,7 +626,9 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   STEP_ELEPHANT_MOVE,
   STEP_BUTTERFLY_MOVE,
   STEP_MONKEY_LEAP,
+  STEP_BARRIER,
   STEP_SHIELD,
+  STEP_SHIELD_ATTACK,
   STEP_PARALYZE,
   STEP_MONKEY_BAT,
   STEP_RESCUE,
@@ -541,5 +640,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   STEP_ELEPHANT_THRONE,
   STEP_BAT_BUTTERFLY,
   STEP_CAPTURE_LION,
+  STEP_ELIMINATE_LIONS,
   STEP_LION_FINALE,
+  STEP_CLOCK,
+  STEP_FAIR_PLAY,
 ];

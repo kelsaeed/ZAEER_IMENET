@@ -36,6 +36,17 @@ test('the opening step is the UI tour and the array starts with a callout', () =
   assert.equal(TUTORIAL_STEPS[0].kind, 'callout');
 });
 
+test('every interactive lesson defines a completion condition and a start cell', () => {
+  // A move/ant lesson with no isComplete could never report "done" and would
+  // strand the player; one with no selectFrom can't be started. Callouts are
+  // exempt (they advance via Next).
+  for (const step of TUTORIAL_STEPS) {
+    if (step.kind === 'callout') continue;
+    assert.equal(typeof step.isComplete, 'function', `${step.id}: interactive lesson needs isComplete`);
+    assert.ok(step.selectFrom, `${step.id}: interactive lesson needs selectFrom`);
+  }
+});
+
 test('every step copy key resolves in all built-in locales', () => {
   // A missing key would render the raw "tutorial.x.y" string to the player.
   // Guard the two shipped languages (English + Arabic) so a new step can't
