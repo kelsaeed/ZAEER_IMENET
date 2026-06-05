@@ -396,15 +396,3 @@ export function stopMusic(): void {
   }
   stopSynthMusic();
 }
-
-export function setMusicVolume(v: number): void {
-  musicVolume = Math.max(0, Math.min(1, v));
-  if (musicEl) musicEl.volume = musicVolume;
-  if (synthMusic) {
-    const ctx = getCtx();
-    if (ctx) {
-      synthMusic.master.gain.cancelScheduledValues(ctx.currentTime);
-      synthMusic.master.gain.linearRampToValueAtTime(musicVolume, ctx.currentTime + 0.3);
-    }
-  }
-}

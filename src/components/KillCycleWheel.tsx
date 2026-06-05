@@ -214,6 +214,3 @@ export default function KillCycleWheel(_props: Props) {
 }
 
 export type { WedgeKey };
-// Body-line lookups are unused now that the wheel isn't interactive,
-// but the export is kept so older imports don't break compilation.
-export const PIECES_FOR_BODY: { key: WedgeKey | 'lion'; bodyKey: string }[] = [];

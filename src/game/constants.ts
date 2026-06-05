@@ -51,15 +51,6 @@ export const PIECE_EMOJI: Record<PieceType, string> = {
   monkey:    '🐒',
 };
 
-export const PIECE_NAME: Record<PieceType, string> = {
-  lion:      'Lion',
-  elephant:  'Elephant',
-  ant:       'Ant',
-  butterfly: 'Butterfly',
-  bat:       'Bat',
-  monkey:    'Monkey',
-};
-
 /** Order for ant rotation cycle: H → V → diagonal → antidiagonal → H */
 export const ORIENTATION_ORDER: Orientation[] = ['horizontal', 'vertical', 'diagonal', 'antidiagonal'];
 
@@ -70,11 +61,6 @@ export const ORIENTATION_LABEL: Record<Orientation, string> = {
   diagonal: 'Diagonal',
   antidiagonal: 'Antidiagonal',
 };
-
-export function getNextOrientation(current: Orientation): Orientation {
-  const i = ORIENTATION_ORDER.indexOf(current);
-  return ORIENTATION_ORDER[(i + 1) % ORIENTATION_ORDER.length];
-}
 
 // ─── Chess-style coordinate labels ──────────────────────────────────────────
 // Columns are letters A–P (left to right), rows are numbers 1–16 (bottom to

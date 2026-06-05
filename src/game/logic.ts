@@ -576,11 +576,6 @@ function getAntMoves(piece: GamePiece, pieces: GamePiece[]): { moves: Position[]
 
 // ─── Apply Move ───────────────────────────────────────────────────────────────
 
-export interface MoveResult {
-  newState: GameState;
-  bounceEffect: BounceEffect | null;
-}
-
 /** Release any shield / paralysis the moving piece was holding before it
  *  leaves its square: a butterfly drops the piece it shielded, a bat frees
  *  the piece it paralysed. Mutates `mp` and the matching piece in `pieces`. */

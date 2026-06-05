@@ -454,12 +454,3 @@ export function useSettings(): SettingsValue {
   if (!v) throw new Error('useSettings must be used within SettingsProvider');
   return v;
 }
-
-// Re-export the audio pref keys so the rare consumer that wants to read
-// them outside of React (e.g. a one-shot click handler that fires a
-// cue without subscribing to the context) can do `localStorage.getItem`.
-export const AUDIO_STORAGE_KEYS = {
-  sfx: SFX_KEY,
-  music: MUSIC_KEY,
-  haptics: HAPTICS_KEY,
-} as const;

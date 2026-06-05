@@ -128,16 +128,6 @@ export function puzzleSnapshotToState(snap: PuzzleSnapshot): GameState {
   };
 }
 
-/** Snapshot the engine-relevant slice of a live state. Used by the admin
- *  authoring UI to capture the position the curator has built. */
-export function stateToPuzzleSnapshot(state: GameState): PuzzleSnapshotV1 {
-  return {
-    v: CURRENT_SNAPSHOT_VERSION,
-    sideToMove: state.currentPlayer,
-    pieces: state.pieces.map(p => ({ ...p })),
-  };
-}
-
 // ─── Loader: parse + validate the on-wire JSON shape ──────────────────────
 // Defensive parse — the position blob arrives from the database (or a
 // curator's pasted JSON import) and we don't trust its shape until we've

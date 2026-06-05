@@ -14,8 +14,6 @@ export const REACTION_EMOJIS = [
   '😍', '❤️', '😘', '💣', '🤬',
 ] as const;
 
-export type ReactionEmoji = typeof REACTION_EMOJIS[number];
-
 /** A single emoji currently flying across the screen. id is monotonic
  *  per-session — used as the React key and for queue cleanup. */
 export interface FlyingEmoji {
