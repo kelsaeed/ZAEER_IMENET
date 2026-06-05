@@ -49,15 +49,16 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* The whole game UI is tap-driven — pieces, panels, the gear, the
- * chat float, etc. None of those should show a text I-beam on hover
- * or trap the user in text-selection mode after a tap. We force
- * cursor: pointer + user-select: none on every button-shaped element
- * so an emoji glyph inside a <button> can't drag the cursor into
- * I-beam mode and a long-press on a piece can't accidentally start
- * selecting text. Real text inputs (textareas, <input type=text>)
- * keep their normal cursor + selection — selectors below opt them
- * back in. */
+/* This is a game/app UI, not a document. By DEFAULT nothing shows a text
+ * caret / I-beam or traps a tap into text-selection mode — titles, cards,
+ * piece descriptions, labels, the board, and every button are
+ * non-selectable. Only real text-entry surfaces (search boxes, the
+ * username/bio fields, chat, etc.) opt back in below, so the caret only
+ * ever appears where you're actually meant to type. */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
 button,
 [role='button'],
 [type='button'],
@@ -92,7 +93,8 @@ input[type='tel'],
 input[type='number'],
 input[type='date'],
 input[type='color'],
-textarea {
+textarea,
+[contenteditable]:not([contenteditable='false']) {
   cursor: text;
   user-select: text;
   -webkit-user-select: text;
