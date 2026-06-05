@@ -8,21 +8,13 @@ import Avatar from '@/components/Avatar';
 import NotificationBell from '@/components/NotificationBell';
 import SettingsButton from '@/components/SettingsButton';
 import AchievementsCard from '@/components/AchievementsCard';
+import RankCard from '@/components/RankCard';
+import { rankFor } from '@/game/ranks';
 import { useProfileForm } from './useProfileForm';
 
 // Stable framer-motion targets — see PieceDisplay / BoardCell.
 const CARD_INITIAL = { opacity: 0, y: 12 };
 const CARD_ANIMATE = { opacity: 1, y: 0 };
-
-/** A rating threshold gets a fun rank emoji + label, gives the player
- *  something to grow toward. */
-function ratingRank(rating: number): { emoji: string; label: string } {
-  if (rating >= 1600) return { emoji: '👑', label: 'Throne Holder' };
-  if (rating >= 1400) return { emoji: '🦁', label: 'Lion Tamer' };
-  if (rating >= 1200) return { emoji: '⚔️', label: 'Warrior' };
-  if (rating >= 1050) return { emoji: '🛡️', label: 'Defender' };
-  return { emoji: '🌱', label: 'Newcomer' };
-}
 
 export default function ProfilePage() {
   const {
@@ -55,7 +47,7 @@ export default function ProfilePage() {
   const draws = profile?.draws ?? 0;
   const totalGames = wins + losses + draws;
   const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
-  const rank = ratingRank(rating);
+  const rank = rankFor(rating).tier;
 
   return (
     <main
@@ -263,6 +255,9 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+
+          {/* Rank tier + progress to the next rank */}
+          <RankCard rating={rating} wins={wins} losses={losses} draws={draws} />
 
           {/* Achievements */}
           <AchievementsCard />
