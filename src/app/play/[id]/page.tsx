@@ -17,6 +17,8 @@ import NotificationBell from '@/components/NotificationBell';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
 import { markGameNotificationsRead } from '@/lib/supabase/notifications';
+import { earnedFromOnlineWin } from '@/game/achievements';
+import { unlock } from '@/lib/achievements';
 import type { Player } from '@/game/types';
 import type { Theme } from '@/game/themes';
 
@@ -40,6 +42,7 @@ const GameHUD = dynamic(() => import('@/components/GameHUD'), { ssr: false });
 const MatchChat = dynamic(() => import('@/components/MatchChat'), { ssr: false });
 const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr: false });
 const OpponentMenu = dynamic(() => import('@/components/OpponentMenu'), { ssr: false });
+const AchievementToast = dynamic(() => import('@/components/AchievementToast'), { ssr: false });
 
 export default function OnlineGamePage() {
   const router = useRouter();
@@ -69,6 +72,8 @@ export default function OnlineGamePage() {
   }, { initial: 42, layout: true });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [winDismissed, setWinDismissed] = useState(false);
+  // Achievements freshly unlocked this session (online win) — drives the toast.
+  const [newAchievements, setNewAchievements] = useState<string[]>([]);
   // Opponent menu (compact popover by default, expandable to a full-screen
   // profile modal). Closed when no anchor is set; tap on the opponent's chip
   // in the player ribbon to open it.
@@ -138,6 +143,18 @@ export default function OnlineGamePage() {
     void import('@/components/GameHUD');
     void import('@/components/MatchChat');
   }, []);
+
+  // Unlock the online-win achievement when this match finishes with the local
+  // player as the winner. Server-decided result (game.winner_id), so the
+  // client only reacts to it.
+  useEffect(() => {
+    if (!game || !user || myPlayerNumber === null) return;
+    const finished = game.status === 'finished' || game.status === 'abandoned';
+    if (finished && game.winner_id === user.id) {
+      const fresh = unlock(earnedFromOnlineWin());
+      if (fresh.length) setNewAchievements(fresh);
+    }
+  }, [game?.status, game?.winner_id, user, myPlayerNumber]);
 
 
   // Resolve which theme each player slot should render in. The local
@@ -435,6 +452,8 @@ export default function OnlineGamePage() {
 
       {/* In-match chat (floating button + slide-in drawer) */}
       {gameId && <MatchChat gameId={gameId} spectator={isSpectator} />}
+
+      <AchievementToast ids={newAchievements} onDone={() => setNewAchievements([])} />
     </main>
     </PlayerThemesProvider>
   );

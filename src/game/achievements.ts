@@ -24,6 +24,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'blitz', emoji: '⚡', title: 'Blitzkrieg', description: 'Win in 15 turns or fewer.' },
   { id: 'first-puzzle', emoji: '🧩', title: 'Puzzler', description: 'Solve your first daily puzzle.' },
   { id: 'clean-puzzle', emoji: '✨', title: 'Clean Solve', description: 'Solve a puzzle with no wrong moves.' },
+  { id: 'online-win', emoji: '🌐', title: 'Online Victory', description: 'Win a match against another player online.' },
 ];
 
 const BEAT_AI: Record<AiLevel, string> = {
@@ -63,4 +64,9 @@ export function earnedFromPuzzle(wrongCount: number): string[] {
   const earned = ['first-puzzle'];
   if (wrongCount === 0) earned.push('clean-puzzle');
   return earned;
+}
+
+/** Achievement ids earned when the local player wins an online match. */
+export function earnedFromOnlineWin(): string[] {
+  return ['online-win'];
 }
