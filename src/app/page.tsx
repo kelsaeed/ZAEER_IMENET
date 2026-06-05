@@ -13,6 +13,8 @@ import AuthBadge from '@/components/AuthBadge';
 import NotificationBell from '@/components/NotificationBell';
 import SplitBackground from '@/components/SplitBackground';
 import { PlayerThemesProvider } from '@/hooks/usePlayerThemes';
+import { earnedFromGame } from '@/game/achievements';
+import { unlock } from '@/lib/achievements';
 
 /** Smooth-scroll to the rotation/end-turn buttons in the HUD. The id
  *  is set on GameHUD's ant-rotation block. Wrapped here so both
@@ -34,6 +36,7 @@ const SettingsPanel = dynamic(() => import('@/components/SettingsPanel'), { ssr:
 const GameBoard = dynamic(() => import('@/components/GameBoard'), { ssr: false });
 const GameHUD = dynamic(() => import('@/components/GameHUD'), { ssr: false });
 const WinScreen = dynamic(() => import('@/components/WinScreen'), { ssr: false });
+const AchievementToast = dynamic(() => import('@/components/AchievementToast'), { ssr: false });
 
 export default function Home() {
   const {
@@ -64,6 +67,8 @@ export default function Home() {
 
   const search = useSearchParams();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Achievements freshly unlocked this session — drives the celebratory toast.
+  const [newAchievements, setNewAchievements] = useState<string[]>([]);
 
   // Responsive board sizing. useLayoutEffect timing (layout:true) keeps the
   // first measure before paint so the board reservation doesn't reflow (CLS).
@@ -125,6 +130,15 @@ export default function Home() {
     void import('@/components/GameHUD');
     void import('@/components/WinScreen');
   }, [state.phase]);
+
+  // Unlock achievements when the human beats the AI. The guard + unlock()'s
+  // own dedup make this a no-op on every non-winning render. Pass-and-play
+  // (no aiLevel) is intentionally excluded by earnedFromGame.
+  useEffect(() => {
+    if (state.phase !== 'won' || state.winner !== 1 || state.aiLevel == null) return;
+    const fresh = unlock(earnedFromGame(state, 1));
+    if (fresh.length) setNewAchievements(fresh);
+  }, [state]);
 
 
   if (state.phase === 'menu') {
@@ -277,6 +291,8 @@ export default function Home() {
       )}
 
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+
+      <AchievementToast ids={newAchievements} onDone={() => setNewAchievements([])} />
     </main>
     </PlayerThemesProvider>
   );

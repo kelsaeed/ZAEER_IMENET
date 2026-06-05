@@ -7,6 +7,7 @@ import LoadingEmojis from '@/components/LoadingEmojis';
 import Avatar from '@/components/Avatar';
 import NotificationBell from '@/components/NotificationBell';
 import SettingsButton from '@/components/SettingsButton';
+import AchievementsCard from '@/components/AchievementsCard';
 import { useProfileForm } from './useProfileForm';
 
 // Stable framer-motion targets — see PieceDisplay / BoardCell.
@@ -262,6 +263,9 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+
+          {/* Achievements */}
+          <AchievementsCard />
 
           {/* Friends preview */}
           <FriendsCard friends={friends} />

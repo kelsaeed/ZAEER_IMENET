@@ -16,10 +16,13 @@ import LoadingEmojis from '@/components/LoadingEmojis';
 // into the main bundle. Describes one ply of the revealed principal line.
 import type { ReplayPly } from '@/components/PuzzleReplayer';
 import { usePuzzleSession, type TodayPuzzle } from './usePuzzleSession';
+import { earnedFromPuzzle } from '@/game/achievements';
+import { unlock } from '@/lib/achievements';
 
 // Heavy chunks are only loaded once we know we have a puzzle to render.
 const GameBoard = dynamic(() => import('@/components/GameBoard'), { ssr: false });
 const PuzzleReplayer = dynamic(() => import('@/components/PuzzleReplayer'), { ssr: false });
+const AchievementToast = dynamic(() => import('@/components/AchievementToast'), { ssr: false });
 
 type LoadState =
   | { kind: 'loading' }
@@ -190,6 +193,14 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
     wrongDetail, onRetry,
     showGiveUpConfirm, setShowGiveUpConfirm, onGiveUp,
   } = usePuzzleSession(puzzle);
+
+  // Unlock puzzle achievements on solve (first solve + clean/no-wrong solve).
+  const [newAchievements, setNewAchievements] = useState<string[]>([]);
+  useEffect(() => {
+    if (status !== 'solved') return;
+    const fresh = unlock(earnedFromPuzzle(wrongCount));
+    if (fresh.length) setNewAchievements(fresh);
+  }, [status, wrongCount]);
 
   const title = locale === 'ar' && puzzle.title_ar
     ? puzzle.title_ar
@@ -386,6 +397,8 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
           />
         )}
       </AnimatePresence>
+
+      <AchievementToast ids={newAchievements} onDone={() => setNewAchievements([])} />
     </div>
   );
 }
