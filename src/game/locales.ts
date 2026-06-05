@@ -441,6 +441,7 @@ const en: Record<string, string> = {
   'admin.themes.errJson': 'JSON parse error',
 
   'app.themeStore': '🎨 Theme Store',
+  'app.leaderboard': 'Leaderboard',
 
   // Auth
   'auth.signIn': 'Sign in',
@@ -907,6 +908,7 @@ const ar: Record<string, string> = {
   'admin.themes.errJson': 'خطأ في تحليل JSON',
 
   'app.themeStore': '🎨 متجر المظاهر',
+  'app.leaderboard': 'لوحة الصدارة',
 
   // Auth
   'auth.signIn': 'تسجيل الدخول',
