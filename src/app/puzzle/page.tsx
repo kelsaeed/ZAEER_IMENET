@@ -23,6 +23,9 @@ import NotificationBell from '@/components/NotificationBell';
 import SettingsButton from '@/components/SettingsButton';
 import LoadingEmojis from '@/components/LoadingEmojis';
 import { markNewPuzzleNotificationsRead } from '@/lib/supabase/notifications';
+// Type-only import — erased at build, so it doesn't pull the replayer chunk
+// into the main bundle. Describes one ply of the revealed principal line.
+import type { ReplayPly } from '@/components/PuzzleReplayer';
 
 // Heavy chunks are only loaded once we know we have a puzzle to render.
 const GameBoard = dynamic(() => import('@/components/GameBoard'), { ssr: false });
@@ -245,7 +248,7 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
   const [wrongCount, setWrongCount] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showGiveUpConfirm, setShowGiveUpConfirm] = useState(false);
-  const [revealedLine, setRevealedLine] = useState<unknown[] | null>(null);
+  const [revealedLine, setRevealedLine] = useState<ReplayPly[] | null>(null);
   // Detail for the wrong-move panel — populated only while status==='wrong'.
   const [wrongDetail, setWrongDetail] = useState<WrongDetail | null>(null);
   const submittingRef = useRef(false);
@@ -329,7 +332,7 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
       const data = await res.json() as {
         result: 'wrong' | 'continue' | 'solved' | 'already-solved';
         defenderReply?: PuzzleMove | null;
-        principalLine?: unknown[];
+        principalLine?: ReplayPly[];
       };
       if (data.result === 'wrong') {
         // KEEP the optimistic state on the board (the player's wrong
@@ -604,7 +607,7 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
         {revealedLine && revealedLine.length > 0 ? (
           <PuzzleReplayer
             snapshot={puzzle.position}
-            line={revealedLine as { side?: 'attacker' | 'defender'; move?: PuzzleMove }[]}
+            line={revealedLine}
             cellSize={cellSize}
           />
         ) : (
@@ -938,7 +941,7 @@ function WrongMovePanel({
   );
 }
 
-function RevealCard({ line, pieces }: { line: unknown[]; pieces: { id: string; type: string }[] }) {
+function RevealCard({ line, pieces }: { line: ReplayPly[]; pieces: { id: string; type: string }[] }) {
   const { theme, t } = useSettings();
   return (
     <div
@@ -949,8 +952,7 @@ function RevealCard({ line, pieces }: { line: unknown[]; pieces: { id: string; t
         {t('puzzle.showingSolution')}
       </div>
       <ol style={{ margin: 0, paddingInlineStart: 18, fontSize: 13, color: theme.textPrimary, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {line.map((p, i) => {
-          const ply = p as { side?: string; move?: { pieceId?: string; target?: { row: number; col: number } } };
+        {line.map((ply, i) => {
           const piece = pieces.find(pp => pp.id === ply.move?.pieceId);
           const what = piece?.type ?? ply.move?.pieceId ?? '?';
           const t2 = ply.move?.target;
