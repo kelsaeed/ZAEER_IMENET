@@ -69,8 +69,6 @@ export default function OnlineGamePage() {
   }, { initial: 42, layout: true });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [winDismissed, setWinDismissed] = useState(false);
-  // Visual feedback for the waiting-room invite-code copy button.
-  const [inviteCopied, setInviteCopied] = useState(false);
   // Opponent menu (compact popover by default, expandable to a full-screen
   // profile modal). Closed when no anchor is set; tap on the opponent's chip
   // in the player ribbon to open it.
@@ -216,70 +214,12 @@ export default function OnlineGamePage() {
 
   // Waiting room — player1 created and is waiting for player2.
   if (game.status === 'waiting') {
-    const isHost = game.player1_id === user.id;
     return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: theme.bgGradient, color: theme.textPrimary }}
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full rounded-2xl p-6 text-center"
-          style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
-        >
-          <div className="text-3xl mb-2">⏳</div>
-          <h1 className="text-xl font-extrabold mb-1" style={{ color: theme.p1Color }}>
-            Waiting for opponent…
-          </h1>
-          <div className="mt-3 mb-5">
-            <LoadingEmojis size={28} />
-          </div>
-          {isHost && game.invite_code && (
-            <>
-              <div className="text-sm opacity-80 mb-2">Share this code with a friend:</div>
-              <div
-                className="font-mono font-extrabold text-3xl tracking-widest mb-4"
-                style={{ color: theme.p1Color, letterSpacing: '0.4em' }}
-              >
-                {game.invite_code}
-              </div>
-              <motion.button
-                onClick={() => {
-                  navigator.clipboard?.writeText(game.invite_code!);
-                  setInviteCopied(true);
-                  setTimeout(() => setInviteCopied(false), 1800);
-                }}
-                whileTap={{ scale: 0.94 }}
-                animate={inviteCopied ? { scale: [1, 1.06, 1] } : { scale: 1 }}
-                transition={{ duration: 0.4 }}
-                className="rounded-lg px-4 py-2 text-sm font-bold mb-4 inline-flex items-center gap-1.5"
-                style={{
-                  background: inviteCopied ? theme.p1Color : theme.buttonRotateBg,
-                  border: `1px solid ${inviteCopied ? theme.p1Color : theme.buttonRotateBorder}`,
-                  color: inviteCopied ? '#000' : theme.buttonRotateText,
-                  transition: 'background 200ms, color 200ms, border-color 200ms',
-                }}
-              >
-                {inviteCopied ? <>✓ Copied!</> : <>📋 Copy code</>}
-              </motion.button>
-            </>
-          )}
-          <div className="flex gap-2 justify-center mt-2">
-            <Link
-              href="/play"
-              className="rounded-lg px-3 py-1.5 text-sm font-semibold"
-              style={{
-                background: theme.buttonBg,
-                border: `1px solid ${theme.buttonBorder}`,
-                color: theme.textPrimary,
-              }}
-            >
-              ← Lobby
-            </Link>
-          </div>
-        </motion.div>
-      </main>
+      <WaitingRoom
+        theme={theme}
+        isHost={game.player1_id === user.id}
+        inviteCode={game.invite_code}
+      />
     );
   }
 
@@ -290,73 +230,26 @@ export default function OnlineGamePage() {
   const winner = game.winner_id === game.player1_id ? 1 : game.winner_id === game.player2_id ? 2 : null;
 
   // Player ribbon — rendered both inline (mobile) and inside the top bar
-  // (desktop). Computing the markup once keeps the two render sites in
+  // (desktop). Computing the element once keeps the two render sites in
   // sync without forcing a re-layout when the viewport crosses lg.
-  const ribbon = (() => {
-    const statusInfo: { icon: string; text: string; tone: 'muted' | 'accent' } | null =
-      reviewing
-        ? { icon: '⏪', text: `Reviewing ${viewingHistoryIndex! + 1}/${state.history.length}`, tone: 'accent' }
-        : isSpectator && !won
-        ? { icon: '👀', text: 'Spectating', tone: 'accent' }
-        : !isMyTurn && !won && !isSpectator
-        ? { icon: '⏳', text: `Waiting for ${opponent?.display_name ?? 'opponent'}…`, tone: 'muted' }
-        : null;
-    return (
-      <div
-        className="flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full text-xs sm:text-sm shadow-sm"
-        style={{
-          background: theme.panelBg,
-          border: `1px solid ${theme.panelBorder}`,
-          color: theme.textPrimary,
-          maxWidth: 'calc(100vw - 24px)',
-        }}
-      >
-        <PlayerChip
-          name={myPlayerNumber === 1 ? (profile?.display_name ?? 'You') : (game.player1_id ? (opponent?.display_name ?? 'P1') : '…')}
-          avatarUrl={myPlayerNumber === 1 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
-          color={theme.p1Color}
-          isYou={myPlayerNumber === 1}
-          isTurn={state.currentPlayer === 1 && isPlaying}
-          accent="p1"
-          // Player 1's chip is clickable when it's the OPPONENT (i.e. I'm
-          // sitting as player 2 in this match). Spectators don't have an
-          // opponent context, so we don't surface the menu for them.
-          onOpenMenu={
-            myPlayerNumber === 2 && opponent?.id
-              ? (e) => setOpponentMenu({ x: e.clientX, y: e.clientY, mode: 'compact' })
-              : undefined
-          }
-        />
-        <span className="opacity-40 text-[10px] sm:text-xs px-0.5">vs</span>
-        <PlayerChip
-          name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : (game.player2_id ? (opponent?.display_name ?? 'P2') : '…')}
-          avatarUrl={myPlayerNumber === 2 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
-          color={theme.p2Color}
-          isYou={myPlayerNumber === 2}
-          isTurn={state.currentPlayer === 2 && isPlaying}
-          accent="p2"
-          onOpenMenu={
-            myPlayerNumber === 1 && opponent?.id
-              ? (e) => setOpponentMenu({ x: e.clientX, y: e.clientY, mode: 'compact' })
-              : undefined
-          }
-        />
-        {statusInfo && (
-          <span
-            className="inline-flex items-center gap-1 ms-1 ps-2 pe-1 py-0.5 text-[10px] sm:text-xs font-semibold border-s"
-            style={{
-              borderColor: 'rgba(255,255,255,0.12)',
-              color: statusInfo.tone === 'accent' ? theme.p1Color : theme.textMuted,
-              maxWidth: 220,
-            }}
-          >
-            <span aria-hidden>{statusInfo.icon}</span>
-            <span className="truncate">{statusInfo.text}</span>
-          </span>
-        )}
-      </div>
-    );
-  })();
+  const ribbon = (
+    <PlayerRibbon
+      theme={theme}
+      reviewing={reviewing}
+      viewingHistoryIndex={viewingHistoryIndex}
+      historyLength={state.history.length}
+      isSpectator={isSpectator}
+      won={won}
+      isMyTurn={isMyTurn}
+      isPlaying={isPlaying}
+      currentPlayer={state.currentPlayer}
+      opponent={opponent}
+      myPlayerNumber={myPlayerNumber}
+      profile={profile}
+      game={game}
+      onOpenOpponentMenu={(x, y) => setOpponentMenu({ x, y, mode: 'compact' })}
+    />
+  );
 
   return (
     <PlayerThemesProvider p1ThemeId={p1ThemeId} p2ThemeId={p2ThemeId}>
@@ -534,6 +427,183 @@ export default function OnlineGamePage() {
       {gameId && <MatchChat gameId={gameId} spectator={isSpectator} />}
     </main>
     </PlayerThemesProvider>
+  );
+}
+
+/** Pre-match lobby shown while player 1 waits for an opponent to join.
+ *  Owns its own copy-feedback state since nothing else needs it. */
+function WaitingRoom({
+  theme,
+  isHost,
+  inviteCode,
+}: {
+  theme: Theme;
+  isHost: boolean;
+  inviteCode: string | null;
+}) {
+  const [inviteCopied, setInviteCopied] = useState(false);
+  return (
+    <main
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: theme.bgGradient, color: theme.textPrimary }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-md w-full rounded-2xl p-6 text-center"
+        style={{ background: theme.panelBg, border: `1px solid ${theme.panelBorder}` }}
+      >
+        <div className="text-3xl mb-2">⏳</div>
+        <h1 className="text-xl font-extrabold mb-1" style={{ color: theme.p1Color }}>
+          Waiting for opponent…
+        </h1>
+        <div className="mt-3 mb-5">
+          <LoadingEmojis size={28} />
+        </div>
+        {isHost && inviteCode && (
+          <>
+            <div className="text-sm opacity-80 mb-2">Share this code with a friend:</div>
+            <div
+              className="font-mono font-extrabold text-3xl tracking-widest mb-4"
+              style={{ color: theme.p1Color, letterSpacing: '0.4em' }}
+            >
+              {inviteCode}
+            </div>
+            <motion.button
+              onClick={() => {
+                navigator.clipboard?.writeText(inviteCode);
+                setInviteCopied(true);
+                setTimeout(() => setInviteCopied(false), 1800);
+              }}
+              whileTap={{ scale: 0.94 }}
+              animate={inviteCopied ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+              transition={{ duration: 0.4 }}
+              className="rounded-lg px-4 py-2 text-sm font-bold mb-4 inline-flex items-center gap-1.5"
+              style={{
+                background: inviteCopied ? theme.p1Color : theme.buttonRotateBg,
+                border: `1px solid ${inviteCopied ? theme.p1Color : theme.buttonRotateBorder}`,
+                color: inviteCopied ? '#000' : theme.buttonRotateText,
+                transition: 'background 200ms, color 200ms, border-color 200ms',
+              }}
+            >
+              {inviteCopied ? <>✓ Copied!</> : <>📋 Copy code</>}
+            </motion.button>
+          </>
+        )}
+        <div className="flex gap-2 justify-center mt-2">
+          <Link
+            href="/play"
+            className="rounded-lg px-3 py-1.5 text-sm font-semibold"
+            style={{
+              background: theme.buttonBg,
+              border: `1px solid ${theme.buttonBorder}`,
+              color: theme.textPrimary,
+            }}
+          >
+            ← Lobby
+          </Link>
+        </div>
+      </motion.div>
+    </main>
+  );
+}
+
+/** The two-player ribbon (both chips + status pill) shown above the
+ *  board. Rendered at two responsive sites from one element — see the
+ *  `ribbon` variable in OnlineGamePage. */
+function PlayerRibbon({
+  theme,
+  reviewing,
+  viewingHistoryIndex,
+  historyLength,
+  isSpectator,
+  won,
+  isMyTurn,
+  isPlaying,
+  currentPlayer,
+  opponent,
+  myPlayerNumber,
+  profile,
+  game,
+  onOpenOpponentMenu,
+}: {
+  theme: Theme;
+  reviewing: boolean;
+  viewingHistoryIndex: number | null;
+  historyLength: number;
+  isSpectator: boolean;
+  won: boolean;
+  isMyTurn: boolean;
+  isPlaying: boolean;
+  currentPlayer: Player;
+  opponent: ReturnType<typeof useOnlineGame>['opponent'];
+  myPlayerNumber: ReturnType<typeof useOnlineGame>['myPlayerNumber'];
+  profile: ReturnType<typeof useUser>['profile'];
+  game: NonNullable<ReturnType<typeof useOnlineGame>['game']>;
+  onOpenOpponentMenu: (x: number, y: number) => void;
+}) {
+  const statusInfo: { icon: string; text: string; tone: 'muted' | 'accent' } | null =
+    reviewing
+      ? { icon: '⏪', text: `Reviewing ${viewingHistoryIndex! + 1}/${historyLength}`, tone: 'accent' }
+      : isSpectator && !won
+      ? { icon: '👀', text: 'Spectating', tone: 'accent' }
+      : !isMyTurn && !won && !isSpectator
+      ? { icon: '⏳', text: `Waiting for ${opponent?.display_name ?? 'opponent'}…`, tone: 'muted' }
+      : null;
+  return (
+    <div
+      className="flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full text-xs sm:text-sm shadow-sm"
+      style={{
+        background: theme.panelBg,
+        border: `1px solid ${theme.panelBorder}`,
+        color: theme.textPrimary,
+        maxWidth: 'calc(100vw - 24px)',
+      }}
+    >
+      <PlayerChip
+        name={myPlayerNumber === 1 ? (profile?.display_name ?? 'You') : (game.player1_id ? (opponent?.display_name ?? 'P1') : '…')}
+        avatarUrl={myPlayerNumber === 1 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
+        color={theme.p1Color}
+        isYou={myPlayerNumber === 1}
+        isTurn={currentPlayer === 1 && isPlaying}
+        accent="p1"
+        // Player 1's chip is clickable when it's the OPPONENT (i.e. I'm
+        // sitting as player 2 in this match). Spectators don't have an
+        // opponent context, so we don't surface the menu for them.
+        onOpenMenu={
+          myPlayerNumber === 2 && opponent?.id
+            ? (e) => onOpenOpponentMenu(e.clientX, e.clientY)
+            : undefined
+        }
+      />
+      <span className="opacity-40 text-[10px] sm:text-xs px-0.5">vs</span>
+      <PlayerChip
+        name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : (game.player2_id ? (opponent?.display_name ?? 'P2') : '…')}
+        avatarUrl={myPlayerNumber === 2 ? (profile?.avatar_url ?? null) : (opponent?.avatar_url ?? null)}
+        color={theme.p2Color}
+        isYou={myPlayerNumber === 2}
+        isTurn={currentPlayer === 2 && isPlaying}
+        accent="p2"
+        onOpenMenu={
+          myPlayerNumber === 1 && opponent?.id
+            ? (e) => onOpenOpponentMenu(e.clientX, e.clientY)
+            : undefined
+        }
+      />
+      {statusInfo && (
+        <span
+          className="inline-flex items-center gap-1 ms-1 ps-2 pe-1 py-0.5 text-[10px] sm:text-xs font-semibold border-s"
+          style={{
+            borderColor: 'rgba(255,255,255,0.12)',
+            color: statusInfo.tone === 'accent' ? theme.p1Color : theme.textMuted,
+            maxWidth: 220,
+          }}
+        >
+          <span aria-hidden>{statusInfo.icon}</span>
+          <span className="truncate">{statusInfo.text}</span>
+        </span>
+      )}
+    </div>
   );
 }
 
