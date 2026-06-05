@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useResponsiveCellSize } from '@/hooks/useResponsiveCellSize';
+import { historyReviewState } from '@/game/interactions';
 import dynamic from 'next/dynamic';
 import { useGame } from '@/hooks/useGame';
 import { useGameAudio } from '@/hooks/useGameAudio';
@@ -107,27 +108,14 @@ export default function Home() {
   }, [aiParam, state.phase, startGame]);
 
   // While reviewing history, render the historical pieces but keep the live
-  // selection state empty so highlights don't bleed into the review.
+  // selection state empty so highlights don't bleed into the review. Memoized
+  // so an unrelated re-render (e.g. a resize changing cellSize) doesn't hand
+  // the board a fresh `displayState` reference.
   const reviewing = state.viewingHistoryIndex !== null;
-  // Memoized so we don't hand the board a fresh `displayState` reference on
-  // unrelated re-renders (e.g. cellSize changes from a resize). The play page
-  // already does this; the home page was missing it.
-  const displayState = useMemo(() => {
-    if (!reviewing) return state;
-    const snap = state.history[state.viewingHistoryIndex!];
-    return {
-      ...state,
-      pieces: snap.pieces,
-      currentPlayer: snap.currentPlayer,
-      lastAction: snap.lastAction,
-      turn: snap.turn,
-      selectedPieceId: null,
-      validMoves: [],
-      canRotate: false,
-      validRotations: [],
-      bounceEffect: undefined,
-    };
-  }, [state, reviewing]);
+  const displayState = useMemo(
+    () => historyReviewState(state, state.viewingHistoryIndex),
+    [state],
+  );
 
   // Preload the in-game chunks while the menu is visible so the click-to-play
   // transition feels instant. Fire-and-forget — webpack caches the modules.

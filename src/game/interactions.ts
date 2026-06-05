@@ -13,6 +13,29 @@
 import { GameState, Orientation } from './types';
 import { getValidMoves, applyMove, applyEndTurn } from './logic';
 
+/** The state to RENDER for a given history-review index. When not reviewing
+ *  (index null) this is the live state, unchanged. While reviewing, it overlays
+ *  the chosen snapshot's pieces/turn/action and blanks the live selection so
+ *  review highlights don't bleed in. Pure — never mutates `state`.
+ *
+ *  Shared by the home and online boards, which both derived this identically. */
+export function historyReviewState(state: GameState, viewingHistoryIndex: number | null): GameState {
+  if (viewingHistoryIndex === null) return state;
+  const snap = state.history[viewingHistoryIndex];
+  return {
+    ...state,
+    pieces: snap.pieces,
+    currentPlayer: snap.currentPlayer,
+    lastAction: snap.lastAction,
+    turn: snap.turn,
+    selectedPieceId: null,
+    validMoves: [],
+    canRotate: false,
+    validRotations: [],
+    bounceEffect: undefined,
+  };
+}
+
 /** Rotate the currently selected ant to the given orientation. Only valid
  *  options are allowed. If the ant hasn't moved yet, the new orientation's
  *  moves are shown; once it has moved, movement is hidden (rotate / End Turn

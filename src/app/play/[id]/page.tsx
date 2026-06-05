@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useResponsiveCellSize } from '@/hooks/useResponsiveCellSize';
+import { historyReviewState } from '@/game/interactions';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
@@ -151,23 +152,10 @@ export default function OnlineGamePage() {
   const p2ThemeId = myPlayerNumber === 2 ? themeId : (opponent?.theme_id ?? null);
 
   const reviewing = viewingHistoryIndex !== null;
-  const displayState = useMemo(() => {
-    if (!state) return null;
-    if (!reviewing) return state;
-    const snap = state.history[viewingHistoryIndex!];
-    return {
-      ...state,
-      pieces: snap.pieces,
-      currentPlayer: snap.currentPlayer,
-      lastAction: snap.lastAction,
-      turn: snap.turn,
-      selectedPieceId: null,
-      validMoves: [],
-      canRotate: false,
-      validRotations: [],
-      bounceEffect: undefined,
-    };
-  }, [state, reviewing, viewingHistoryIndex]);
+  const displayState = useMemo(
+    () => (state ? historyReviewState(state, viewingHistoryIndex) : null),
+    [state, viewingHistoryIndex],
+  );
 
   // Loading / error / not-a-player gates.
   if (userLoading || loading) {

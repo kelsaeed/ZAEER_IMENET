@@ -16,6 +16,7 @@ import {
   reduceEndTurn,
   reduceSwitchToShieldedPiece,
   reduceSwitchToShieldingButterfly,
+  historyReviewState,
 } from './interactions';
 import { piece, makeState } from './testHelpers';
 import type { GameState } from './types';
@@ -157,6 +158,25 @@ test('rotateAntTo refuses an orientation that is not a valid rotation', () => {
   assert.equal(selected.validRotations.includes('vertical'), false);
   const after = reduceRotateAntTo(selected, 'vertical');
   assert.equal(after.pieces.find(p => p.id === 'A1')!.orientation, 'horizontal'); // unchanged
+});
+
+// ─── History review state ────────────────────────────────────────────────────
+test('historyReviewState returns the live state when not reviewing', () => {
+  const s = makeState(farLions());
+  assert.equal(historyReviewState(s, null), s); // same reference
+});
+
+test('historyReviewState overlays the chosen snapshot and clears selection', () => {
+  const base = makeState(farLions());
+  // Make a move so there is a second snapshot to review back to.
+  const moved = reduceCellClick(reduceCellClick(base, 15, 0), 14, 0);
+  const reviewIndex = 0; // the starting position
+  const view = historyReviewState({ ...moved, selectedPieceId: 'L1' }, reviewIndex);
+  // Pieces come from the snapshot (lion back at its start), selection blanked.
+  assert.equal(view.pieces.find(p => p.id === 'L1')!.row, 15);
+  assert.equal(view.selectedPieceId, null);
+  assert.equal(view.validMoves.length, 0);
+  assert.equal(view.bounceEffect, undefined);
 });
 
 test('endTurn flips the player only after the ant has acted', () => {
