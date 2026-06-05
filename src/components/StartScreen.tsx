@@ -57,8 +57,19 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
   return (
     <div
       dir={isRTL ? 'rtl' : 'ltr'}
-      className="min-h-screen flex flex-col items-center justify-start sm:justify-center px-3 sm:px-6 py-6 sm:py-8 pt-16 sm:pt-12 lg:pt-16 relative overflow-x-hidden overflow-y-auto"
-      style={{ minHeight: '100dvh', position: 'relative', background: theme.bgGradient, color: theme.textPrimary }}
+      className="min-h-screen flex flex-col items-center justify-start px-4 sm:px-6 relative overflow-x-hidden overflow-y-auto"
+      style={{
+        minHeight: '100dvh',
+        position: 'relative',
+        background: theme.bgGradient,
+        color: theme.textPrimary,
+        // Top-aligned hero: content starts high (clearing the fixed top bar)
+        // instead of being dead-centred, which left huge empty bands above
+        // and below on desktop. clamp keeps the offset comfortable across
+        // viewport heights and on mobile.
+        paddingTop: 'clamp(72px, 9vh, 120px)',
+        paddingBottom: 'clamp(28px, 5vh, 56px)',
+      }}
     >
       {/* Top bar: settings on one side, auth badge on the other. */}
       {onOpenSettings && (
@@ -94,22 +105,22 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           for RTL. */}
       <div
         className="
-          w-full relative z-10 flex flex-col items-center gap-7 sm:gap-8
-          lg:flex-row lg:items-center lg:justify-center lg:gap-12 xl:gap-16
-          lg:max-w-7xl xl:max-w-[88rem]
+          w-full relative z-10 flex flex-col items-center gap-6 sm:gap-7
+          lg:flex-row lg:items-center lg:justify-center lg:gap-10 xl:gap-14
+          lg:max-w-6xl xl:max-w-7xl
         "
       >
-        {/* ── Left column ─────────────────────────────────────────── */}
-        <div className="flex flex-col items-center lg:items-stretch gap-5 sm:gap-6 w-full lg:flex-1 lg:max-w-xl">
+        {/* ── Left column: hero + rules + primary actions ─────────── */}
+        <div className="flex flex-col items-center lg:items-stretch gap-4 sm:gap-5 w-full lg:flex-1 lg:max-w-xl">
           <motion.div
-            initial={{ opacity: 0, y: -30 }}
+            initial={{ opacity: 0, y: -24 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center"
             style={{ textAlign: 'center' }}
           >
             {/* Crown bob — pure CSS so it doesn't restart on parent re-renders.
                 See zi-crown-bob in globals.css. */}
-            <div className="zi-crown-bob text-5xl sm:text-6xl xl:text-7xl mb-3" aria-hidden>
+            <div className="zi-crown-bob text-5xl sm:text-6xl xl:text-7xl mb-2" aria-hidden>
               👑
             </div>
             <h1 className="text-4xl sm:text-5xl xl:text-6xl font-extrabold mb-2 px-1" style={{ fontWeight: 800, color: theme.p1Color }}>
@@ -121,9 +132,9 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
 
           {/* Win conditions */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
             className="rounded-2xl p-4 sm:p-5 w-full max-w-lg lg:max-w-none"
             style={{ background: theme.panelBg, borderRadius: '1rem', border: `1px solid ${theme.panelBorder}`, width: '100%' }}
           >
@@ -140,11 +151,68 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
             </div>
           </motion.div>
 
+          {/* Primary actions — Offline (modal), Online (/play), Daily Puzzle.
+              Placed right under the win section as the hero CTAs, sharing the
+              row equally (flex-1) so it reads as a confident block of actions
+              rather than three small pills. */}
+          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md sm:max-w-none">
+            <motion.button
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.24, duration: 0.3, ease: 'easeOut' }}
+              onClick={() => setOfflineOpen(true)}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold w-full sm:flex-1 transition-all duration-300"
+              style={{ fontWeight: 800, color: '#000', background: `linear-gradient(to right, ${theme.p1Color}, ${theme.selectedRing}, ${theme.p1Color})`, boxShadow: `0 0 30px ${theme.p1Color}80` }}
+            >
+              {t('app.offlineGame')}
+            </motion.button>
+
+            <motion.a
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.32, duration: 0.3, ease: 'easeOut' }}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              href="/play"
+              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
+              style={{
+                fontWeight: 800,
+                color: theme.textPrimary,
+                background: theme.panelBg,
+                border: `1px solid ${theme.p2AccentBorder}`,
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <span>{t('app.onlineGame')}</span>
+            </motion.a>
+
+            <motion.a
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.3, ease: 'easeOut' }}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              href="/puzzle"
+              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
+              style={{
+                fontWeight: 800,
+                color: theme.textPrimary,
+                background: theme.panelBg,
+                border: `1px solid ${theme.p1AccentBorder}`,
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <span>{t('app.dailyPuzzle')}</span>
+            </motion.a>
+          </div>
+
           {/* Board legend */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 1 }}
+            transition={{ delay: 0.5 }}
             className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm px-1"
           >
             <div className="flex items-center gap-2">
@@ -165,7 +233,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           <motion.div
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.0 }}
+            transition={{ delay: 0.58 }}
             className="flex flex-wrap gap-2 justify-center"
           >
             <Link
@@ -213,78 +281,22 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
               🎬 View Story
             </button>
           </motion.div>
-
-          {/* Primary actions — Offline (modal), Online (/play), Daily Puzzle.
-              They share the row equally (flex-1) so the row reads as a
-              confident block of CTAs rather than three small pills. */}
-          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md sm:max-w-none mt-1">
-            <motion.button
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.1, duration: 0.35, ease: 'easeOut' }}
-              onClick={() => setOfflineOpen(true)}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold w-full sm:flex-1 transition-all duration-300"
-              style={{ fontWeight: 800, color: '#000', background: `linear-gradient(to right, ${theme.p1Color}, ${theme.selectedRing}, ${theme.p1Color})`, boxShadow: `0 0 30px ${theme.p1Color}80` }}
-            >
-              {t('app.offlineGame')}
-            </motion.button>
-
-            <motion.a
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.2, duration: 0.35, ease: 'easeOut' }}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              href="/play"
-              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
-              style={{
-                fontWeight: 800,
-                color: theme.textPrimary,
-                background: theme.panelBg,
-                border: `1px solid ${theme.p2AccentBorder}`,
-                backdropFilter: 'blur(8px)',
-              }}
-            >
-              <span>{t('app.onlineGame')}</span>
-            </motion.a>
-
-            <motion.a
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.3, duration: 0.35, ease: 'easeOut' }}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              href="/puzzle"
-              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
-              style={{
-                fontWeight: 800,
-                color: theme.textPrimary,
-                background: theme.panelBg,
-                border: `1px solid ${theme.p1AccentBorder}`,
-                backdropFilter: 'blur(8px)',
-              }}
-            >
-              <span>{t('app.dailyPuzzle')}</span>
-            </motion.a>
-          </div>
         </div>
 
         {/* ── Right column: piece guide (6 cards) ─────────────────── */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
+          transition={{ delay: 0.3 }}
           className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-2xl lg:max-w-xl lg:flex-1"
           style={{ width: '100%' }}
         >
           {PIECE_TYPES.map((type, i) => (
             <motion.div
               key={type}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.08 * i + 0.55 }}
+              transition={{ delay: 0.06 * i + 0.3 }}
               className="rounded-xl p-4 transition-colors"
               style={{ background: theme.panelBg, borderRadius: '0.75rem', border: `1px solid ${theme.panelBorder}` }}
             >
@@ -324,7 +336,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
           // the right edge on mobile because framer's translateY(0)
           // erased the translateX(-50%).
           <div
-            className="fixed bottom-4 z-30"
+            className="fixed bottom-6 z-30"
             style={{
               left: '50%',
               transform: 'translateX(-50%)',
