@@ -17,7 +17,7 @@ const en: Record<string, string> = {
   'app.startButton': '⚔️ Start Game ⚔️',
   'app.playOnline': 'Play Online',
   'app.onlineGame': '🌐 Online Game',
-  'app.offlineGame': '⚔️ Offline Game ⚔️',
+  'app.offlineGame': '⚔️ Offline Game',
   'app.dailyPuzzle': '🧩 Daily Puzzle',
 
   // Daily puzzle screen
@@ -506,7 +506,7 @@ const ar: Record<string, string> = {
   'app.startButton': '⚔️ ابدأ اللعبة ⚔️',
   'app.playOnline': 'العب أونلاين',
   'app.onlineGame': '🌐 لعبة أونلاين',
-  'app.offlineGame': '⚔️ لعبة محلية ⚔️',
+  'app.offlineGame': '⚔️ لعبة محلية',
   'app.dailyPuzzle': '🧩 أحجية اليوم',
 
   // Daily puzzle screen
