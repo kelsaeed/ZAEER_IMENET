@@ -49,3 +49,25 @@ export function unlock(ids: string[]): string[] {
   }
   return fresh;
 }
+
+/** Merge a remote (database) map into the local store — the earliest unlock
+ *  date wins for each id — and persist + return the merged result. Used by the
+ *  DB sync so unlocks earned on another device show up here too. */
+export function mergeUnlocked(remote: UnlockedMap): UnlockedMap {
+  const local = getUnlocked();
+  const merged: UnlockedMap = {};
+  for (const [id, when] of Object.entries(remote)) {
+    if (VALID.has(id) && typeof when === 'string') merged[id] = when;
+  }
+  for (const [id, when] of Object.entries(local)) {
+    if (!merged[id] || when < merged[id]) merged[id] = when;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(merged));
+    } catch {
+      /* ignore */
+    }
+  }
+  return merged;
+}

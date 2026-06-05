@@ -260,7 +260,7 @@ export default function ProfilePage() {
           <RankCard rating={rating} wins={wins} losses={losses} draws={draws} />
 
           {/* Achievements */}
-          <AchievementsCard />
+          <AchievementsCard userId={user.id} />
 
           {/* Friends preview */}
           <FriendsCard friends={friends} />

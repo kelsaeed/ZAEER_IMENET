@@ -3,13 +3,23 @@ import { useEffect, useState } from 'react';
 import { useSettings } from '@/hooks/useSettings';
 import { ACHIEVEMENTS } from '@/game/achievements';
 import { getUnlocked, type UnlockedMap } from '@/lib/achievements';
+import { syncAchievements } from '@/lib/supabase/achievements';
 
 /** Profile section listing every achievement with its unlocked/locked state.
- *  Reads from localStorage after mount to avoid an SSR/CSR hydration mismatch. */
-export default function AchievementsCard() {
+ *  Reads after mount to avoid an SSR/CSR hydration mismatch. When a `userId`
+ *  is given it syncs with the database (cross-device); otherwise it shows the
+ *  local set only. */
+export default function AchievementsCard({ userId }: { userId?: string }) {
   const { theme } = useSettings();
   const [unlocked, setUnlocked] = useState<UnlockedMap>({});
-  useEffect(() => { setUnlocked(getUnlocked()); }, []);
+  useEffect(() => {
+    if (userId) {
+      let mounted = true;
+      void syncAchievements(userId).then((m) => { if (mounted) setUnlocked(m); });
+      return () => { mounted = false; };
+    }
+    setUnlocked(getUnlocked());
+  }, [userId]);
 
   const count = Object.keys(unlocked).length;
   const total = ACHIEVEMENTS.length;
