@@ -581,6 +581,59 @@ export interface MoveResult {
   bounceEffect: BounceEffect | null;
 }
 
+/** Release any shield / paralysis the moving piece was holding before it
+ *  leaves its square: a butterfly drops the piece it shielded, a bat frees
+ *  the piece it paralysed. Mutates `mp` and the matching piece in `pieces`. */
+function releaseMovingPieceEffects(mp: GamePiece, pieces: GamePiece[]): void {
+  if (mp.type === 'butterfly' && mp.shielding) {
+    const shielded = pieces.find(p => p.id === mp.shielding);
+    if (shielded) shielded.shieldedBy = undefined;
+    mp.shielding = undefined;
+  }
+  if (mp.type === 'bat' && mp.paralyzing) {
+    const paralyzed = pieces.find(p => p.id === mp.paralyzing);
+    if (paralyzed) { paralyzed.isParalyzed = false; paralyzed.paralyzedBy = undefined; }
+    mp.paralyzing = undefined;
+  }
+}
+
+/** Decide whether the move just played ends the game: a lion reaching the
+ *  throne, or the mover having wiped out every enemy lion. Returns the
+ *  (possibly unchanged) phase/winner plus the win message when one applies —
+ *  otherwise the `lastAction` passed in. Pure: reads `pieces`, mutates nothing. */
+function resolveWinConditions(
+  pieces: GamePiece[],
+  movedPieceId: string,
+  movedType: PieceType,
+  movedPlayer: Player,
+  phase: GameState['phase'],
+  lastAction: ActionMessage | null,
+): { phase: GameState['phase']; winner: Player | null; lastAction: ActionMessage | null } {
+  let winner: Player | null = null;
+
+  // Lion on throne.
+  if (phase !== 'won') {
+    const movedPiece = pieces.find(p => p.id === movedPieceId);
+    if (movedPiece && movedType === 'lion' && isThrone(movedPiece.row, movedPiece.col)) {
+      winner = movedPlayer;
+      phase = 'won';
+      lastAction = { key: 'action.lionWinsThrone', vars: { n: movedPlayer } };
+    }
+  }
+
+  // All enemy lions eliminated.
+  if (phase !== 'won') {
+    const enemyPlayer: Player = movedPlayer === 1 ? 2 : 1;
+    if (pieces.filter(p => p.player === enemyPlayer && p.type === 'lion').length === 0) {
+      winner = movedPlayer;
+      phase = 'won';
+      lastAction = { key: 'action.lionWinsKill', vars: { n: movedPlayer } };
+    }
+  }
+
+  return { phase, winner, lastAction };
+}
+
 export function applyMove(state: GameState, pieceId: string, targetRow: number, targetCol: number): GameState {
   const piece = state.pieces.find(p => p.id === pieceId);
   if (!piece) return state;
@@ -604,16 +657,7 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
   let bounceEffect: BounceEffect | undefined;
 
   // Release any current effects the moving piece had
-  if (mp.type === 'butterfly' && mp.shielding) {
-    const shielded = pieces.find(p => p.id === mp.shielding);
-    if (shielded) shielded.shieldedBy = undefined;
-    mp.shielding = undefined;
-  }
-  if (mp.type === 'bat' && mp.paralyzing) {
-    const paralyzed = pieces.find(p => p.id === mp.paralyzing);
-    if (paralyzed) { paralyzed.isParalyzed = false; paralyzed.paralyzedBy = undefined; }
-    mp.paralyzing = undefined;
-  }
+  releaseMovingPieceEffects(mp, pieces);
 
   // Find what's at the target cell
   const interactive = getInteractiveAtCell(pieces, targetRow, targetCol, pieceId);
@@ -892,25 +936,11 @@ export function applyMove(state: GameState, pieceId: string, targetRow: number, 
     if (att) att.cooldown = 2;
   }
 
-  // ── Win condition: Lion on throne ─────────────────────────────────────────
-  if (phase !== 'won') {
-    const movedPiece = pieces.find(p => p.id === pieceId);
-    if (movedPiece && piece.type === 'lion' && isThrone(movedPiece.row, movedPiece.col)) {
-      winner = piece.player;
-      phase = 'won';
-      lastAction = { key: 'action.lionWinsThrone', vars: { n: piece.player } };
-    }
-  }
-
-  // ── Win condition: all enemy lions eliminated ─────────────────────────────
-  if (phase !== 'won') {
-    const enemyPlayer: Player = piece.player === 1 ? 2 : 1;
-    if (pieces.filter(p => p.player === enemyPlayer && p.type === 'lion').length === 0) {
-      winner = piece.player;
-      phase = 'won';
-      lastAction = { key: 'action.lionWinsKill', vars: { n: piece.player } };
-    }
-  }
+  // ── Win conditions: lion on throne, or all enemy lions eliminated ──────────
+  const win = resolveWinConditions(pieces, pieceId, piece.type, piece.player, phase, lastAction);
+  phase = win.phase;
+  winner = win.winner;
+  lastAction = win.lastAction;
 
   // Ant: only one move per turn; after move, player can rotate then End Turn.
   // Turn does NOT end here — keep ant selected so player can rotate or End Turn.
