@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
 import { useSettings } from '@/hooks/useSettings';
+import { useGameAudio } from '@/hooks/useGameAudio';
 import { format } from '@/game/locales';
 import { parsePuzzleSnapshot } from '@/game/puzzleTypes';
 import { ORIENTATION_LABEL } from '@/game/constants';
@@ -23,6 +24,8 @@ import { unlock } from '@/lib/achievements';
 const GameBoard = dynamic(() => import('@/components/GameBoard'), { ssr: false });
 const PuzzleReplayer = dynamic(() => import('@/components/PuzzleReplayer'), { ssr: false });
 const AchievementToast = dynamic(() => import('@/components/AchievementToast'), { ssr: false });
+// Only pulled in once a puzzle is solved — the celebration burst.
+const Confetti = dynamic(() => import('@/components/Confetti'), { ssr: false });
 
 type LoadState =
   | { kind: 'loading' }
@@ -215,6 +218,20 @@ function PuzzleSession({ puzzle, locale, backHref, isArchive }: PuzzleSessionPro
     wrongDetail, onRetry,
     showGiveUpConfirm, setShowGiveUpConfirm, onGiveUp,
   } = usePuzzleSession(puzzle);
+
+  // Reuse the main game's audio/haptics engine off the puzzle's engine
+  // state: selecting a piece, moving, capturing, and the optimistic
+  // win/lose on the solving (or refuting) move all fire the same cues as
+  // a real match — and it respects the sound/haptics toggles in Settings.
+  // The solver is `sideToMove`, so a winning move plays 'win' and a lost
+  // lion plays 'lose'.
+  useGameAudio({ state, viewerPlayer: sideToMove });
+
+  // Festive confetti palette drawn from the active theme's accents.
+  const confettiColors = useMemo(() => ([
+    theme.p1Color, theme.throneBg, theme.selectedRing,
+    '#ffffff', '#f472b6', '#a78bfa', '#34d399',
+  ]), [theme.p1Color, theme.throneBg, theme.selectedRing]);
 
   // Unlock puzzle achievements on solve (first solve + clean/no-wrong solve,
   // plus the archive-solve badge when this is a past puzzle).
@@ -422,6 +439,14 @@ function PuzzleSession({ puzzle, locale, backHref, isArchive }: PuzzleSessionPro
           />
         )}
       </AnimatePresence>
+
+      {/* Solve celebration — a full-screen confetti rain behind the
+          panels. pointer-events-none so it never blocks the buttons. */}
+      {status === 'solved' && (
+        <div className="fixed inset-0 z-30 pointer-events-none">
+          <Confetti colors={confettiColors} />
+        </div>
+      )}
 
       <AchievementToast ids={newAchievements} onDone={() => setNewAchievements([])} />
     </div>
