@@ -260,6 +260,8 @@ const en: Record<string, string> = {
 
   // HUD
   'hud.playerTurn': "Player {n}'s Turn",
+  'hud.playerTurnNamed': "{name}'s Turn",
+  'hud.yourTurn': 'Your Turn',
   'hud.turnCounter': 'Turn #{n}',
   'hud.player1Pieces': "Player 1 Pieces ({n})",
   'hud.player2Pieces': "Player 2 Pieces ({n})",
@@ -728,6 +730,8 @@ const ar: Record<string, string> = {
   'legend.validMove': 'حركة متاحة',
 
   'hud.playerTurn': 'دور اللاعب {n}',
+  'hud.playerTurnNamed': 'دور {name}',
+  'hud.yourTurn': 'دورك',
   'hud.turnCounter': 'الدور #{n}',
   'hud.player1Pieces': 'قطع اللاعب 1 ({n})',
   'hud.player2Pieces': 'قطع اللاعب 2 ({n})',

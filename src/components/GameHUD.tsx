@@ -22,6 +22,13 @@ interface Props {
   onHistoryForward: () => void;
   onHistoryToLive: () => void;
   onHistoryJumpTo: (index: number) => void;
+  /** Online only: the two players' display names plus which slot the local
+   *  viewer occupies. When provided, the turn banner reads "Your Turn" on
+   *  the viewer's turn and "{name}'s Turn" otherwise, instead of the generic
+   *  "Player N's Turn". Offline / tutorial leave these unset. */
+  p1Name?: string;
+  p2Name?: string;
+  viewerPlayer?: Player | null;
 }
 
 const ALL_TYPES = ['monkey', 'bat', 'butterfly', 'ant', 'elephant', 'lion'] as const;
@@ -41,10 +48,23 @@ export default function GameHUD({
   onHistoryForward,
   onHistoryToLive,
   onHistoryJumpTo,
+  p1Name,
+  p2Name,
+  viewerPlayer,
 }: Props) {
   const { theme, t } = useSettings();
   const { pieces, currentPlayer, selectedPieceId, validRotations, antHasRotated, antMovedThisTurn, lastAction, turn } = state;
   const pieceName = (type: string) => t(`piece.${type}`);
+
+  // Turn-indicator headline. Online matches pass the players' names so the
+  // banner reads "Your Turn" / "{name}'s Turn" instead of "Player N's Turn".
+  const activeName = currentPlayer === 1 ? p1Name : p2Name;
+  const turnHeadline =
+    viewerPlayer != null && viewerPlayer === currentPlayer
+      ? t('hud.yourTurn')
+      : activeName
+        ? format(t('hud.playerTurnNamed'), { name: activeName })
+        : format(t('hud.playerTurn'), { n: currentPlayer });
 
   const selectedPiece = selectedPieceId ? pieces.find(p => p.id === selectedPieceId) : null;
   const isAntSelected = selectedPiece?.type === 'ant';
@@ -141,7 +161,7 @@ export default function GameHUD({
         }}
       >
         <div style={{ color: currentPlayer === 1 ? theme.p1Color : theme.p2Color }}>
-          {currentPlayer === 1 ? '🥇' : '🥈'} {format(t('hud.playerTurn'), { n: currentPlayer })}
+          {currentPlayer === 1 ? '🥇' : '🥈'} {turnHeadline}
         </div>
         <div className="opacity-70 mt-1 font-normal" style={{ fontSize: fs.small }}>{format(t('hud.turnCounter'), { n: turn })}</div>
       </motion.div>

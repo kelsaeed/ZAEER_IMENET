@@ -337,6 +337,12 @@ export default function OnlineGamePage() {
         reviewing={reviewing}
         historyIndex={viewingHistoryIndex}
         historyLength={state.history.length}
+        // Name the turn banner: "Your Turn" for the local player, the
+        // opponent's name on their turn — clearer than "Player 1/2".
+        // Spectators (myPlayerNumber === null) get no names → generic label.
+        viewerPlayer={myPlayerNumber}
+        p1Name={myPlayerNumber === 1 ? (profile?.display_name ?? 'You') : myPlayerNumber === 2 ? (opponent?.display_name ?? undefined) : undefined}
+        p2Name={myPlayerNumber === 2 ? (profile?.display_name ?? 'You') : myPlayerNumber === 1 ? (opponent?.display_name ?? undefined) : undefined}
         onMainMenu={() => router.push('/play')}
         onRestartMatch={resign}
         onRotateTo={rotateAntTo}
