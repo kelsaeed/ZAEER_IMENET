@@ -24,6 +24,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'blitz', emoji: '⚡', title: 'Blitzkrieg', description: 'Win in 15 turns or fewer.' },
   { id: 'first-puzzle', emoji: '🧩', title: 'Puzzler', description: 'Solve your first daily puzzle.' },
   { id: 'clean-puzzle', emoji: '✨', title: 'Clean Solve', description: 'Solve a puzzle with no wrong moves.' },
+  { id: 'archive-solve', emoji: '🗂️', title: 'Time Traveler', description: 'Solve a puzzle from the archive.' },
   { id: 'online-win', emoji: '🌐', title: 'Online Victory', description: 'Win a match against another player online.' },
 ];
 
@@ -59,10 +60,12 @@ export function earnedFromGame(state: GameState, viewerPlayer: Player): string[]
   return earned;
 }
 
-/** Achievement ids earned when a daily puzzle is solved. */
-export function earnedFromPuzzle(wrongCount: number): string[] {
+/** Achievement ids earned when a puzzle is solved. `isArchive` is true when
+ *  the solve came from the archive (a past puzzle) rather than today's. */
+export function earnedFromPuzzle(wrongCount: number, isArchive = false): string[] {
   const earned = ['first-puzzle'];
   if (wrongCount === 0) earned.push('clean-puzzle');
+  if (isArchive) earned.push('archive-solve');
   return earned;
 }
 

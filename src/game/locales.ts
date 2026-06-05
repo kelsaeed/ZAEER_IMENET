@@ -48,6 +48,16 @@ const en: Record<string, string> = {
   'puzzle.signIn': 'Sign in',
   'puzzle.share': 'Share',
   'puzzle.shareCopied': 'Copied!',
+  'puzzle.archive.title': 'Puzzle Archive',
+  'puzzle.archive.subtitle': 'Replay every past daily puzzle.',
+  'puzzle.archive.empty': 'No past puzzles yet — check back soon.',
+  'puzzle.archive.solved': 'Solved',
+  'puzzle.archive.gaveUp': 'Gave up',
+  'puzzle.archive.unsolved': 'Not solved',
+  'puzzle.archive.unavailable': 'Unavailable',
+  'puzzle.archive.loadMore': 'Load more',
+  'puzzle.archive.today': 'Today',
+  'puzzle.archive.notFound': 'This puzzle isn’t available.',
 
   // Match-chat emoji reactions
   'reactions.muteHint': 'Mute reactions from others',
@@ -442,6 +452,7 @@ const en: Record<string, string> = {
 
   'app.themeStore': '🎨 Theme Store',
   'app.leaderboard': 'Leaderboard',
+  'app.puzzleArchive': '🗂️ Archive',
 
   // Auth
   'auth.signIn': 'Sign in',
@@ -538,6 +549,16 @@ const ar: Record<string, string> = {
   'puzzle.signIn': 'تسجيل الدخول',
   'puzzle.share': 'شارك',
   'puzzle.shareCopied': 'تم النسخ!',
+  'puzzle.archive.title': 'أرشيف الألغاز',
+  'puzzle.archive.subtitle': 'أعد لعب كل ألغاز الأيام السابقة.',
+  'puzzle.archive.empty': 'لا توجد ألغاز سابقة بعد — عد قريباً.',
+  'puzzle.archive.solved': 'تم الحل',
+  'puzzle.archive.gaveUp': 'استسلمت',
+  'puzzle.archive.unsolved': 'لم يُحل',
+  'puzzle.archive.unavailable': 'غير متاح',
+  'puzzle.archive.loadMore': 'تحميل المزيد',
+  'puzzle.archive.today': 'اليوم',
+  'puzzle.archive.notFound': 'هذا اللغز غير متاح.',
 
   // Match-chat emoji reactions
   'reactions.muteHint': 'كتم تفاعلات الآخرين',
@@ -909,6 +930,7 @@ const ar: Record<string, string> = {
 
   'app.themeStore': '🎨 متجر المظاهر',
   'app.leaderboard': 'لوحة الصدارة',
+  'app.puzzleArchive': '🗂️ الأرشيف',
 
   // Auth
   'auth.signIn': 'تسجيل الدخول',

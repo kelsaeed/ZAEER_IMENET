@@ -65,3 +65,10 @@ test('puzzle achievements: first solve always, clean only with zero wrong moves'
   assert.deepEqual(earnedFromPuzzle(0).sort(), ['clean-puzzle', 'first-puzzle']);
   assert.deepEqual(earnedFromPuzzle(3), ['first-puzzle']);
 });
+
+test('archive solves additionally grant the archive-solve badge', () => {
+  assert.deepEqual(earnedFromPuzzle(0, true).sort(), ['archive-solve', 'clean-puzzle', 'first-puzzle']);
+  assert.deepEqual(earnedFromPuzzle(3, true).sort(), ['archive-solve', 'first-puzzle']);
+  // Daily (non-archive) solves never grant it.
+  assert.ok(!earnedFromPuzzle(0).includes('archive-solve'));
+});

@@ -260,6 +260,17 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
               >
                 🏆 {t('app.leaderboard')}
               </Link>
+              <Link
+                href="/puzzle/archive"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
+                style={{
+                  background: theme.panelBg,
+                  border: `1px solid ${theme.p1AccentBorder}`,
+                  color: theme.p1Color,
+                }}
+              >
+                {t('app.puzzleArchive')}
+              </Link>
               {/* Theme Store pill — uses the buttonRotate accent so it pops
                   against every theme's background instead of blending into
                   the panelBg overlay. */}
