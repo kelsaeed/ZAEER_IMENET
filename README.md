@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/badge/tests-135%20passing-success)](#testing--ci)
 [![License](https://img.shields.io/badge/license-Proprietary-red)](./LICENSE)
 
-![Preview](./assets/hero.png)
+![Preview](./.github/assets/hero.png)
 
 ## Overview
 Zaeer is an original turn-based strategy game built on a custom-designed system. The project combines game design, system architecture, and full-stack development into a single interactive platform.
@@ -36,11 +36,11 @@ See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the system design and the onlin
 
 ## Game Preview
 
-![Gameplay](./assets/gameplay1.png)
+![Gameplay](./.github/assets/gameplay1.png)
 
-![Victory](./assets/victory.png)
+![Victory](./.github/assets/victory.png)
 
-![Gameplay](./assets/gameplay2.png)
+![Gameplay](./.github/assets/gameplay2.png)
 
 ---
 

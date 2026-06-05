@@ -5,4 +5,4 @@ package-lock.json
 tsconfig.tsbuildinfo
 *.md
 public/
-assets/
+.github/assets/
