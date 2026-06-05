@@ -36,11 +36,21 @@ See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for the system design and the onlin
 
 ## Game Preview
 
+**Gameplay — the 16×16 board mid-match**
+
 ![Gameplay](./.github/assets/gameplay1.png)
 
-![Victory](./.github/assets/victory.png)
+**Built-in interactive tutorial**
 
-![Gameplay](./.github/assets/gameplay2.png)
+![Tutorial](./.github/assets/tutorial.png)
+
+**Piece interactions — who beats who**
+
+![Who beats who](./.github/assets/lifecycle.png)
+
+**Victory screen**
+
+![Victory](./.github/assets/victory.png)
 
 ---
 
