@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useResponsiveCellSize } from '@/hooks/useResponsiveCellSize';
 import dynamic from 'next/dynamic';
 import { useGame } from '@/hooks/useGame';
 import { useGameAudio } from '@/hooks/useGameAudio';
@@ -61,8 +62,31 @@ export default function Home() {
   useGameAudio({ state, viewerPlayer: 1 });
 
   const search = useSearchParams();
-  const [cellSize, setCellSize] = useState(42);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Responsive board sizing. useLayoutEffect timing (layout:true) keeps the
+  // first measure before paint so the board reservation doesn't reflow (CLS).
+  const cellSize = useResponsiveCellSize((vw, vh) => {
+    // Side-by-side at lg (≥1024). Below that, the HUD stacks under the board.
+    const sideBySide = vw >= 1024;
+    const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 12 : 20;
+    // HUD width on lg+ matches the compact `.zi-hud` clamp in globals.css
+    // (clamp(11rem, 14vw, 18rem)) so the board can grow into the freed width.
+    const hudReserve = sideBySide
+      ? Math.max(11 * 16, Math.min(20 * 16, Math.floor(vw * 0.15)))
+      : 0;
+    const flexGap = sideBySide ? 12 : 0;
+    // Board = 16 cells + 0.5-cell row label = 16.5; pad slightly for safety.
+    const widthBudget = vw - padX * 2 - hudReserve - flexGap;
+    const maxFromW = Math.floor(widthBudget / 16.6);
+    const padY = sideBySide ? 36 : 56;
+    const maxFromH = Math.floor((vh - padY) / 16.6);
+    const minCell = vw < 360 ? 14 : 16;
+    const maxCell = sideBySide
+      ? (vw >= 1600 ? 124 : vw >= 1280 ? 104 : 86)
+      : 60;
+    return Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH));
+  }, { initial: 42, layout: true });
 
   // Tutorial CTA: when the tutorial's "Play vs Easy AI" button routes
   // back to /?ai=easy, auto-launch a fresh untimed easy-AI game so the
@@ -114,63 +138,6 @@ export default function Home() {
     void import('@/components/WinScreen');
   }, [state.phase]);
 
-  // useLayoutEffect runs synchronously before the browser paints, so
-  // the initial cellSize calc happens before the first frame and the
-  // GameBoard reservation is sized correctly on first paint. Avoids
-  // the 42-px-default → real-size reflow that Lighthouse was scoring
-  // as a CLS shift on mobile.
-  useLayoutEffect(() => {
-    function calc() {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-
-      // Side-by-side at lg (≥1024). Below that, the HUD stacks under the board.
-      const sideBySide = vw >= 1024;
-
-      const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 12 : 20;
-      // HUD width on lg+ matches the compact `.zi-hud` clamp in globals.css
-      // (clamp(11rem, 14vw, 18rem)). Keeping these in sync means the board
-      // can grow into every pixel of the freed-up width.
-      const hudReserve = sideBySide
-        ? Math.max(11 * 16, Math.min(20 * 16, Math.floor(vw * 0.15)))
-        : 0;
-      const flexGap = sideBySide ? 12 : 0;
-
-      // Board = 16 cells + 0.5-cell row label = 16.5; pad slightly for safety.
-      const widthBudget = vw - padX * 2 - hudReserve - flexGap;
-      const maxFromW = Math.floor(widthBudget / 16.6);
-
-      const padY = sideBySide ? 36 : 56;
-      const maxFromH = Math.floor((vh - padY) / 16.6);
-
-      const minCell = vw < 360 ? 14 : 16;
-      const maxCell = sideBySide
-        ? (vw >= 1600 ? 124 : vw >= 1280 ? 104 : 86)
-        : 60;
-      setCellSize(Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH)));
-    }
-
-    // RAF-throttle: a drag-resize fires the resize event ~60×/s. Without
-    // throttling, each fire triggers a setState → re-render of 256 cells.
-    // requestAnimationFrame coalesces them so we recalc at most once per frame.
-    let raf = 0;
-    function schedule() {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        calc();
-      });
-    }
-
-    calc();
-    window.addEventListener('resize', schedule);
-    window.addEventListener('orientationchange', schedule);
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('orientationchange', schedule);
-    };
-  }, []);
 
   if (state.phase === 'menu') {
     return (

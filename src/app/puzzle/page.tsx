@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useResponsiveCellSize } from '@/hooks/useResponsiveCellSize';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@/hooks/useUser';
@@ -260,36 +261,18 @@ function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
   }, []);
 
   // Cell-size sizing to match the main game's responsive math.
-  const [cellSize, setCellSize] = useState(36);
-  useEffect(() => {
-    function calc() {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const sideBySide = vw >= 1024;
-      const padX = vw < 380 ? 6 : sideBySide ? 12 : 20;
-      const sideReserve = sideBySide ? 280 : 0;
-      const widthBudget = vw - padX * 2 - sideReserve - (sideBySide ? 12 : 0);
-      const maxFromW = Math.floor(widthBudget / 16.6);
-      const padY = sideBySide ? 60 : 200;
-      const maxFromH = Math.floor((vh - padY) / 16.6);
-      const minCell = vw < 360 ? 14 : 16;
-      const maxCell = sideBySide ? 64 : 56;
-      setCellSize(Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH)));
-    }
-    let raf = 0;
-    function schedule() {
-      if (raf) return;
-      raf = requestAnimationFrame(() => { raf = 0; calc(); });
-    }
-    calc();
-    window.addEventListener('resize', schedule);
-    window.addEventListener('orientationchange', schedule);
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('orientationchange', schedule);
-    };
-  }, []);
+  const cellSize = useResponsiveCellSize((vw, vh) => {
+    const sideBySide = vw >= 1024;
+    const padX = vw < 380 ? 6 : sideBySide ? 12 : 20;
+    const sideReserve = sideBySide ? 280 : 0;
+    const widthBudget = vw - padX * 2 - sideReserve - (sideBySide ? 12 : 0);
+    const maxFromW = Math.floor(widthBudget / 16.6);
+    const padY = sideBySide ? 60 : 200;
+    const maxFromH = Math.floor((vh - padY) / 16.6);
+    const minCell = vw < 360 ? 14 : 16;
+    const maxCell = sideBySide ? 64 : 56;
+    return Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH));
+  }, { initial: 36, layout: false });
 
   // Make sure /start has been called so started_at reflects open-time.
   useEffect(() => {

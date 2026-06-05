@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useResponsiveCellSize } from '@/hooks/useResponsiveCellSize';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
@@ -39,7 +40,28 @@ export default function TutorialPage() {
   const { theme, isRTL, t } = useSettings();
   const [phase, setPhase] = useState<Phase>({ kind: 'wheel' });
   const [shake, setShake] = useState(0);
-  const [cellSize, setCellSize] = useState(40);
+  // Responsive board sizing — reserves room for the lesson side panel on lg
+  // and the stacked panel on mobile. layout:true measures before paint.
+  const cellSize = useResponsiveCellSize((vw, vh) => {
+    const sideBySide = vw >= 1024;
+    const padX = vw < 380 ? 6 : vw < 640 ? 12 : 16;
+    // Side panel (instruction card + controls + Next) reserve on lg.
+    const sideReserve = sideBySide
+      ? Math.max(208, Math.min(360, Math.floor(vw * 0.18)))
+      : 0;
+    const flexGap = sideBySide ? 20 : 0;
+    const widthBudget = vw - padX * 2 - sideReserve - flexGap;
+    const maxFromW = Math.floor(widthBudget / 16.6);
+    // Vertical reserve: lg keeps the corners fixed so only the top bar needs
+    // clearing; mobile must leave room for the stacked panel.
+    const padY = sideBySide ? 84 : 260;
+    const maxFromH = Math.floor((vh - padY) / 16.6);
+    const minCell = vw < 360 ? 14 : 16;
+    const maxCell = sideBySide
+      ? (vw >= 1600 ? 96 : vw >= 1280 ? 84 : 64)
+      : 52;
+    return Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH));
+  }, { initial: 40, layout: true });
 
   // Mark tutorial-seen so the home-page first-load toast doesn't keep
   // pestering returning users. Also warm the heavy chunks now so moving
@@ -51,49 +73,6 @@ export default function TutorialPage() {
     void import('@/components/GameBoard');
     void import('@/components/GameHUD');
     void import('@/components/TutorialTourScene');
-  }, []);
-
-  // Responsive cell sizing — mirrors the real match page so the tutorial
-  // board is the SAME size as a live game. On lg+ the board sits beside
-  // a side panel (reserve its width); on mobile it's full-width with
-  // room kept for the stacked instruction + controls. useLayoutEffect so
-  // the first paint is already at the right size (no CLS jump).
-  useLayoutEffect(() => {
-    function calc() {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const sideBySide = vw >= 1024;
-      const padX = vw < 380 ? 6 : vw < 640 ? 12 : 16;
-      // Side panel (instruction card + controls + Next) reserve on lg.
-      const sideReserve = sideBySide
-        ? Math.max(208, Math.min(360, Math.floor(vw * 0.18)))
-        : 0;
-      const flexGap = sideBySide ? 20 : 0;
-      const widthBudget = vw - padX * 2 - sideReserve - flexGap;
-      const maxFromW = Math.floor(widthBudget / 16.6);
-      // Vertical reserve: lg keeps the corners fixed so only the top bar
-      // needs clearing; mobile must leave room for the stacked panel.
-      const padY = sideBySide ? 84 : 260;
-      const maxFromH = Math.floor((vh - padY) / 16.6);
-      const minCell = vw < 360 ? 14 : 16;
-      const maxCell = sideBySide
-        ? (vw >= 1600 ? 96 : vw >= 1280 ? 84 : 64)
-        : 52;
-      setCellSize(Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH)));
-    }
-    let raf = 0;
-    function schedule() {
-      if (raf) return;
-      raf = requestAnimationFrame(() => { raf = 0; calc(); });
-    }
-    calc();
-    window.addEventListener('resize', schedule);
-    window.addEventListener('orientationchange', schedule);
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('orientationchange', schedule);
-    };
   }, []);
 
   function startLessons() {

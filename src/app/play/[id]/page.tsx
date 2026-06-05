@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useLayoutEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useResponsiveCellSize } from '@/hooks/useResponsiveCellSize';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
@@ -45,7 +46,26 @@ export default function OnlineGamePage() {
   const gameId = params?.id ?? null;
   const { user, profile, loading: userLoading } = useUser();
   const { theme, themeId, isRTL, t } = useSettings();
-  const [cellSize, setCellSize] = useState(42);
+  // Responsive board sizing — same math as the local board, with a taller
+  // mobile vertical reserve for the resign/chat float buttons near the bottom.
+  // layout:true measures before paint to avoid the CLS reflow on mobile.
+  const cellSize = useResponsiveCellSize((vw, vh) => {
+    const sideBySide = vw >= 1024;
+    const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 12 : 20;
+    const hudReserve = sideBySide
+      ? Math.max(11 * 16, Math.min(20 * 16, Math.floor(vw * 0.15)))
+      : 0;
+    const flexGap = sideBySide ? 12 : 0;
+    const widthBudget = vw - padX * 2 - hudReserve - flexGap;
+    const maxFromW = Math.floor(widthBudget / 16.6);
+    const padY = sideBySide ? 56 : 140;
+    const maxFromH = Math.floor((vh - padY) / 16.6);
+    const minCell = vw < 360 ? 14 : 16;
+    const maxCell = sideBySide
+      ? (vw >= 1600 ? 124 : vw >= 1280 ? 104 : 86)
+      : 60;
+    return Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH));
+  }, { initial: 42, layout: true });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [winDismissed, setWinDismissed] = useState(false);
   // Visual feedback for the waiting-room invite-code copy button.
@@ -120,59 +140,6 @@ export default function OnlineGamePage() {
     void import('@/components/MatchChat');
   }, []);
 
-  // Responsive cell sizing — same RAF-throttled logic as the local page.
-  // useLayoutEffect (not useEffect) runs synchronously before the browser
-  // paints, so the initial calc happens BEFORE the first frame and the
-  // GameBoard placeholder reservation in JSX below is sized to the real
-  // cellSize on the very first paint. With useEffect we'd render at the
-  // 42-px default first, then re-render at the real size — Lighthouse
-  // saw that reflow as a 0.13 CLS shift on mobile.
-  useLayoutEffect(() => {
-    function calc() {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const sideBySide = vw >= 1024;
-      const padX = vw < 380 ? 6 : vw < 640 ? 12 : sideBySide ? 12 : 20;
-      // Slimmer HUD reserve on desktop — HUD itself is now compact on lg+
-      // (smaller fonts, condensed panels). The board can grow into the
-      // freed-up width.
-      const hudReserve = sideBySide
-        ? Math.max(11 * 16, Math.min(20 * 16, Math.floor(vw * 0.15)))
-        : 0;
-      const flexGap = sideBySide ? 12 : 0;
-      const widthBudget = vw - padX * 2 - hudReserve - flexGap;
-      const maxFromW = Math.floor(widthBudget / 16.6);
-      // Vertical reserve: on lg+ the player ribbon is fixed in the top bar
-      // (no longer pushes the board down), so we only reserve top-padding
-      // for the bar + a little breathing room. Mobile keeps more clearance
-      // because the resign/chat float buttons sit near the bottom edge.
-      const padY = sideBySide ? 56 : 140;
-      const maxFromH = Math.floor((vh - padY) / 16.6);
-      const minCell = vw < 360 ? 14 : 16;
-      const maxCell = sideBySide
-        ? (vw >= 1600 ? 124 : vw >= 1280 ? 104 : 86)
-        : 60;
-      setCellSize(Math.max(minCell, Math.min(maxCell, maxFromW, maxFromH)));
-    }
-
-    let raf = 0;
-    function schedule() {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        calc();
-      });
-    }
-
-    calc();
-    window.addEventListener('resize', schedule);
-    window.addEventListener('orientationchange', schedule);
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('orientationchange', schedule);
-    };
-  }, []);
 
   // Resolve which theme each player slot should render in. The local
   // user owns whichever slot they sit in (myPlayerNumber); the
