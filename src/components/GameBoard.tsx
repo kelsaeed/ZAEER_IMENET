@@ -9,6 +9,11 @@ import { cellKey, buildCellPieceMap, buildValidMoveSet, pickMainPiece, NO_PIECES
 import { PERF_ENABLED, readCellRenderCount } from './boardRenderCount';
 import { useSettings } from '@/hooks/useSettings';
 
+// 0..BOARD_SIZE-1, built once at module load. The grid maps over this for
+// column labels, rows, and each row's cells instead of allocating a fresh
+// `Array.from({ length: BOARD_SIZE })` (×18) on every board render.
+const CELL_INDEXES = Array.from({ length: BOARD_SIZE }, (_, i) => i);
+
 interface Props {
   state: GameState;
   cellSize: number;
@@ -92,7 +97,7 @@ export default function GameBoard({
     >
       {/* Column labels — chess-style A..P */}
       <div className="flex" style={{ display: 'flex', paddingLeft: cellSize * 0.5 }}>
-        {Array.from({ length: BOARD_SIZE }).map((_, c) => (
+        {CELL_INDEXES.map(c => (
           <div
             key={c}
             style={{
@@ -132,7 +137,7 @@ export default function GameBoard({
           userSelect: 'none',
         }}
       >
-        {Array.from({ length: BOARD_SIZE }).map((_, row) => (
+        {CELL_INDEXES.map(row => (
           <div key={row} className="flex" style={{ display: 'flex' }}>
             {/* Row label — chess-style 16..1 (top to bottom) */}
             <div
@@ -149,7 +154,7 @@ export default function GameBoard({
               {rowLabel(row)}
             </div>
 
-            {Array.from({ length: BOARD_SIZE }).map((_, col) => {
+            {CELL_INDEXES.map(col => {
               const key = cellKey(row, col);
               const piecesHere = cellPieceMap.get(key) ?? NO_PIECES;
               const mainPiece = pickMainPiece(piecesHere);

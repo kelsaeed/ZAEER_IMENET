@@ -55,8 +55,19 @@ export default function GameHUD({
   const showEndTurn = isAntSelected && (antHasRotated || antMovedThisTurn); // Show if rotated or moved
   const elephantCooldown = selectedPiece?.type === 'elephant' ? (selectedPiece.cooldown ?? 0) : 0;
 
-  const p1Pieces = pieces.filter(p => p.player === 1);
-  const p2Pieces = pieces.filter(p => p.player === 2);
+  // One pass over the pieces yields both the per-player totals and the
+  // per-type tallies the count panel needs — replaces the 14 separate
+  // filter passes (2 player splits + 6 types × 2 players) this used to run
+  // on every move. Output is identical to the old per-type filters.
+  const pieceCounts: Record<Player, { total: number; byType: Partial<Record<string, number>> }> = {
+    1: { total: 0, byType: {} },
+    2: { total: 0, byType: {} },
+  };
+  for (const p of pieces) {
+    const bucket = pieceCounts[p.player];
+    bucket.total += 1;
+    bucket.byType[p.type] = (bucket.byType[p.type] ?? 0) + 1;
+  }
 
   // Track whether we're on the lg+ side-by-side layout so we can serve a
   // tighter set of tokens there. The HUD has to fit alongside the board
@@ -347,8 +358,8 @@ export default function GameHUD({
       )}
 
       {/* Piece count per player */}
-      {[1, 2].map(player => {
-        const playerPieces = player === 1 ? p1Pieces : p2Pieces;
+      {([1, 2] as const).map(player => {
+        const counts = pieceCounts[player];
         const color = player === 1 ? theme.p1Color : theme.p2Color;
         // Mix the per-player tint against `inputBg` (always a solid
         // colour across every theme) rather than `transparent`. With
@@ -363,11 +374,11 @@ export default function GameHUD({
         return (
           <div key={player} style={{ background: bcolor, border, padding: sp.padMed, borderRadius: sp.radius }}>
             <div className="font-semibold mb-2" style={{ color, fontSize: fs.base }}>
-              {format(t(`hud.player${player}Pieces`), { n: playerPieces.length })}
+              {format(t(`hud.player${player}Pieces`), { n: counts.total })}
             </div>
             <div className="flex flex-wrap gap-x-2 gap-y-1">
               {ALL_TYPES.map(type => {
-                const count = playerPieces.filter(p => p.type === type).length;
+                const count = counts.byType[type] ?? 0;
                 if (count === 0) return null;
                 return (
                   <div key={type} className="flex items-center gap-1 opacity-90" style={{ fontSize: fs.small }}>
