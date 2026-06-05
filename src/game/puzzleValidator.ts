@@ -26,7 +26,6 @@ import {
   type PuzzleSnapshot,
   type PuzzleMove,
   type AttackerMove,
-  type DefenderMove,
   type SolutionNode,
   type DefenderBranch,
   puzzleSnapshotToState,

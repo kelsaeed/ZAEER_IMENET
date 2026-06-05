@@ -179,7 +179,7 @@ interface PuzzleSessionProps {
 }
 
 function PuzzleSession({ puzzle, locale }: PuzzleSessionProps) {
-  const { theme, isRTL, t } = useSettings();
+  const { theme, t } = useSettings();
   const sideToMove = puzzle.side_to_move;
 
   const {

@@ -46,7 +46,7 @@ export default function OnlineGamePage() {
   const params = useParams<{ id: string }>();
   const gameId = params?.id ?? null;
   const { user, profile, loading: userLoading } = useUser();
-  const { theme, themeId, isRTL, t } = useSettings();
+  const { theme, themeId, isRTL } = useSettings();
   // Responsive board sizing — same math as the local board, with a taller
   // mobile vertical reserve for the resign/chat float buttons near the bottom.
   // layout:true measures before paint to avoid the CLS reflow on mobile.

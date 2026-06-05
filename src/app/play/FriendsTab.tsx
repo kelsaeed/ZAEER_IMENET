@@ -219,7 +219,7 @@ export function FriendsTab({
       ) : (
         <>
           {incoming.length > 0 && (
-            <Section title={`📥 Incoming requests (${incoming.length})`} theme={theme}>
+            <Section title={`📥 Incoming requests (${incoming.length})`}>
               {incoming.map(f => (
                 <FriendRow
                   key={f.friendshipId}
@@ -234,7 +234,7 @@ export function FriendsTab({
           )}
 
           {outgoing.length > 0 && (
-            <Section title={`📤 Sent (${outgoing.length})`} theme={theme}>
+            <Section title={`📤 Sent (${outgoing.length})`}>
               {outgoing.map(f => (
                 <FriendRow
                   key={f.friendshipId}
@@ -248,7 +248,7 @@ export function FriendsTab({
             </Section>
           )}
 
-          <Section title={`🤝 Friends (${accepted.length})`} theme={theme}>
+          <Section title={`🤝 Friends (${accepted.length})`}>
             {accepted.length === 0 ? (
               <div className="text-sm opacity-60 py-3 text-center">
                 No friends yet. Search above to find someone!
@@ -283,7 +283,7 @@ export function FriendsTab({
   );
 }
 
-function Section({ title, theme, children }: { title: string; theme: ReturnType<typeof useSettings>['theme']; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-5">
       <div className="text-sm font-semibold mb-2 opacity-85">{title}</div>
