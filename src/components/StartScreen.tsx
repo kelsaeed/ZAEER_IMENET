@@ -87,77 +87,208 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
       {/* Background: bouncing emojis (canvas) */}
       {isMounted && <AnimatedBackground />}
 
-      {/* On lg+ everything reflows into a 2-column grid: title + rules +
-          legend + buttons stack on the left, the 6-card piece guide
-          fills the right column. */}
+      {/* Main content. On lg+ it splits into two balanced columns: the
+          title, rules, legend, secondary links, and primary actions stack
+          on the left; the 6-card piece guide fills the right. Below lg it's
+          a single centered column. The flex layout mirrors automatically
+          for RTL. */}
       <div
         className="
-          flex flex-col items-center w-full relative z-10 gap-0
-          lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-10 lg:gap-y-0
-          lg:max-w-6xl lg:items-center lg:justify-items-center
+          w-full relative z-10 flex flex-col items-center gap-7 sm:gap-8
+          lg:flex-row lg:items-center lg:justify-center lg:gap-12 xl:gap-16
+          lg:max-w-7xl xl:max-w-[88rem]
         "
       >
-        <motion.div
-          initial={{ opacity: 0, y: -30 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8 lg:mb-4 lg:col-start-1 lg:row-start-1 lg:self-end"
-          style={{ textAlign: 'center' }}
-        >
-          {/* Crown bob — pure CSS so it doesn't restart on parent re-renders.
-              See zi-crown-bob in globals.css. */}
-          <div className="zi-crown-bob text-5xl sm:text-6xl mb-4" aria-hidden>
-            👑
-          </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold mb-2 px-1" style={{ fontWeight: 800, color: theme.p1Color }}>
-            {t('app.title')}
-          </h1>
-          <p className="text-base sm:text-lg px-2" style={{ color: theme.textMuted }}>{t('app.subtitle')}</p>
-          <p className="text-sm mt-1" style={{ color: theme.textMuted, opacity: 0.7 }}>{t('app.boardSummary')}</p>
-        </motion.div>
-
-        {/* Win conditions */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mb-6 lg:mb-4 rounded-2xl p-4 max-w-lg w-full lg:col-start-1 lg:row-start-2"
-          style={{ background: theme.panelBg, borderRadius: '1rem', padding: '1rem', border: `1px solid ${theme.panelBorder}`, maxWidth: '32rem', width: '100%' }}
-        >
-          <h3 className="font-bold text-center mb-3" style={{ color: theme.p1Color, fontWeight: 700, textAlign: 'center', marginBottom: '0.75rem' }}>{t('win.title')}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm" style={{ color: theme.textPrimary }}>
-            <div className="flex items-start gap-2">
-              <span>👑</span>
-              <span>{t('win.lionThrone')}</span>
+        {/* ── Left column ─────────────────────────────────────────── */}
+        <div className="flex flex-col items-center lg:items-stretch gap-5 sm:gap-6 w-full lg:flex-1 lg:max-w-xl">
+          <motion.div
+            initial={{ opacity: 0, y: -30 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center"
+            style={{ textAlign: 'center' }}
+          >
+            {/* Crown bob — pure CSS so it doesn't restart on parent re-renders.
+                See zi-crown-bob in globals.css. */}
+            <div className="zi-crown-bob text-5xl sm:text-6xl xl:text-7xl mb-3" aria-hidden>
+              👑
             </div>
-            <div className="flex items-start gap-2">
-              <span>💀</span>
-              <span>{t('win.killLions')}</span>
-            </div>
-          </div>
-        </motion.div>
+            <h1 className="text-4xl sm:text-5xl xl:text-6xl font-extrabold mb-2 px-1" style={{ fontWeight: 800, color: theme.p1Color }}>
+              {t('app.title')}
+            </h1>
+            <p className="text-base sm:text-lg xl:text-xl px-2" style={{ color: theme.textMuted }}>{t('app.subtitle')}</p>
+            <p className="text-sm mt-1" style={{ color: theme.textMuted, opacity: 0.7 }}>{t('app.boardSummary')}</p>
+          </motion.div>
 
-        {/* Piece guide — 6 cards. */}
+          {/* Win conditions */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="rounded-2xl p-4 sm:p-5 w-full max-w-lg lg:max-w-none"
+            style={{ background: theme.panelBg, borderRadius: '1rem', border: `1px solid ${theme.panelBorder}`, width: '100%' }}
+          >
+            <h3 className="font-bold text-center mb-3" style={{ color: theme.p1Color, fontWeight: 700, textAlign: 'center', marginBottom: '0.75rem' }}>{t('win.title')}</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm" style={{ color: theme.textPrimary }}>
+              <div className="flex items-start gap-2">
+                <span>👑</span>
+                <span>{t('win.lionThrone')}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span>💀</span>
+                <span>{t('win.killLions')}</span>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Board legend */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1 }}
+            className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm px-1"
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded shrink-0" style={{ background: theme.throneBg, border: `1px solid ${theme.throneBorder}` }} />
+              <span style={{ color: theme.textMuted }}>{t('legend.throne')}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded shrink-0" style={{ background: theme.barrierBg, border: `1px solid ${theme.barrierBorder}` }} />
+              <span style={{ color: theme.textMuted }}>{t('legend.barrier')}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full shrink-0" style={{ background: theme.validMoveFill, border: `2px solid ${theme.validMoveBorder}` }} />
+              <span style={{ color: theme.textMuted }}>{t('legend.validMove')}</span>
+            </div>
+          </motion.div>
+
+          {/* Secondary links — tutorial, theme store, view story. */}
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.0 }}
+            className="flex flex-wrap gap-2 justify-center"
+          >
+            <Link
+              href="/tutorial"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
+              style={{
+                background: theme.panelBg,
+                border: `1px solid ${theme.p1AccentBorder}`,
+                color: theme.p1Color,
+              }}
+            >
+              {t('tutorial.button')}
+            </Link>
+            {/* Theme Store pill — uses the buttonRotate accent (the same
+                theme-driven gold/amber/white-on-black palette as the
+                "active tab" pill in SettingsPanel) so it pops against
+                every theme's background instead of blending into the
+                panelBg overlay. */}
+            <Link
+              href="/store"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
+              style={{
+                background: theme.buttonRotateBg,
+                border: `1px solid ${theme.buttonRotateBorder}`,
+                color: theme.buttonRotateText,
+                boxShadow: `0 4px 14px ${theme.buttonRotateBorder}`,
+              }}
+            >
+              {t('app.themeStore')}
+            </Link>
+            {/* View Story — opens a popup with the intro video. Uses the
+                same bright buttonRotate styling as Theme Store so it
+                reads as a sibling CTA, not a faded afterthought. */}
+            <button
+              type="button"
+              onClick={() => setStoryOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
+              style={{
+                background: theme.buttonRotateBg,
+                border: `1px solid ${theme.buttonRotateBorder}`,
+                color: theme.buttonRotateText,
+                boxShadow: `0 4px 14px ${theme.buttonRotateBorder}`,
+              }}
+            >
+              🎬 View Story
+            </button>
+          </motion.div>
+
+          {/* Primary actions — Offline (modal), Online (/play), Daily Puzzle.
+              They share the row equally (flex-1) so the row reads as a
+              confident block of CTAs rather than three small pills. */}
+          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md sm:max-w-none mt-1">
+            <motion.button
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.1, duration: 0.35, ease: 'easeOut' }}
+              onClick={() => setOfflineOpen(true)}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold w-full sm:flex-1 transition-all duration-300"
+              style={{ fontWeight: 800, color: '#000', background: `linear-gradient(to right, ${theme.p1Color}, ${theme.selectedRing}, ${theme.p1Color})`, boxShadow: `0 0 30px ${theme.p1Color}80` }}
+            >
+              {t('app.offlineGame')}
+            </motion.button>
+
+            <motion.a
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.2, duration: 0.35, ease: 'easeOut' }}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              href="/play"
+              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
+              style={{
+                fontWeight: 800,
+                color: theme.textPrimary,
+                background: theme.panelBg,
+                border: `1px solid ${theme.p2AccentBorder}`,
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <span>{t('app.onlineGame')}</span>
+            </motion.a>
+
+            <motion.a
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.3, duration: 0.35, ease: 'easeOut' }}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              href="/puzzle"
+              className="px-5 py-3.5 rounded-2xl text-base sm:text-lg font-extrabold text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
+              style={{
+                fontWeight: 800,
+                color: theme.textPrimary,
+                background: theme.panelBg,
+                border: `1px solid ${theme.p1AccentBorder}`,
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <span>{t('app.dailyPuzzle')}</span>
+            </motion.a>
+          </div>
+        </div>
+
+        {/* ── Right column: piece guide (6 cards) ─────────────────── */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="
-            grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2
-            gap-3 mb-8 lg:mb-0 max-w-2xl w-full
-            lg:col-start-2 lg:row-start-1 lg:row-span-4 lg:self-center
-          "
-          style={{ maxWidth: '42rem', width: '100%' }}
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-2xl lg:max-w-xl lg:flex-1"
+          style={{ width: '100%' }}
         >
           {PIECE_TYPES.map((type, i) => (
             <motion.div
               key={type}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 * i + 0.6 }}
-              className="rounded-xl p-3 lg:p-4 transition-colors"
+              transition={{ delay: 0.08 * i + 0.55 }}
+              className="rounded-xl p-4 transition-colors"
               style={{ background: theme.panelBg, borderRadius: '0.75rem', border: `1px solid ${theme.panelBorder}` }}
             >
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-2xl">{PIECE_EMOJI_MAP[type]}</span>
                 <span className="font-bold text-sm lg:text-base" style={{ color: theme.textPrimary }}>{t(`piece.${type}`)}</span>
               </div>
@@ -165,137 +296,6 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
             </motion.div>
           ))}
         </motion.div>
-
-        {/* Board legend */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 sm:gap-6 mb-8 lg:mb-4 text-sm px-1 lg:col-start-1 lg:row-start-3 lg:justify-self-center"
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded" style={{ background: theme.throneBg, border: `1px solid ${theme.throneBorder}` }} />
-            <span style={{ color: theme.textMuted }}>{t('legend.throne')}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded" style={{ background: theme.barrierBg, border: `1px solid ${theme.barrierBorder}` }} />
-            <span style={{ color: theme.textMuted }}>{t('legend.barrier')}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full" style={{ background: theme.validMoveFill, border: `2px solid ${theme.validMoveBorder}` }} />
-            <span style={{ color: theme.textMuted }}>{t('legend.validMove')}</span>
-          </div>
-        </motion.div>
-
-        {/* Tutorial entry — small, sits above the two hero buttons so
-            first-timers see it without crowding the main CTAs. */}
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.0 }}
-          className="mb-3 lg:mb-2 lg:col-start-1 lg:row-start-4 lg:row-end-4 lg:self-end lg:justify-self-center flex flex-wrap gap-2 justify-center"
-        >
-          <Link
-            href="/tutorial"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
-            style={{
-              background: theme.panelBg,
-              border: `1px solid ${theme.p1AccentBorder}`,
-              color: theme.p1Color,
-            }}
-          >
-            {t('tutorial.button')}
-          </Link>
-          {/* Theme Store pill — uses the buttonRotate accent (the same
-              theme-driven gold/amber/white-on-black palette as the
-              "active tab" pill in SettingsPanel) so it pops against
-              every theme's background instead of blending into the
-              panelBg overlay. */}
-          <Link
-            href="/store"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
-            style={{
-              background: theme.buttonRotateBg,
-              border: `1px solid ${theme.buttonRotateBorder}`,
-              color: theme.buttonRotateText,
-              boxShadow: `0 4px 14px ${theme.buttonRotateBorder}`,
-            }}
-          >
-            {t('app.themeStore')}
-          </Link>
-          {/* View Story — opens a popup with the intro video. Uses the
-              same bright buttonRotate styling as Theme Store so it
-              reads as a sibling CTA, not a faded afterthought. */}
-          <button
-            type="button"
-            onClick={() => setStoryOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-transform hover:scale-105 active:scale-95"
-            style={{
-              background: theme.buttonRotateBg,
-              border: `1px solid ${theme.buttonRotateBorder}`,
-              color: theme.buttonRotateText,
-              boxShadow: `0 4px 14px ${theme.buttonRotateBorder}`,
-            }}
-          >
-            🎬 View Story
-          </button>
-        </motion.div>
-
-        {/* Two hero buttons: Online (routes to /play) + Offline (opens
-            modal with mode picker + timer). The mode picker pills that
-            used to live above this row moved into the offline modal. */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md sm:max-w-none sm:w-auto lg:col-start-1 lg:row-start-5 lg:self-start">
-          <motion.button
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.1, duration: 0.35, ease: 'easeOut' }}
-            onClick={() => setOfflineOpen(true)}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="px-8 sm:px-10 py-3 sm:py-4 rounded-2xl text-lg sm:text-xl font-extrabold w-full sm:w-auto transition-all duration-300"
-            style={{ fontWeight: 800, color: '#000', background: `linear-gradient(to right, ${theme.p1Color}, ${theme.selectedRing}, ${theme.p1Color})`, boxShadow: `0 0 30px ${theme.p1Color}80` }}
-          >
-            {t('app.offlineGame')}
-          </motion.button>
-
-          <motion.a
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.2, duration: 0.35, ease: 'easeOut' }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            href="/play"
-            className="px-8 sm:px-10 py-3 sm:py-4 rounded-2xl text-lg sm:text-xl font-extrabold text-center w-full sm:w-auto transition-all duration-300 flex items-center justify-center gap-2"
-            style={{
-              fontWeight: 800,
-              color: theme.textPrimary,
-              background: theme.panelBg,
-              border: `1px solid ${theme.p2AccentBorder}`,
-              backdropFilter: 'blur(8px)',
-            }}
-          >
-            <span>{t('app.onlineGame')}</span>
-          </motion.a>
-
-          <motion.a
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.3, duration: 0.35, ease: 'easeOut' }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            href="/puzzle"
-            className="px-8 sm:px-10 py-3 sm:py-4 rounded-2xl text-lg sm:text-xl font-extrabold text-center w-full sm:w-auto transition-all duration-300 flex items-center justify-center gap-2"
-            style={{
-              fontWeight: 800,
-              color: theme.textPrimary,
-              background: theme.panelBg,
-              border: `1px solid ${theme.p1AccentBorder}`,
-              backdropFilter: 'blur(8px)',
-            }}
-          >
-            <span>{t('app.dailyPuzzle')}</span>
-          </motion.a>
-        </div>
       </div>
 
       <OfflineGameModal
