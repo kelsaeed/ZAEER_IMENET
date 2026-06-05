@@ -165,7 +165,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
                 onClick={() => setOfflineOpen(true)}
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.96 }}
-                className="px-5 py-4 sm:py-5 rounded-2xl text-base sm:text-lg font-extrabold whitespace-nowrap w-full sm:flex-1 transition-all duration-300"
+                className="px-4 py-4 sm:py-5 rounded-2xl text-sm sm:text-base font-extrabold whitespace-nowrap w-full sm:flex-1 transition-all duration-300"
                 style={{ fontWeight: 800, color: '#000', background: `linear-gradient(to right, ${theme.p1Color}, ${theme.selectedRing}, ${theme.p1Color})`, boxShadow: `0 0 30px ${theme.p1Color}80` }}
               >
                 {t('app.offlineGame')}
@@ -178,7 +178,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.96 }}
                 href="/play"
-                className="px-5 py-4 sm:py-5 rounded-2xl text-base sm:text-lg font-extrabold whitespace-nowrap text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
+                className="px-4 py-4 sm:py-5 rounded-2xl text-sm sm:text-base font-extrabold whitespace-nowrap text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
                 style={{
                   fontWeight: 800,
                   color: theme.textPrimary,
@@ -197,7 +197,7 @@ export default function StartScreen({ onStart, onOpenSettings }: Props) {
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.96 }}
                 href="/puzzle"
-                className="px-5 py-4 sm:py-5 rounded-2xl text-base sm:text-lg font-extrabold whitespace-nowrap text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
+                className="px-4 py-4 sm:py-5 rounded-2xl text-sm sm:text-base font-extrabold whitespace-nowrap text-center w-full sm:flex-1 transition-all duration-300 flex items-center justify-center gap-2"
                 style={{
                   fontWeight: 800,
                   color: theme.textPrimary,
