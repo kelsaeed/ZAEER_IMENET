@@ -197,7 +197,7 @@ export function PlayTab({
             <div className="flex items-center justify-center py-6"><LoadingEmojis size={22} /></div>
           ) : asyncRooms.length === 0 ? (
             <div className="text-sm opacity-60 py-3 text-center">
-              Nobody's set up a game yet. Be the first!
+              Nobody&apos;s set up a game yet. Be the first!
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -273,7 +273,7 @@ export function PlayTab({
           {gamesLoading ? (
             <div className="flex items-center justify-center py-6"><LoadingEmojis size={22} /></div>
           ) : games.length === 0 ? (
-            <div className="text-sm opacity-60 py-3 text-center">Nobody's looking for a game right now.</div>
+            <div className="text-sm opacity-60 py-3 text-center">Nobody&apos;s looking for a game right now.</div>
           ) : (
             <div className="flex flex-col gap-2">
               {games.map(g => (

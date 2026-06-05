@@ -352,7 +352,7 @@ export default function SolutionRecorder({ snapshot, value, onChange }: Props) {
             {labelOffset > 0 && (
               <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
                 Click your piece, then click a green target. For ants, pick a post-rotation
-                or press "End turn".
+                or press &quot;End turn&quot;.
               </div>
             )}
           </div>

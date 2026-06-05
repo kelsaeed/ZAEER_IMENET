@@ -227,7 +227,7 @@ export default function PuzzleEditor({ mode, puzzleId, initial, onSavedAndValida
           Click your piece, then click a green target — that records one
           attacker move. The local AI plays the defender between turns
           just so you can see the next position; the validator on save
-          still proves every defender reply, not just the AI's.
+          still proves every defender reply, not just the AI&apos;s.
           Line length sets the depth budget — three attacker moves =
           mate-in-3.
         </p>

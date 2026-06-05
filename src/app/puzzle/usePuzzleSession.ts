@@ -306,7 +306,7 @@ export function usePuzzleSession(puzzle: TodayPuzzle) {
     setValidRotations(piece.type === 'ant' ? vr : []);
   }, [
     locked, isPlayerTurn, antTurnInProgress, selectedPieceId, validMoves,
-    state, sideToMove, submitMove, feedback, status, turnActions, resetTurn,
+    state, sideToMove, submitMove, feedback, turnActions, resetTurn,
   ]);
 
   /** Rotate the selected ant to the given orientation. Mirrors
