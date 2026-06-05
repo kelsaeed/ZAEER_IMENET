@@ -6,8 +6,8 @@
 // These cover the trust boundary the API route depends on: a legal move is
 // accepted, everything illegal/unauthorised/stale is rejected with the
 // right status, and a finished game is immutable. (Non-participant and
-// optimistic-concurrency rejection are enforced in the route/DB layer —
-// see SERVER_AUTHORITATIVE_MOVES_REPORT.md for the manual test.)
+// optimistic-concurrency rejection are enforced in the route/DB layer and
+// verified manually against a live database.)
 
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';

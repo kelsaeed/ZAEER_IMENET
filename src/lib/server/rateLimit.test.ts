@@ -4,8 +4,8 @@
 //
 // Covers the pure window math, the in-memory store, and the checkRateLimit
 // orchestration (in-memory pre-filter + fail-open DB layer). The DB RPC
-// itself (migration 0019) can't be unit-tested without Postgres — see
-// RATE_LIMITING_REPORT.md for the manual smoke check.
+// itself (migration 0019) can't be unit-tested without Postgres and is
+// covered by a manual smoke check against a live database.
 
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
