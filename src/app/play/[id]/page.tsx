@@ -312,6 +312,10 @@ export default function OnlineGamePage() {
         <GameBoard
           state={displayState!}
           cellSize={cellSize}
+          // Flip the board for player 2 so their own pieces sit at the
+          // bottom — each player views the match from their own side, like
+          // a physical board. Spectators keep player 1's orientation.
+          flip={myPlayerNumber === 2}
           onCellClick={isSpectator ? () => {} : clickCell}
           rotationHintAt={
             state.canRotate && state.phase === 'playing' && isMyTurn && state.selectedPieceId

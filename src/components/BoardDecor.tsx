@@ -8,6 +8,10 @@ interface Props {
   /** Cell width in pixels — used to size the overlay so the halves
    *  line up exactly with rows 0–7 and 8–15. */
   cellSize: number;
+  /** Mirror the board (online player 2's chess-style view). When set,
+   *  each player's decor stays glued to their own pieces: player 2's
+   *  half (rows 0–7) is drawn at the bottom and player 1's at the top. */
+  flip?: boolean;
 }
 
 /** Animated overlay positioned over the board grid. Reads each
@@ -21,7 +25,7 @@ interface Props {
  *  the same animations on the same half — the "celestial player's
  *  half" looks magical from either side of the table. The opponent's
  *  page background stays whatever theme they picked. */
-export default function BoardDecor({ cellSize }: Props) {
+export default function BoardDecor({ cellSize, flip = false }: Props) {
   const { getDecorKind } = useSettings();
   const themes = usePlayerThemes();
 
@@ -45,18 +49,24 @@ export default function BoardDecor({ cellSize }: Props) {
   const cellsWidth = cellSize * BOARD_SIZE;
   const halfHeight = cellSize * (BOARD_SIZE / 2);
 
+  // topKind is player 2's territory (rows 0–7), bottomKind player 1's
+  // (rows 8–15). When the board is flipped those rows swap visual ends,
+  // so each half's vertical position follows its owner's pieces.
+  const p2Top = flip ? halfHeight : 0;
+  const p1Top = flip ? 0 : halfHeight;
+
   return (
     <>
       {topKind !== 'none' && (
         <BoardDecorHalf
           decorKind={topKind}
-          style={{ top: 0, left: labelOffset, width: cellsWidth, height: halfHeight }}
+          style={{ top: p2Top, left: labelOffset, width: cellsWidth, height: halfHeight }}
         />
       )}
       {bottomKind !== 'none' && (
         <BoardDecorHalf
           decorKind={bottomKind}
-          style={{ top: halfHeight, left: labelOffset, width: cellsWidth, height: halfHeight }}
+          style={{ top: p1Top, left: labelOffset, width: cellsWidth, height: halfHeight }}
         />
       )}
     </>

@@ -13,6 +13,10 @@ import { useSettings } from '@/hooks/useSettings';
 // column labels, rows, and each row's cells instead of allocating a fresh
 // `Array.from({ length: BOARD_SIZE })` (×18) on every board render.
 const CELL_INDEXES = Array.from({ length: BOARD_SIZE }, (_, i) => i);
+// Reversed order, for the "flip the board" perspective: an online player 2
+// sees the board rotated 180° so their own pieces sit at the bottom, like
+// sitting across a physical board. Built once at module load.
+const REV_INDEXES = [...CELL_INDEXES].reverse();
 
 interface Props {
   state: GameState;
@@ -42,15 +46,29 @@ interface Props {
    *  than guessing percentages against the outer wrapper, which also
    *  has to account for the column-label row's variable height. */
   tourBadges?: { n: number; row: number; col: number }[];
+  /** When true, render the board rotated 180° (rows and columns reversed)
+   *  so the local player's own pieces sit at the bottom — the chess-style
+   *  "flip for the player on the far side" view. Used by online matches for
+   *  player 2. Cell content stays upright and click coordinates are
+   *  unchanged; only the on-screen layout is mirrored. */
+  flip?: boolean;
 }
 
 export default function GameBoard({
   state, cellSize, onCellClick, tutorialHighlight, extraHighlights,
-  rotationHintAt, onRotationHintClick, tourBadges,
+  rotationHintAt, onRotationHintClick, tourBadges, flip = false,
 }: Props) {
   const { pieces, selectedPieceId, validMoves, bounceEffect } = state;
   const { theme } = useSettings();
   const labelColor = `color-mix(in srgb, ${theme.textPrimary} 30%, transparent)`;
+
+  // Render order for labels, rows, and cells. Flipped = reversed so the
+  // local player's pieces sit at the bottom. `dispIndex` maps an actual
+  // board coordinate to its on-screen index, so the absolutely-positioned
+  // overlays (highlights, tour badges, rotation hint) land on the same
+  // visual cell as the flex-laid grid.
+  const order = flip ? REV_INDEXES : CELL_INDEXES;
+  const dispIndex = (i: number) => (flip ? BOARD_SIZE - 1 - i : i);
 
   // ── Per-render lookups, built once instead of inside all 256 cells ──────
   // cellPieceMap only rebuilds when `pieces` changes (i.e. on a move), so a
@@ -97,7 +115,7 @@ export default function GameBoard({
     >
       {/* Column labels — chess-style A..P */}
       <div className="flex" style={{ display: 'flex', paddingLeft: cellSize * 0.5 }}>
-        {CELL_INDEXES.map(c => (
+        {order.map(c => (
           <div
             key={c}
             style={{
@@ -137,7 +155,7 @@ export default function GameBoard({
           userSelect: 'none',
         }}
       >
-        {CELL_INDEXES.map(row => (
+        {order.map(row => (
           <div key={row} className="flex" style={{ display: 'flex' }}>
             {/* Row label — chess-style 16..1 (top to bottom) */}
             <div
@@ -154,7 +172,7 @@ export default function GameBoard({
               {rowLabel(row)}
             </div>
 
-            {CELL_INDEXES.map(col => {
+            {order.map(col => {
               const key = cellKey(row, col);
               const piecesHere = cellPieceMap.get(key) ?? NO_PIECES;
               const mainPiece = pickMainPiece(piecesHere);
@@ -181,7 +199,7 @@ export default function GameBoard({
             celestial player's territory looks magical from either
             seat at the table. Pointer-events: none + screen blend so
             it never intercepts taps and never washes out pieces. */}
-        <BoardDecor cellSize={cellSize} />
+        <BoardDecor cellSize={cellSize} flip={flip} />
 
         {/* Secondary "notice this" pulses (callout lessons). Calmer than
             the primary highlight and tinted with the opponent accent so
@@ -192,8 +210,8 @@ export default function GameBoard({
             aria-hidden
             className="absolute pointer-events-none rounded-md zi-tutorial-pulse"
             style={{
-              top: h.row * cellSize,
-              left: 0.5 * cellSize + h.col * cellSize,
+              top: dispIndex(h.row) * cellSize,
+              left: 0.5 * cellSize + dispIndex(h.col) * cellSize,
               width: cellSize,
               height: cellSize,
               boxSizing: 'border-box',
@@ -210,8 +228,8 @@ export default function GameBoard({
             aria-hidden
             className="absolute pointer-events-none rounded-md zi-tutorial-pulse"
             style={{
-              top: tutorialHighlight.row * cellSize,
-              left: 0.5 * cellSize + tutorialHighlight.col * cellSize,
+              top: dispIndex(tutorialHighlight.row) * cellSize,
+              left: 0.5 * cellSize + dispIndex(tutorialHighlight.col) * cellSize,
               width: cellSize,
               height: cellSize,
               boxSizing: 'border-box',
@@ -228,8 +246,8 @@ export default function GameBoard({
         {tourBadges?.map(b => {
           const gw = 0.5 * cellSize + BOARD_SIZE * cellSize;
           const gh = BOARD_SIZE * cellSize;
-          const left = Math.max(2, Math.min(0.5 * cellSize + b.col * cellSize + cellSize / 2 - 11, gw - 24));
-          const top = Math.max(2, Math.min(b.row * cellSize + cellSize / 2 - 11, gh - 24));
+          const left = Math.max(2, Math.min(0.5 * cellSize + dispIndex(b.col) * cellSize + cellSize / 2 - 11, gw - 24));
+          const top = Math.max(2, Math.min(dispIndex(b.row) * cellSize + cellSize / 2 - 11, gh - 24));
           return (
             <div
               key={`tb-${b.n}`}
@@ -258,8 +276,8 @@ export default function GameBoard({
           <RotationHint
             visible
             cellSize={cellSize}
-            antRow={rotationHintAt.row}
-            antCol={rotationHintAt.col}
+            antRow={dispIndex(rotationHintAt.row)}
+            antCol={dispIndex(rotationHintAt.col)}
             onClick={onRotationHintClick}
           />
         )}
